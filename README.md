@@ -7,8 +7,8 @@ PWA-first eBay photo handoff app for camera capture, item packets, and a lister 
 - Phase 0 camera spike is implemented
 - Phase 1 store/batch queue scaffolding is implemented
 - Supabase project is linked and seeded
-- Phase 1 now includes Supabase session bootstrap and a batch upload path
-- Phase 1 now includes a desktop store/batch/item queue with item detail and manual checkoff
+- Phase 1 now includes Supabase session bootstrap and a batch upload path for one shared account
+- Phase 1 now includes a desktop store/batch/item queue with item detail and manual checkoff for the same shared account
 
 ## Local development
 
@@ -33,3 +33,4 @@ See:
 - [`.env.example`](/Users/joe/Projects/ebay-photo-app/.env.example)
 
 Phase 1 uses Supabase Auth magic-link login and syncs captured item packets into the remote `stores`, `batches`, `items`, `photos`, and `photo_variants` tables.
+The same account is intended for both phone capture and desktop listing.

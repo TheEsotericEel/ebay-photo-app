@@ -9,6 +9,7 @@ Phase 1 moves the app from camera spike into the first real handoff workflow.
 - Supabase Auth magic-link bootstrap
 - batch sync into Supabase tables and private storage
 - desktop store queue with batch drilldown and item detail
+- single shared account across capture and lister devices
 - item listing status controls
 - default store and batch seed data
 
