@@ -378,7 +378,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 }
 
-export function Phase1Screen() {
+export function WorkspaceScreen() {
   const cameraRef = useRef<CameraPreviewHandle>(null)
   const isMobile = useIsMobile()
   const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
@@ -397,7 +397,7 @@ export function Phase1Screen() {
   const [itemNote, setItemNote] = useState('')
   const [itemWeight, setItemWeight] = useState('')
   const [capturing, setCapturing] = useState(false)
-  const [statusMsg, setStatusMsg] = useState('Phase 1 shell ready')
+  const [statusMsg, setStatusMsg] = useState('Workspace ready')
   const [selectedPhoto, setSelectedPhoto] = useState<StoredPhoto | null>(null)
   const [selectedRatio, setSelectedRatio] = useState<OutputRatio>(() => loadDefaultRatioFromStorage())
   const [lastCaptureDiagnostics, setLastCaptureDiagnostics] = useState<CaptureDiagnostics | null>(null)
@@ -640,7 +640,7 @@ export function Phase1Screen() {
       setItemSku('')
       setItemNote('')
       setItemWeight('')
-      setStatusMsg('Phase 1 data reset')
+      setStatusMsg('Workspace data reset')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setStorageErrors((prev) => [...prev, `Reset failed: ${msg}`])
@@ -944,7 +944,7 @@ export function Phase1Screen() {
       <div style={s.mobileScreen}>
         <div style={s.mobileHero}>
           <div>
-            <div style={s.mobileHeroTitle}>Phase 1 capture</div>
+            <div style={s.mobileHeroTitle}>Capture workspace</div>
             <div style={s.mobileHeroCopy}>
               Camera-first mobile capture with upload and cleanup running in the background. Queue review stays off this screen.
             </div>
@@ -1283,9 +1283,9 @@ export function Phase1Screen() {
       <div style={{ ...s.panel, margin: '0 12px' }}>
         <div style={s.header}>
           <div>
-            <div style={s.title}>Phase 1 capture + queue</div>
+            <div style={s.title}>Capture workspace</div>
             <div style={s.subtitle}>
-              {APP_NAME} connected to Supabase bucket `{SUPABASE_STORAGE_BUCKET}` with store/batch queue scaffolding.
+              {APP_NAME} connected to Supabase bucket `{SUPABASE_STORAGE_BUCKET}` with capture, queue, and cleanup workflows.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1346,7 +1346,7 @@ export function Phase1Screen() {
               ))}
             </div>
             <div style={{ fontSize: 12, color: '#8b8b8b', lineHeight: 1.6 }}>
-              The camera path is still the Phase 0 implementation. Phase 1 adds store/batch context and queue state around it.
+              The camera path is still the browser capture implementation. The workspace adds store, batch, queue, and cleanup context around it.
             </div>
           </div>
         </div>
@@ -1981,3 +1981,5 @@ function QueueThumb({ photo, onClick }: { photo: StoredPhoto | null; onClick?: (
     <div style={s.queueThumbFallback} />
   )
 }
+
+export { WorkspaceScreen as Phase1Screen }

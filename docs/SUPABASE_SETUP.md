@@ -1,6 +1,6 @@
 # Supabase Setup
 
-This project uses Supabase as the remote backend for Phase 1 and later work.
+This project uses Supabase as the remote backend for the workspace and later work.
 
 ## Linked project
 
@@ -36,7 +36,7 @@ VITE_SUPABASE_ANON_KEY=your_anon_key
 
 ## App login and sync
 
-- Phase 1 uses Supabase Auth magic-link login.
+- The workspace uses Supabase Auth magic-link login.
 - The same account is used on the phone and desktop for now.
 - Sign in with an email address in the app, then use `Sync Batch` to push the current store/batch/items/photos into Supabase.
 - The app writes uploaded assets into the private `photo-assets` bucket and records photo variants in `public.photo_variants`.

@@ -1,17 +1,16 @@
 import { useState } from 'react'
-import { Phase1Screen } from './phase1/Phase1Screen'
-import { Phase0Screen } from './phase0/Phase0Screen'
 import { CameraLab } from './phase0/CameraLab'
+import { WorkspaceScreen } from './phase1/Phase1Screen'
 import { useIsMobile } from './lib/useViewportMode'
 
-type View = 'phase1' | 'phase0' | 'lab'
+type View = 'workspace' | 'lab'
 
 export function App() {
-  const [view, setView] = useState<View>('phase1')
+  const [view, setView] = useState<View>('workspace')
   const isMobile = useIsMobile()
 
-  if (view === 'phase1' && isMobile) {
-    return <Phase1Screen />
+  if (view === 'workspace' && isMobile) {
+    return <WorkspaceScreen />
   }
 
   return (
@@ -27,34 +26,19 @@ export function App() {
           }}
         >
           <button
-            onClick={() => setView('phase1')}
+            onClick={() => setView('workspace')}
             style={{
               flex: 1,
               padding: '8px 12px',
               borderRadius: 6,
-              border: view === 'phase1' ? '1px solid #666' : '1px solid #333',
-              background: view === 'phase1' ? '#2a2a2a' : 'transparent',
-              color: view === 'phase1' ? '#eee' : '#888',
+              border: view === 'workspace' ? '1px solid #666' : '1px solid #333',
+              background: view === 'workspace' ? '#2a2a2a' : 'transparent',
+              color: view === 'workspace' ? '#eee' : '#888',
               fontSize: 13,
               cursor: 'pointer',
             }}
           >
-            Phase 1
-          </button>
-          <button
-            onClick={() => setView('phase0')}
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              borderRadius: 6,
-              border: view === 'phase0' ? '1px solid #666' : '1px solid #333',
-              background: view === 'phase0' ? '#2a2a2a' : 'transparent',
-              color: view === 'phase0' ? '#eee' : '#888',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            Phase 0 Spike
+            Workspace
           </button>
           <button
             onClick={() => setView('lab')}
@@ -73,8 +57,7 @@ export function App() {
           </button>
         </div>
       )}
-      {view === 'phase1' && <Phase1Screen />}
-      {view === 'phase0' && <Phase0Screen />}
+      {view === 'workspace' && <WorkspaceScreen />}
       {view === 'lab' && <CameraLab />}
     </div>
   )

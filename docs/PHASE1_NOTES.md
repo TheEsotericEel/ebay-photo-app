@@ -1,6 +1,6 @@
-# Phase 1 Notes
+# Workspace Notes
 
-Phase 1 moves the app from camera spike into the first real handoff workflow.
+This workspace moves the app from camera spike into the first real handoff workflow.
 The current implementation is split into a mobile capture surface and a desktop queue surface.
 
 ## Added in this repo
