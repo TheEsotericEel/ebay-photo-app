@@ -1,0 +1,10 @@
+/**
+ * Shared IndexedDB configuration for all adapters.
+ * Ensures consistent DB name and version across the application.
+ */
+
+export const DB_NAME = 'ebay-photo-spike'
+export const DB_VERSION = 2
+
+export const PHOTO_STORE_NAME = 'pending-photos'
+export const ITEM_STORE_NAME = 'item-packets'
