@@ -109,7 +109,12 @@ export class IndexedDbPhotoStore implements LocalPhotoStore {
   }
 
   async save(photo: Omit<StoredPhoto, 'savedAt'>): Promise<StoredPhoto> {
-    const record: StoredPhoto = { ...photo, savedAt: new Date().toISOString() }
+    const record: StoredPhoto = {
+      ...photo,
+      uploadStatus: photo.uploadStatus || 'local',
+      remoteStatus: photo.remoteStatus || 'not_uploaded',
+      savedAt: new Date().toISOString(),
+    }
     await this.tx('readwrite', (store) => store.put(record))
     return record
   }

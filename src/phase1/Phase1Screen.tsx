@@ -8,6 +8,7 @@ import { IndexedDbPhotoStore, StoredPhoto } from '../adapters/localPhotoStore'
 import { IndexedDbItemPacketStore, ItemPacket, ListingStatus } from '../adapters/itemPacket'
 import { syncBatchToSupabase, BatchUploadProgress } from '../adapters/supabaseUpload'
 import { attachOrderedPhotosToItem, getItemReadiness, sortItems } from '../adapters/itemHelpers'
+import { getBatchUploadStateSummary, getCleanupReport } from '../adapters/uploadState'
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
 import { CameraCapabilities, CaptureDiagnostics } from '../adapters/camera'
@@ -319,6 +320,7 @@ export function Phase1Screen() {
   const [authMessage, setAuthMessage] = useState('')
   const [uploadProgress, setUploadProgress] = useState<BatchUploadProgress | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [cleanupMessage, setCleanupMessage] = useState('')
 
   const loadData = useCallback(async () => {
     const [storesData, photosData, itemsData] = await Promise.all([
@@ -399,6 +401,8 @@ export function Phase1Screen() {
 
       const photoRecord = {
         id,
+        uploadStatus: 'local' as const,
+        remoteStatus: 'not_uploaded' as const,
         blob: processed.blob,
         mimeType: processed.mimeType,
         size: processed.size,
@@ -608,6 +612,31 @@ export function Phase1Screen() {
     }
   }, [allItems, allPhotos, batches, loadData, photoStore, selectedBatchId, selectedStoreId, session, stores, uploading])
 
+  const handleClearVerifiedLocalCopies = useCallback(async () => {
+    const report = getCleanupReport(allItems, allPhotos, selectedStoreId, selectedBatchId)
+
+    if (report.blockedPhotos > 0 || report.eligiblePhotos === 0) {
+      setCleanupMessage('Local cleanup is blocked until every photo in the batch is verified.')
+      return
+    }
+
+    const verifiedPhotoIds = allPhotos
+      .filter((photo) => photo.uploadStatus === 'verified' && photo.remoteStatus === 'verified')
+      .filter((photo) => allItems.some((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId && item.photoIds.includes(photo.id)))
+      .map((photo) => photo.id)
+
+    try {
+      for (const photoId of verifiedPhotoIds) {
+        await photoStore.delete(photoId)
+      }
+      await loadData()
+      setCleanupMessage(`Cleared ${verifiedPhotoIds.length} verified local photo${verifiedPhotoIds.length === 1 ? '' : 's'}.`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCleanupMessage(`Cleanup failed: ${msg}`)
+    }
+  }, [allItems, allPhotos, loadData, photoStore, selectedBatchId, selectedStoreId])
+
   const queueItems = useMemo(() => {
     const items = allItems.filter((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId)
     const filtered = queueFilter === 'all' ? items : items.filter((item) => (item.listingStatus || 'new') === queueFilter)
@@ -628,6 +657,14 @@ export function Phase1Screen() {
       readyCount: items.filter((item) => getItemReadiness(item, allPhotos).readyForHandoff).length,
       ...byStatus,
     }
+  }, [allItems, allPhotos, selectedBatchId, selectedStoreId])
+
+  const batchUploadSummary = useMemo(() => {
+    return getBatchUploadStateSummary(allItems, allPhotos, selectedStoreId, selectedBatchId)
+  }, [allItems, allPhotos, selectedBatchId, selectedStoreId])
+
+  const cleanupReport = useMemo(() => {
+    return getCleanupReport(allItems, allPhotos, selectedStoreId, selectedBatchId)
   }, [allItems, allPhotos, selectedBatchId, selectedStoreId])
 
   const currentItemPhotos = useMemo(() => {
@@ -784,6 +821,43 @@ export function Phase1Screen() {
               )}
             </div>
           )}
+          <div style={s.progressBox}>
+            <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+              Upload / cleanup
+            </div>
+            <div>Total photos: {batchUploadSummary.totalPhotos}</div>
+            <div>Verified: {batchUploadSummary.verifiedPhotos}</div>
+            <div>Pending: {batchUploadSummary.pendingPhotos}</div>
+            <div>Failed: {batchUploadSummary.failedPhotos}</div>
+            <div>Safe to clear: {cleanupReport.safeToClear ? 'yes' : 'no'}</div>
+            {cleanupReport.issues.length > 0 && (
+              <div style={{ marginTop: 4, color: '#fca5a5' }}>
+                {cleanupReport.issues.map((issue) => (
+                  <div key={issue.reason}>
+                    {issue.count} {issue.reason}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+              <button
+                style={{ ...s.button, ...s.buttonSmall }}
+                onClick={handleSyncBatch}
+                disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
+              >
+                Retry upload
+              </button>
+              <button
+                style={{ ...s.button, ...s.buttonSmall }}
+                onClick={handleClearVerifiedLocalCopies}
+                disabled={!cleanupReport.safeToClear}
+                title={cleanupReport.safeToClear ? 'Remove verified local copies' : 'Uploads must be verified first'}
+              >
+                Clear local copies
+              </button>
+            </div>
+            {cleanupMessage && <div style={{ marginTop: 6, color: '#cbd5e1' }}>{cleanupMessage}</div>}
+          </div>
         </div>
       </div>
 

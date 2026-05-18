@@ -33,6 +33,7 @@ export interface BatchUploadSummary {
   uploadedPhotos: number
   failedPhotos: number
   skippedItems: number
+  skippedPhotos: number
 }
 
 export interface BatchUploadOptions {
@@ -295,6 +296,7 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
   let uploadedPhotos = 0
   let failedPhotos = 0
   let skippedItems = 0
+  let skippedPhotos = 0
 
   onProgress?.({
     stage: 'resolving_store',
@@ -332,6 +334,7 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
 
       const remoteItem = await resolveRemoteItem(client, remoteStore.id, remoteBatch.id, item)
       const remotePhotoIdByLocalId = new Map<string, string>()
+      const pendingPhotos = itemPhotos.filter((photo) => photo.uploadStatus !== 'verified' || photo.remoteStatus !== 'verified')
 
       await itemStore.updateItem(item.id, {
         remoteId: remoteItem.id,
@@ -340,8 +343,45 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
         remoteUpdatedAt: nowIso(),
       })
 
+      if (pendingPhotos.length === 0) {
+        const itemFinalizedAt = nowIso()
+        const { error: itemFinalizeError } = await client
+          .from('items')
+          .update({
+            main_photo_id: remotePhotoIdByLocalId.get(itemPhotos[0]?.id || '') || itemPhotos[0]?.remoteId || null,
+            status: item.listingStatus || 'new',
+            sku: item.sku || null,
+            notes: item.note || null,
+            weight: item.weight || null,
+          })
+          .eq('id', remoteItem.id)
+
+        if (itemFinalizeError) {
+          throw itemFinalizeError
+        }
+
+        await itemStore.updateItem(item.id, {
+          remoteId: remoteItem.id,
+          uploadStatus: 'verified',
+          remoteStatus: 'verified',
+          remoteUpdatedAt: itemFinalizedAt,
+        })
+
+        uploadedItems += 1
+        uploadedPhotos += itemPhotos.length
+        continue
+      }
+
       for (let photoIndex = 0; photoIndex < itemPhotos.length; photoIndex += 1) {
         const localPhoto = itemPhotos[photoIndex]
+        const alreadyVerified = localPhoto.uploadStatus === 'verified' && localPhoto.remoteStatus === 'verified'
+        if (alreadyVerified) {
+          skippedPhotos += 1
+          const existingRemoteId = localPhoto.remoteId || makeId('photo')
+          remotePhotoIdByLocalId.set(localPhoto.id, existingRemoteId)
+          continue
+        }
+
         const remotePhotoId = localPhoto.remoteId || makeId('photo')
         remotePhotoIdByLocalId.set(localPhoto.id, remotePhotoId)
 
@@ -362,6 +402,13 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
           remoteStatus: 'not_uploaded',
         })
 
+        const { data: existingPhotoRow } = await client
+          .from('photos')
+          .select('upload_attempt_count')
+          .eq('id', remotePhotoId)
+          .maybeSingle()
+        const nextAttemptCount = (existingPhotoRow?.upload_attempt_count || 0) + 1
+
         const { error: photoInsertError } = await client
           .from('photos')
           .upsert(
@@ -375,7 +422,7 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
               upload_status: 'uploading',
               remote_status: 'not_uploaded',
               captured_at: localPhoto.capturedAt,
-              upload_attempt_count: 1,
+              upload_attempt_count: nextAttemptCount,
             },
             { onConflict: 'id' },
           )
@@ -488,5 +535,6 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
     uploadedPhotos,
     failedPhotos,
     skippedItems,
+    skippedPhotos,
   }
 }
