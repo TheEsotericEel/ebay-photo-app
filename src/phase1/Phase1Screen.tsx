@@ -164,12 +164,6 @@ function pickCameraDeviceForZoomPreset(devices: CameraDeviceInfo[], zoom: number
   return best.device
 }
 
-function formatWhiteBalanceLabel(mode: string): string {
-  if (mode === 'continuous') return 'WB Auto'
-  if (mode === 'manual') return 'WB Manual'
-  return `WB ${mode}`
-}
-
 const s: Record<string, React.CSSProperties> = {
   screen: {
     display: 'flex',
@@ -1636,10 +1630,6 @@ function MobileWorkspace({
   const currentZoom = capabilities?.trackSettings?.zoom
   const [lensMenuOpen, setLensMenuOpen] = useState(false)
   const lensMenuRef = useRef<HTMLDivElement>(null)
-  const currentWhiteBalanceMode =
-    capabilities?.trackSettings?.whiteBalanceMode || rawCapabilities?.whiteBalanceMode?.[0] || ''
-  const availableWhiteBalanceModes = rawCapabilities?.whiteBalanceMode || []
-  const showWhiteBalanceSelector = availableWhiteBalanceModes.length > 0
   const availableZoomChoices = quickZoomPresets.length > 1 ? quickZoomPresets : []
   const lensButtonLabel = formatZoomPreset(currentZoom ?? preferredZoom)
 
@@ -1852,34 +1842,6 @@ function MobileWorkspace({
                     More
                   </button>
                 </div>
-
-                {showWhiteBalanceSelector && (
-                  <div
-                    style={{
-                      ...s.mobileQuickSelectorGrid,
-                      gridTemplateColumns: 'minmax(0, 1fr)',
-                    }}
-                  >
-                    {showWhiteBalanceSelector && (
-                      <div style={s.mobileQuickSelectorRow}>
-                        <div style={s.mobileQuickSelectorLabel}>White balance</div>
-                        <select
-                          style={s.mobileQuickSelect}
-                          value={currentWhiteBalanceMode}
-                          onChange={(event) => {
-                            void handleApplyCameraSettingConstraint({ whiteBalanceMode: event.target.value })
-                          }}
-                        >
-                          {availableWhiteBalanceModes.map((mode) => (
-                            <option key={mode} value={mode}>
-                              {formatWhiteBalanceLabel(mode)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
             <div style={s.mobileCaptureActions}>
