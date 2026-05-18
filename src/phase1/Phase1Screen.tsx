@@ -1147,7 +1147,7 @@ export function WorkspaceScreen() {
   const isMobile = useIsMobile()
   const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
-  const [desktopMode, setDesktopMode] = useState<DesktopMode>(() => loadWorkspacePreferences().desktopMode || 'capture')
+  const [desktopMode, setDesktopMode] = useState<DesktopMode>(() => loadWorkspacePreferences().desktopMode || 'queue')
   const [cameraPermissionRemembered, setCameraPermissionRemembered] = useState(() => loadCameraPermissionGranted())
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
@@ -1238,7 +1238,7 @@ export function WorkspaceScreen() {
           batchesData.find((entry) => entry.status === 'active') ||
           (await workflowStore.ensureDefaultBatch(preferredStore.id))
 
-        setDesktopMode(prefs.desktopMode || 'capture')
+        setDesktopMode(prefs.desktopMode || 'queue')
         setSelectedStoreId(preferredStore.id)
         setSelectedBatchId(preferredBatch.id)
         setBatches(batchesData.length > 0 ? batchesData : [preferredBatch])
@@ -1931,9 +1931,9 @@ export function WorkspaceScreen() {
           </div>
           <div style={s.desktopTabs}>
             {([
-              ['capture', 'Capture'],
               ['queue', 'Queue'],
               ['tools', 'Tools'],
+              ['capture', 'Capture'],
             ] as const).map(([mode, label]) => (
               <button
                 key={mode}
@@ -1996,7 +1996,7 @@ export function WorkspaceScreen() {
               <div style={s.desktopPanelHead}>
                 <div>
                   <div style={s.desktopPanelTitle}>Capture</div>
-                  <div style={s.desktopPanelMeta}>Camera-first workspace for the current store and batch.</div>
+                  <div style={s.desktopPanelMeta}>Optional quick capture for the current store and batch.</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button style={{ ...s.button, ...s.buttonDanger }} onClick={handleReset}>Reset</button>

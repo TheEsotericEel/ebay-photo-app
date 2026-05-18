@@ -39,5 +39,5 @@ The app uses Supabase Auth magic-link login and syncs captured item packets into
 The same account is intended for both phone capture and desktop management.
 On mobile, the app opens on a capture home screen with a single `Open Camera` action.
 The camera mounts only after the user chooses to open it, and the browser remembers an accepted camera permission so later visits can resume faster.
-On desktop, the app shows a tabbed management layout with fixed panels for Capture, Queue, and Tools instead of a long scrolling page.
+On desktop, the app opens to a queue-first management layout with fixed panels for Queue, Tools, and optional Capture instead of a long scrolling page.
 The app also remembers the last desktop tab and the selected store/batch in the browser.
