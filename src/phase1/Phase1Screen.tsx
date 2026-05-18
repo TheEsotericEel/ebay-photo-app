@@ -22,6 +22,7 @@ import { buildCameraTestLogText, formatCameraTestLogEntry } from '../adapters/ca
 import { supabase } from '../lib/supabase'
 import { APP_NAME, SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
 import { loadCameraPermissionGranted, saveCameraPermissionGranted } from '../lib/cameraPermission'
+import { loadCameraPreferences, saveCameraPreferences } from '../adapters/cameraPreferences'
 import { DesktopMode, loadWorkspacePreferences, saveWorkspacePreferences } from '../lib/workspacePreferences'
 import { useSupabaseSession } from '../lib/useSupabaseSession'
 import { useIsMobile } from '../lib/useViewportMode'
@@ -74,7 +75,8 @@ function getQuickZoomPresets(capabilities: CameraCapabilities | null): number[] 
 }
 
 function formatZoomPreset(value: number): string {
-  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}x`
+  const raw = Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)
+  return `${raw.startsWith('0.') ? raw.slice(1) : raw}x`
 }
 
 function isPresetActive(current: number | undefined, preset: number): boolean {
@@ -97,6 +99,69 @@ function formatCameraDeviceLabel(label: string): string {
     .replace(/camera/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function scoreDeviceForZoomPreset(deviceLabel: string, zoom: number): number {
+  const label = formatCameraDeviceLabel(deviceLabel).toLowerCase()
+
+  let score = 0
+  if (zoom <= 0.75) {
+    if (label.includes('ultra')) score += 100
+    if (label.includes('0.5')) score += 90
+    if (label.includes('wide')) score += 80
+    if (label.includes('rear')) score += 10
+  } else if (zoom < 1.5) {
+    if (label.includes('main')) score += 100
+    if (label.includes('wide')) score += 90
+    if (label.includes('rear')) score += 70
+  } else if (zoom < 2.5) {
+    if (label.includes('tele')) score += 100
+    if (label.includes('2')) score += 90
+    if (label.includes('rear')) score += 60
+  } else if (zoom < 4.5) {
+    if (label.includes('tele')) score += 100
+    if (label.includes('3')) score += 90
+    if (label.includes('rear')) score += 50
+  } else {
+    if (label.includes('tele')) score += 100
+    if (label.includes('zoom')) score += 90
+    if (label.includes('rear')) score += 50
+  }
+
+  if (label.includes('triple')) score += 5
+  if (label.includes('dual')) score += 3
+  if (label.includes('back')) score += 2
+
+  return score
+}
+
+function pickCameraDeviceForZoomPreset(devices: CameraDeviceInfo[], zoom: number, currentDeviceId?: string): CameraDeviceInfo | null {
+  if (devices.length === 0) {
+    return null
+  }
+
+  const currentDevice = currentDeviceId ? devices.find((device) => device.deviceId === currentDeviceId) || null : null
+  const scored = devices
+    .map((device) => ({
+      device,
+      score: scoreDeviceForZoomPreset(device.label || device.deviceId, zoom),
+    }))
+    .sort((a, b) => b.score - a.score)
+
+  if (scored.length === 0) {
+    return null
+  }
+
+  const best = scored[0]
+  if (best.score <= 0) {
+    return currentDevice
+  }
+
+  if (currentDevice && scoreDeviceForZoomPreset(currentDevice.label || currentDevice.deviceId, zoom) >= best.score) {
+    return currentDevice
+  }
+
+  return best.device
 }
 
 function formatWhiteBalanceLabel(mode: string): string {
@@ -488,6 +553,59 @@ const s: Record<string, React.CSSProperties> = {
     minHeight: 0,
     background: '#000',
     touchAction: 'none',
+  },
+  mobileLensControl: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    zIndex: 4,
+    display: 'grid',
+    justifyItems: 'end',
+    gap: 6,
+  },
+  mobileLensButton: {
+    minWidth: 52,
+    height: 34,
+    padding: '0 12px',
+    borderRadius: 999,
+    border: '1px solid rgba(255, 255, 255, 0.18)',
+    background: 'rgba(16, 16, 16, 0.92)',
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: 800,
+    letterSpacing: -0.1,
+    boxShadow: '0 10px 24px rgba(0, 0, 0, 0.25)',
+  },
+  mobileLensButtonActive: {
+    background: '#f2f2f2',
+    color: '#111',
+    borderColor: '#f2f2f2',
+  },
+  mobileLensMenu: {
+    display: 'grid',
+    gap: 4,
+    minWidth: 92,
+    padding: 6,
+    borderRadius: 16,
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    background: 'rgba(8, 8, 8, 0.96)',
+    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.35)',
+    backdropFilter: 'blur(18px)',
+  },
+  mobileLensMenuItem: {
+    width: '100%',
+    padding: '9px 12px',
+    borderRadius: 12,
+    border: '1px solid transparent',
+    background: 'transparent',
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: 700,
+    textAlign: 'left' as const,
+  },
+  mobileLensMenuItemActive: {
+    background: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   mobileCameraTopBar: {
     position: 'absolute',
@@ -1407,6 +1525,7 @@ function MobileWorkspace({
   authLoading,
   cameraPreviewRatio,
   selectedRatio,
+  preferredZoom,
   cameraRef,
   handleCameraError,
   handleCameraStarted,
@@ -1419,7 +1538,6 @@ function MobileWorkspace({
   handleOpenCameraSettings,
   handleCloseCameraSettings,
   handleToggleCameraSettingsPreviewQuality,
-  handleSelectCameraSettingDevice,
   handleApplyCameraSettingConstraint,
   handleOpenCameraTest,
   handleCloseCameraTest,
@@ -1471,6 +1589,7 @@ function MobileWorkspace({
   authLoading: boolean
   cameraPreviewRatio: OutputRatio
   selectedRatio: OutputRatio
+  preferredZoom: number
   cameraRef: React.RefObject<CameraPreviewHandle>
   handleCameraError: (msg: string) => void
   handleCameraStarted: () => void
@@ -1483,7 +1602,6 @@ function MobileWorkspace({
   handleOpenCameraSettings: () => void
   handleCloseCameraSettings: () => void
   handleToggleCameraSettingsPreviewQuality: () => void
-  handleSelectCameraSettingDevice: (deviceId: string) => Promise<void>
   handleApplyCameraSettingConstraint: (constraint: CameraTestConstraintSet) => Promise<void>
   handleOpenCameraTest: () => void
   handleCloseCameraTest: () => void
@@ -1516,12 +1634,55 @@ function MobileWorkspace({
   const rawCapabilities = capabilities?.raw as ExtendedMediaTrackCapabilities | null
   const quickZoomPresets = useMemo(() => getQuickZoomPresets(capabilities), [capabilities])
   const currentZoom = capabilities?.trackSettings?.zoom
+  const [lensMenuOpen, setLensMenuOpen] = useState(false)
+  const lensMenuRef = useRef<HTMLDivElement>(null)
   const currentWhiteBalanceMode =
     capabilities?.trackSettings?.whiteBalanceMode || rawCapabilities?.whiteBalanceMode?.[0] || ''
   const availableWhiteBalanceModes = rawCapabilities?.whiteBalanceMode || []
-  const compactDeviceButtons = cameraDevices.length > 1 && cameraDevices.length <= 4 ? cameraDevices : []
-  const showDeviceSelector = cameraDevices.length > 1 && compactDeviceButtons.length === 0
   const showWhiteBalanceSelector = availableWhiteBalanceModes.length > 0
+  const availableZoomChoices = quickZoomPresets.length > 1 ? quickZoomPresets : []
+  const lensButtonLabel = formatZoomPreset(currentZoom ?? preferredZoom)
+
+  useEffect(() => {
+    if (!lensMenuOpen) {
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (lensMenuRef.current && target instanceof Node && !lensMenuRef.current.contains(target)) {
+        setLensMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+    }
+  }, [lensMenuOpen])
+
+  useEffect(() => {
+    if (mobileMode !== 'camera') {
+      setLensMenuOpen(false)
+    }
+  }, [mobileMode])
+
+  useEffect(() => {
+    if (metadataOverlayOpen || cameraSettingsOpen || cameraTestOpen) {
+      setLensMenuOpen(false)
+    }
+  }, [cameraSettingsOpen, cameraTestOpen, metadataOverlayOpen])
+
+  const handleApplyZoomPreset = useCallback(async (preset: number) => {
+    const currentDeviceId = capabilities?.trackSettings?.deviceId
+    const targetDevice = pickCameraDeviceForZoomPreset(cameraDevices, preset, currentDeviceId)
+
+    if (targetDevice && targetDevice.deviceId !== currentDeviceId) {
+      await handleSelectCameraDevice(targetDevice.deviceId)
+    }
+
+    await handleApplyCameraSettingConstraint({ zoom: preset })
+  }, [cameraDevices, capabilities?.trackSettings?.deviceId, handleApplyCameraSettingConstraint, handleSelectCameraDevice])
 
   if (mobileMode === 'camera') {
     return (
@@ -1543,6 +1704,45 @@ function MobileWorkspace({
               ratio={cameraPreviewRatio}
               fit="full-frame"
             />
+
+            {availableZoomChoices.length > 0 && (
+              <div ref={lensMenuRef} style={s.mobileLensControl}>
+                {lensMenuOpen && (
+                  <div style={s.mobileLensMenu}>
+                    {availableZoomChoices.map((preset) => (
+                      <button
+                        key={preset}
+                        style={{
+                          ...s.mobileLensMenuItem,
+                          ...(isPresetActive(currentZoom ?? preferredZoom, preset) ? s.mobileLensMenuItemActive : {}),
+                        }}
+                        onClick={() => {
+                          void handleApplyZoomPreset(preset)
+                          setLensMenuOpen(false)
+                        }}
+                      >
+                        {formatZoomPreset(preset)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  style={{
+                    ...s.mobileLensButton,
+                    ...(availableZoomChoices.some((preset) => isPresetActive(currentZoom ?? preferredZoom, preset))
+                      ? s.mobileLensButtonActive
+                      : {}),
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setLensMenuOpen((open) => !open)
+                  }}
+                  aria-label="Choose zoom"
+                >
+                  {lensButtonLabel}
+                </button>
+              </div>
+            )}
           </div>
 
           <div style={s.mobileCameraTopBar}>
@@ -1633,28 +1833,6 @@ function MobileWorkspace({
                 </div>
               </div>
 
-              {quickZoomPresets.length > 0 && (
-                <div style={s.mobileQuickSection}>
-                  <div style={s.mobileQuickSectionLabel}>Zoom</div>
-                  <div style={s.mobileQuickPillRow}>
-                    {quickZoomPresets.map((preset) => (
-                      <button
-                        key={preset}
-                        style={{
-                          ...s.mobileQuickPill,
-                          ...(isPresetActive(currentZoom, preset) ? s.mobileQuickPillActive : {}),
-                        }}
-                        onClick={() => {
-                          void handleApplyCameraSettingConstraint({ zoom: preset })
-                        }}
-                      >
-                        {formatZoomPreset(preset)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div style={s.mobileQuickSubtleRow}>
                 <div style={s.mobileQuickSplitRow}>
                   {rawCapabilities?.torch && (
@@ -1670,61 +1848,18 @@ function MobileWorkspace({
                       {capabilities?.trackSettings?.torch ? 'Torch on' : 'Torch off'}
                     </button>
                   )}
-
-                  {compactDeviceButtons.length > 0 ? (
-                    compactDeviceButtons.map((device) => {
-                      const active = capabilities?.trackSettings?.deviceId === device.deviceId
-                      const label = formatCameraDeviceLabel(device.label || device.deviceId)
-                      return (
-                        <button
-                          key={device.deviceId}
-                          style={{
-                            ...s.mobileQuickPill,
-                            ...(active ? s.mobileQuickPillActive : {}),
-                          }}
-                          onClick={() => {
-                            void handleSelectCameraSettingDevice(device.deviceId)
-                          }}
-                        >
-                          {label}
-                        </button>
-                      )
-                    })
-                  ) : null}
                   <button style={s.mobileQuickPill} onClick={handleOpenCameraSettings}>
                     More
                   </button>
                 </div>
 
-                {(showDeviceSelector || showWhiteBalanceSelector) && (
+                {showWhiteBalanceSelector && (
                   <div
                     style={{
                       ...s.mobileQuickSelectorGrid,
-                      gridTemplateColumns:
-                        showDeviceSelector && showWhiteBalanceSelector
-                          ? 'minmax(0, 1fr) minmax(0, 1fr)'
-                          : 'minmax(0, 1fr)',
+                      gridTemplateColumns: 'minmax(0, 1fr)',
                     }}
                   >
-                    {showDeviceSelector && (
-                      <div style={s.mobileQuickSelectorRow}>
-                        <div style={s.mobileQuickSelectorLabel}>Camera</div>
-                        <select
-                          style={s.mobileQuickSelect}
-                          value={capabilities?.trackSettings?.deviceId || ''}
-                          onChange={(event) => {
-                            void handleSelectCameraSettingDevice(event.target.value)
-                          }}
-                        >
-                          {cameraDevices.map((device) => (
-                            <option key={device.deviceId} value={device.deviceId}>
-                              {formatCameraDeviceLabel(device.label || device.deviceId)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
                     {showWhiteBalanceSelector && (
                       <div style={s.mobileQuickSelectorRow}>
                         <div style={s.mobileQuickSelectorLabel}>White balance</div>
@@ -1872,6 +2007,7 @@ export function WorkspaceScreen() {
   const pinchStartZoomRef = useRef<number | null>(null)
   const pinchLastAppliedZoomRef = useRef<number | null>(null)
   const pinchApplyingRef = useRef(false)
+  const restorePreferredZoomPendingRef = useRef(false)
   const isMobile = useIsMobile()
   const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
@@ -1879,6 +2015,7 @@ export function WorkspaceScreen() {
   const [cameraPermissionRemembered, setCameraPermissionRemembered] = useState(() => loadCameraPermissionGranted())
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
+  const [preferredZoom, setPreferredZoom] = useState<number>(() => loadCameraPreferences().preferredZoom ?? 1)
   const [captureErrors, setCaptureErrors] = useState<string[]>([])
   const [storageErrors, setStorageErrors] = useState<string[]>([])
   const [allPhotos, setAllPhotos] = useState<StoredPhoto[]>([])
@@ -2581,6 +2718,7 @@ export function WorkspaceScreen() {
     setCameraState('active')
     setCameraPermissionRemembered(true)
     saveCameraPermissionGranted(true)
+    restorePreferredZoomPendingRef.current = true
 
     void refreshCameraTestState()
 
@@ -2813,6 +2951,11 @@ export function WorkspaceScreen() {
         return
       }
 
+      if (typeof constraint.zoom === 'number' && refreshed?.trackSettings?.zoom === constraint.zoom) {
+        setPreferredZoom(constraint.zoom)
+        saveCameraPreferences({ preferredZoom: constraint.zoom })
+      }
+
       setCameraTestMessage('Applied camera test setting.')
       appendCameraTestLog(formatCameraTestLogEntry({
         action,
@@ -2841,7 +2984,7 @@ export function WorkspaceScreen() {
         error: msg,
       }))
     }
-  }, [appendCameraTestLog, applyCameraConstraint, getCameraTestLogContext])
+  }, [appendCameraTestLog, applyCameraConstraint, getCameraTestLogContext, saveCameraPreferences])
 
   const handleApplyCameraSettingConstraint = useCallback(async (constraint: CameraTestConstraintSet) => {
     if (!cameraRef.current) {
@@ -2883,13 +3026,45 @@ export function WorkspaceScreen() {
         return
       }
 
+      if (typeof constraint.zoom === 'number' && afterSettings?.zoom === constraint.zoom) {
+        setPreferredZoom(constraint.zoom)
+        saveCameraPreferences({ preferredZoom: constraint.zoom })
+      }
+
       setCameraSettingsMessage('Applied camera setting.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setCameraSettingsError(msg)
       setCameraSettingsMessage('Camera setting failed.')
     }
-  }, [applyCameraConstraint, cameraRef])
+  }, [applyCameraConstraint, cameraRef, saveCameraPreferences])
+
+  useEffect(() => {
+    if (cameraState !== 'active' || !restorePreferredZoomPendingRef.current || !cameraRef.current) {
+      return
+    }
+
+    const liveCapabilities = cameraRef.current.getCapabilities() ?? capabilities
+    const supportedZoomChoices = getQuickZoomPresets(liveCapabilities)
+    if (supportedZoomChoices.length === 0) {
+      return
+    }
+
+    const zoomToRestore =
+      supportedZoomChoices.some((preset) => isPresetActive(preferredZoom, preset))
+        ? preferredZoom
+        : supportedZoomChoices.some((preset) => isPresetActive(1, preset))
+          ? 1
+          : supportedZoomChoices[0]
+
+    if (isPresetActive(capabilities?.trackSettings?.zoom, zoomToRestore)) {
+      restorePreferredZoomPendingRef.current = false
+      return
+    }
+
+    restorePreferredZoomPendingRef.current = false
+    void handleApplyCameraSettingConstraint({ zoom: zoomToRestore })
+  }, [cameraState, capabilities, handleApplyCameraSettingConstraint, preferredZoom])
 
   const handleSelectCameraDevice = useCallback(async (deviceId: string) => {
     if (!cameraRef.current) {
@@ -2960,25 +3135,6 @@ export function WorkspaceScreen() {
       }))
     }
   }, [appendCameraTestLog, getCameraTestLogContext, refreshCameraTestState, switchCameraDevice])
-
-  const handleSelectCameraSettingDevice = useCallback(async (deviceId: string) => {
-    if (!cameraRef.current) {
-      setCameraSettingsError('Camera not started')
-      setCameraSettingsMessage('Device switch failed.')
-      return
-    }
-
-    try {
-      setCameraSettingsError('')
-      setCameraSettingsMessage('Switching camera device…')
-      await switchCameraDevice(deviceId)
-      setCameraSettingsMessage('Camera device switched.')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setCameraSettingsError(msg)
-      setCameraSettingsMessage('Device switch failed.')
-    }
-  }, [switchCameraDevice])
 
   const handleChangeCameraTestPreviewRatio = useCallback((ratio: OutputRatio) => {
     setCameraTestPreviewRatio(ratio)
@@ -3243,6 +3399,7 @@ export function WorkspaceScreen() {
         authLoading={authLoading}
         cameraPreviewRatio={cameraTestOpen ? cameraTestPreviewRatio : cameraSettingsPreviewQuality ? 'full' : selectedRatio}
         selectedRatio={selectedRatio}
+        preferredZoom={preferredZoom}
         cameraRef={cameraRef}
         handleCameraError={handleCameraError}
         handleCameraStarted={handleCameraStarted}
@@ -3255,7 +3412,6 @@ export function WorkspaceScreen() {
         handleOpenCameraSettings={handleOpenCameraSettings}
         handleCloseCameraSettings={handleCloseCameraSettings}
         handleToggleCameraSettingsPreviewQuality={handleToggleCameraSettingsPreviewQuality}
-        handleSelectCameraSettingDevice={handleSelectCameraSettingDevice}
         handleApplyCameraSettingConstraint={handleApplyCameraSettingConstraint}
         handleOpenCameraTest={handleOpenCameraTest}
         handleCloseCameraTest={handleCloseCameraTest}
