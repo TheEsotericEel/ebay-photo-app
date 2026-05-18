@@ -357,6 +357,37 @@ const s: Record<string, React.CSSProperties> = {
     display: 'grid',
     gap: 10,
   },
+  mobileStatusStrip: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+    gap: 8,
+  },
+  mobileStatusChip: {
+    background: '#121212',
+    border: '1px solid #242424',
+    borderRadius: 14,
+    padding: 10,
+    display: 'grid',
+    gap: 3,
+  },
+  mobileStatusChipLabel: {
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    color: '#9ca3af',
+    fontWeight: 800,
+  },
+  mobileStatusChipValue: {
+    fontSize: 13,
+    fontWeight: 800,
+    color: '#f2f2f2',
+    lineHeight: 1.25,
+  },
+  mobileStatusChipMeta: {
+    fontSize: 11,
+    color: '#94a3b8',
+    lineHeight: 1.35,
+  },
   mobileLaunchButton: {
     padding: '18px 14px',
     fontSize: 18,
@@ -989,6 +1020,128 @@ function ItemLifecycleStrip({
   )
 }
 
+function MobileWorkspaceStatusStrip({
+  mode,
+  selectedStore,
+  selectedBatch,
+  batchUploadSummary,
+  cameraPermissionRemembered,
+  cameraState,
+  currentItem,
+  currentItemReadiness,
+  supabaseReady,
+  session,
+  authLoading,
+}: {
+  mode: 'home' | 'camera'
+  selectedStore: StoreRecord | null
+  selectedBatch: BatchRecord | null
+  batchUploadSummary: ReturnType<typeof getBatchUploadStateSummary>
+  cameraPermissionRemembered: boolean
+  cameraState: CameraState
+  currentItem: ItemPacket | null
+  currentItemReadiness: ReturnType<typeof getItemReadiness> | null
+  supabaseReady: boolean
+  session: { user: { email?: string | null; id: string } } | null
+  authLoading: boolean
+}) {
+  const workspaceChip: StatusChipModel = selectedStore && selectedBatch
+    ? {
+        label: 'Workspace',
+        value: `${selectedStore.shortCode} / ${selectedBatch.name}`,
+        meta: `${batchUploadSummary.totalItems} items • ${batchUploadSummary.totalPhotos} photos`,
+        tone: 'neutral',
+      }
+    : {
+        label: 'Workspace',
+        value: 'Unselected',
+        meta: 'Choose a store and batch',
+        tone: 'neutral',
+      }
+
+  const syncChip: StatusChipModel = !supabaseReady
+    ? {
+        label: 'Sync',
+        value: 'Setup needed',
+        meta: 'Missing Supabase env vars',
+        tone: 'warn',
+      }
+    : authLoading
+      ? {
+          label: 'Sync',
+          value: 'Loading',
+          meta: 'Checking session',
+          tone: 'neutral',
+        }
+      : session
+        ? getUploadBatchLabel(batchUploadSummary)
+        : {
+            label: 'Sync',
+            value: 'Signed out',
+            meta: 'Magic link sign-in required',
+            tone: 'warn',
+          }
+
+  const thirdChip: StatusChipModel = mode === 'home'
+    ? cameraState === 'active'
+      ? {
+          label: 'Camera',
+          value: 'Ready',
+          meta: cameraPermissionRemembered ? 'Permission remembered' : 'Permission granted',
+          tone: 'good',
+        }
+      : cameraPermissionRemembered
+        ? {
+            label: 'Camera',
+            value: 'Saved',
+            meta: 'Tap to resume',
+            tone: 'neutral',
+          }
+        : {
+            label: 'Camera',
+            value: 'Off',
+            meta: 'Tap Open Camera',
+            tone: 'neutral',
+          }
+    : currentItem
+      ? {
+          label: 'Item',
+          value: `#${currentItem.itemNumber}`,
+          meta: currentItemReadiness?.readyForHandoff ? 'Ready for handoff' : 'Needs info',
+          tone: currentItemReadiness?.readyForHandoff ? 'good' : 'warn',
+        }
+      : {
+          label: 'Item',
+          value: 'None',
+          meta: 'Capture the first item',
+          tone: 'neutral',
+        }
+
+  return (
+    <div style={s.mobileStatusStrip}>
+      {[workspaceChip, syncChip, thirdChip].map((chip) => (
+        <div
+          key={`${mode}-${chip.label}-${chip.value}`}
+          style={{
+            ...s.mobileStatusChip,
+            ...(chip.tone === 'good'
+              ? s.statusToneGood
+              : chip.tone === 'warn'
+                ? s.statusToneWarn
+                : chip.tone === 'bad'
+                  ? s.statusToneBad
+                  : s.statusToneNeutral),
+          }}
+        >
+          <div style={s.mobileStatusChipLabel}>{chip.label}</div>
+          <div style={s.mobileStatusChipValue}>{chip.value}</div>
+          <div style={s.mobileStatusChipMeta}>{chip.meta}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function WorkspaceScreen() {
   const cameraRef = useRef<CameraPreviewHandle>(null)
   const isMobile = useIsMobile()
@@ -1526,22 +1679,6 @@ export function WorkspaceScreen() {
     return sortItems(filtered, 'newest-first')
   }, [allItems, queueFilter, selectedBatchId, selectedStoreId])
 
-  const queueStats = useMemo(() => {
-    const items = allItems.filter((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId)
-    const byStatus = {
-      new: items.filter((item) => (item.listingStatus || 'new') === 'new').length,
-      listed: items.filter((item) => item.listingStatus === 'listed').length,
-      hold: items.filter((item) => item.listingStatus === 'hold').length,
-      needs_retake: items.filter((item) => item.listingStatus === 'needs_retake').length,
-    }
-    return {
-      itemCount: items.length,
-      photoCount: items.reduce((sum, item) => sum + item.photoIds.length, 0),
-      readyCount: items.filter((item) => getItemReadiness(item, allPhotos).readyForHandoff).length,
-      ...byStatus,
-    }
-  }, [allItems, allPhotos, selectedBatchId, selectedStoreId])
-
   const batchUploadSummary = useMemo(() => {
     return getBatchUploadStateSummary(allItems, allPhotos, selectedStoreId, selectedBatchId)
   }, [allItems, allPhotos, selectedBatchId, selectedStoreId])
@@ -1663,6 +1800,20 @@ export function WorkspaceScreen() {
               </div>
             </div>
 
+            <MobileWorkspaceStatusStrip
+              mode="camera"
+              selectedStore={selectedStore}
+              selectedBatch={selectedBatch}
+              batchUploadSummary={batchUploadSummary}
+              cameraPermissionRemembered={cameraPermissionRemembered}
+              cameraState={cameraState}
+              currentItem={currentItem}
+              currentItemReadiness={currentItemReadiness}
+              supabaseReady={supabaseReady}
+              session={session}
+              authLoading={authLoading}
+            />
+
             <div style={s.mobileCameraCard}>
               <CameraPreview
                 ref={cameraRef}
@@ -1674,12 +1825,6 @@ export function WorkspaceScreen() {
             </div>
 
             <div style={s.mobileFooter}>
-              {currentItem && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, color: '#a8a8a8' }}>
-                  <span>Item {currentItem.itemNumber}</span>
-                  <span>{currentItem.photoIds.length} photo{currentItem.photoIds.length === 1 ? '' : 's'}</span>
-                </div>
-              )}
               <div style={s.mobileStatusLine}>{statusMsg}</div>
 
               <div style={s.mobileRatioRow}>
@@ -1731,16 +1876,19 @@ export function WorkspaceScreen() {
             </div>
           </div>
 
-          <div style={s.mobileHomeCard}>
-            <div style={s.mobileSummary}>
-              <div style={s.mobileSummaryLine}>
-                {selectedStore?.name || 'Default Store'} / {selectedBatch?.name || 'Current Batch'}
-              </div>
-              <div style={s.mobileSubtle}>
-                {queueStats.itemCount} items • {queueStats.photoCount} photos • {queueStats.readyCount} ready
-              </div>
-            </div>
-          </div>
+            <MobileWorkspaceStatusStrip
+              mode="home"
+              selectedStore={selectedStore}
+              selectedBatch={selectedBatch}
+              batchUploadSummary={batchUploadSummary}
+              cameraPermissionRemembered={cameraPermissionRemembered}
+              cameraState={cameraState}
+              currentItem={currentItem}
+              currentItemReadiness={currentItemReadiness}
+              supabaseReady={supabaseReady}
+              session={session}
+              authLoading={authLoading}
+            />
 
           <div style={s.mobileLaunchArea}>
             <button
@@ -1763,9 +1911,9 @@ export function WorkspaceScreen() {
             )}
           </div>
         </div>
-      </div>
-    )
-  }
+        </div>
+      )
+    }
 
   if (isMobile) {
     return <MobileWorkspace />

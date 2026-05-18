@@ -16,6 +16,7 @@ The workspace also remembers the last desktop tab and the selected store and bat
 - retention dates and remote cleanup for listed items
 - a compact workspace status strip for camera, auth, sync, cleanup, and workspace selection
 - lifecycle chips on queue items and item detail so capture, upload, and cleanup state are visible without extra scrolling
+- a matching compact status strip on mobile home and camera screens
 - item listing status controls
 - default store and batch seed data
 
