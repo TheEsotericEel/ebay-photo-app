@@ -144,6 +144,18 @@ export function Phase0Screen() {
               facingMode: undefined,
               deviceId: undefined,
               zoom: undefined,
+              torch: undefined,
+              focusMode: undefined,
+              focusDistance: undefined,
+              exposureMode: undefined,
+              exposureTime: undefined,
+              exposureCompensation: undefined,
+              whiteBalanceMode: undefined,
+              brightness: undefined,
+              contrast: undefined,
+              saturation: undefined,
+              sharpness: undefined,
+              iso: undefined,
             },
       })
     } else {

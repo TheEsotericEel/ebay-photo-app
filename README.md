@@ -41,3 +41,5 @@ On mobile, the app opens on a capture home screen with a single `Open Camera` ac
 The camera mounts only after the user chooses to open it, and the browser remembers an accepted camera permission so later visits can resume faster.
 On desktop, the app opens to a queue-first management layout and can scroll naturally where needed.
 The app also remembers the last desktop tab and the selected store/batch in the browser.
+The mobile capture flow keeps the live preview visible while SKU, weight, and dimensions are edited in an overlay.
+`Next` advances to the next item in the same capture session, while `Done` ends capture for now without adding the final submit step yet.

@@ -166,19 +166,20 @@ async function resolveRemoteItem(
   const remoteId = item.remoteId || existing?.id || makeId('item')
   const { data, error } = await client
     .from('items')
-    .upsert(
-      {
-        id: remoteId,
-        store_id: storeId,
-        batch_id: batchId,
-        sequence: item.itemNumber,
-        status: item.listingStatus || 'new',
-        sku: item.sku || null,
-        notes: item.note || null,
-        weight: item.weight || null,
-        listing_intent: 'unknown',
-        tags: [],
-      },
+        .upsert(
+          {
+            id: remoteId,
+            store_id: storeId,
+            batch_id: batchId,
+            sequence: item.itemNumber,
+            status: item.listingStatus || 'new',
+            sku: item.sku || null,
+            notes: item.note || null,
+            weight: item.weight || null,
+            dimensions: item.dimensions || null,
+            listing_intent: 'unknown',
+            tags: [],
+          },
       { onConflict: 'batch_id,sequence' },
     )
     .select('id')
@@ -355,6 +356,7 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
             sku: item.sku || null,
             notes: item.note || null,
             weight: item.weight || null,
+            dimensions: item.dimensions || null,
             listed_at: item.listingStatus === 'listed' ? (item.listedAt || itemFinalizedAt) : null,
             photo_retention_until: item.listingStatus === 'listed' ? retentionWindow.expiresAt : null,
           })
@@ -476,6 +478,7 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
           sku: item.sku || null,
           notes: item.note || null,
           weight: item.weight || null,
+          dimensions: item.dimensions || null,
           listed_at: item.listingStatus === 'listed' ? (item.listedAt || itemFinalizedAt) : null,
           photo_retention_until: item.listingStatus === 'listed' ? retentionWindow.expiresAt : null,
         })

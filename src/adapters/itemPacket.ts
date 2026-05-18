@@ -33,12 +33,13 @@ export interface ItemPacket {
   sku?: string
   note?: string
   weight?: string
+  dimensions?: string
 }
 
 export interface LocalItemPacketStore {
   createItem(storeId: string, batchId: string): Promise<ItemPacket>
   addItemPhoto(itemId: string, photoId: string): Promise<void>
-  updateItemMetadata(itemId: string, metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight'>>): Promise<void>
+  updateItemMetadata(itemId: string, metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight' | 'dimensions'>>): Promise<void>
   setListingStatus(itemId: string, listingStatus: ListingStatus): Promise<void>
   updateItem(itemId: string, patch: Partial<ItemPacket>): Promise<void>
   finalizeItem(itemId: string): Promise<void>
@@ -154,7 +155,7 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
 
   async updateItemMetadata(
     itemId: string,
-    metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight'>>,
+    metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight' | 'dimensions'>>,
   ): Promise<void> {
     await this.updateItem(itemId, metadata)
   }

@@ -71,6 +71,7 @@ export function getOrderedPhotosWithMissing(
 export interface ItemReadiness {
   hasSku: boolean
   hasWeight: boolean
+  hasDimensions: boolean
   photoCount: number
   hasPhotos: boolean
   isComplete: boolean
@@ -80,7 +81,7 @@ export interface ItemReadiness {
 
 /**
  * Derives readiness information from an item.
- * readyForHandoff is defined as: complete item + SKU present + weight present + at least 1 photo + no missing photos
+ * readyForHandoff is defined as: complete item + SKU present + weight present + dimensions present + at least 1 photo + no missing photos
  */
 export function getItemReadiness(
   item: ItemPacket,
@@ -88,6 +89,7 @@ export function getItemReadiness(
 ): ItemReadiness {
   const hasSku = !!item.sku && item.sku.trim().length > 0
   const hasWeight = !!item.weight && item.weight.trim().length > 0
+  const hasDimensions = !!item.dimensions && item.dimensions.trim().length > 0
   const photoCount = item.photoIds.length
   const hasPhotos = photoCount > 0
   const isComplete = item.status === 'complete'
@@ -96,12 +98,13 @@ export function getItemReadiness(
   const orderedPhotos = getOrderedPhotosWithMissing(item, allPhotos)
   const missingPhotoCount = orderedPhotos.filter((p) => p === null).length
 
-  // Ready for handoff: complete + SKU + weight + at least 1 photo + no missing photos
-  const readyForHandoff = isComplete && hasSku && hasWeight && hasPhotos && missingPhotoCount === 0
+  // Ready for handoff: complete + SKU + weight + dimensions + at least 1 photo + no missing photos
+  const readyForHandoff = isComplete && hasSku && hasWeight && hasDimensions && hasPhotos && missingPhotoCount === 0
 
   return {
     hasSku,
     hasWeight,
+    hasDimensions,
     photoCount,
     hasPhotos,
     isComplete,

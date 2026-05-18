@@ -56,6 +56,18 @@ export interface TrackSettings {
   facingMode: string | undefined
   deviceId: string | undefined
   zoom: number | undefined
+  torch: boolean | undefined
+  focusMode: string | undefined
+  focusDistance: number | undefined
+  exposureMode: string | undefined
+  exposureTime: number | undefined
+  exposureCompensation: number | undefined
+  whiteBalanceMode: string | undefined
+  brightness: number | undefined
+  contrast: number | undefined
+  saturation: number | undefined
+  sharpness: number | undefined
+  iso: number | undefined
 }
 
 export interface CameraCapabilities {
@@ -68,6 +80,30 @@ export interface CameraCapabilities {
   trackSettings: TrackSettings | null
 }
 
+export interface CameraDeviceInfo {
+  kind: string
+  deviceId: string
+  label: string
+  groupId: string
+}
+
+export interface CameraTestConstraintSet extends MediaTrackConstraintSet {
+  zoom?: number | ConstrainDoubleRange
+  focusMode?: string | string[] | ConstrainDOMStringParameters
+  focusDistance?: number | ConstrainDoubleRange
+  pointsOfInterest?: { x: number; y: number } | { x: number; y: number }[]
+  torch?: boolean
+  exposureMode?: string | string[] | ConstrainDOMStringParameters
+  exposureTime?: number | ConstrainDoubleRange
+  exposureCompensation?: number | ConstrainDoubleRange
+  whiteBalanceMode?: string | string[] | ConstrainDOMStringParameters
+  brightness?: number | ConstrainDoubleRange
+  contrast?: number | ConstrainDoubleRange
+  saturation?: number | ConstrainDoubleRange
+  sharpness?: number | ConstrainDoubleRange
+  iso?: number | ConstrainDoubleRange
+}
+
 export interface CameraAdapter {
   start(videoEl: HTMLVideoElement): Promise<void>
   stop(): void
@@ -77,6 +113,8 @@ export interface CameraAdapter {
 
 export class BrowserCameraAdapter implements CameraAdapter {
   private stream: MediaStream | null = null
+  private videoEl: HTMLVideoElement | null = null
+  private track: MediaStreamTrack | null = null
   private capabilities: CameraCapabilities | null = null
   private diagnostics: CaptureDiagnostics = {}
 
@@ -111,6 +149,7 @@ export class BrowserCameraAdapter implements CameraAdapter {
 
     let stream = await navigator.mediaDevices.getUserMedia(initialConstraints)
     this.stream = stream
+    this.videoEl = videoEl
     videoEl.srcObject = stream
     await videoEl.play()
 
@@ -118,6 +157,7 @@ export class BrowserCameraAdapter implements CameraAdapter {
     if (!track) {
       throw new Error('No video track available')
     }
+    this.track = track
 
     // Record initial stream dimensions
     this.diagnostics.initialStreamWidth = videoEl.videoWidth
@@ -146,6 +186,8 @@ export class BrowserCameraAdapter implements CameraAdapter {
       this.stream.getTracks().forEach((t) => t.stop())
       this.stream = null
     }
+    this.track = null
+    this.videoEl = null
     this.capabilities = null
   }
 
@@ -396,6 +438,74 @@ export class BrowserCameraAdapter implements CameraAdapter {
   getCapabilities(): CameraCapabilities | null {
     return this.capabilities
   }
+
+  getActiveTrack(): MediaStreamTrack | null {
+    return this.track
+  }
+
+  async listVideoInputDevices(): Promise<CameraDeviceInfo[]> {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      return []
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    return devices
+      .filter((device) => device.kind === 'videoinput')
+      .map((device) => ({
+        kind: device.kind,
+        deviceId: device.deviceId,
+        label: device.label || `Camera ${device.deviceId.slice(0, 4)}`,
+        groupId: device.groupId || '',
+      }))
+  }
+
+  async applyTestConstraints(constraints: CameraTestConstraintSet): Promise<CameraCapabilities | null> {
+    const track = this.track
+    if (!track) {
+      throw new Error('Camera not started')
+    }
+
+    await track.applyConstraints({
+      advanced: [constraints] as MediaTrackConstraintSet[],
+    })
+
+    this.capabilities = probeCapabilities(track, this.videoEl ?? undefined)
+    return this.capabilities
+  }
+
+  async switchDevice(deviceId: string): Promise<CameraCapabilities | null> {
+    const videoEl = this.videoEl
+    if (!videoEl) {
+      throw new Error('Camera view not attached')
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Camera API unavailable')
+    }
+
+    const currentDeviceId = this.track?.getSettings().deviceId
+    if (currentDeviceId && currentDeviceId === deviceId) {
+      return this.capabilities
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: deviceId } },
+      audio: false,
+    })
+
+    const previousStream = this.stream
+    this.stream = stream
+    this.track = stream.getVideoTracks()[0] || null
+    videoEl.srcObject = stream
+    await videoEl.play()
+
+    if (previousStream) {
+      previousStream.getTracks().forEach((t) => t.stop())
+    }
+
+    this.capabilities = this.track ? probeCapabilities(this.track, videoEl) : null
+    return this.capabilities
+  }
 }
 
 function probeCapabilities(track: MediaStreamTrack, videoEl?: HTMLVideoElement): CameraCapabilities {
@@ -422,7 +532,21 @@ function probeCapabilities(track: MediaStreamTrack, videoEl?: HTMLVideoElement):
   let trackSettings: TrackSettings | null = null
   try {
     const s = track.getSettings()
-    const ext = s as typeof s & { zoom?: number }
+    const ext = s as typeof s & {
+      zoom?: number
+      torch?: boolean
+      focusMode?: string
+      focusDistance?: number
+      exposureMode?: string
+      exposureTime?: number
+      exposureCompensation?: number
+      whiteBalanceMode?: string
+      brightness?: number
+      contrast?: number
+      saturation?: number
+      sharpness?: number
+      iso?: number
+    }
     trackSettings = {
       width: s.width,
       height: s.height,
@@ -430,6 +554,18 @@ function probeCapabilities(track: MediaStreamTrack, videoEl?: HTMLVideoElement):
       facingMode: s.facingMode,
       deviceId: s.deviceId,
       zoom: ext.zoom,
+      torch: ext.torch,
+      focusMode: ext.focusMode,
+      focusDistance: ext.focusDistance,
+      exposureMode: ext.exposureMode,
+      exposureTime: ext.exposureTime,
+      exposureCompensation: ext.exposureCompensation,
+      whiteBalanceMode: ext.whiteBalanceMode,
+      brightness: ext.brightness,
+      contrast: ext.contrast,
+      saturation: ext.saturation,
+      sharpness: ext.sharpness,
+      iso: ext.iso,
     }
     if (videoEl) {
       trackSettings.width = trackSettings.width ?? (videoEl.videoWidth || undefined)
@@ -453,7 +589,21 @@ function probeCapabilities(track: MediaStreamTrack, videoEl?: HTMLVideoElement):
 function readTrackSettings(track: MediaStreamTrack): TrackSettings {
   try {
     const s = track.getSettings()
-    const ext = s as typeof s & { zoom?: number }
+    const ext = s as typeof s & {
+      zoom?: number
+      torch?: boolean
+      focusMode?: string
+      focusDistance?: number
+      exposureMode?: string
+      exposureTime?: number
+      exposureCompensation?: number
+      whiteBalanceMode?: string
+      brightness?: number
+      contrast?: number
+      saturation?: number
+      sharpness?: number
+      iso?: number
+    }
     return {
       width: s.width,
       height: s.height,
@@ -461,9 +611,40 @@ function readTrackSettings(track: MediaStreamTrack): TrackSettings {
       facingMode: s.facingMode,
       deviceId: s.deviceId,
       zoom: ext.zoom,
+      torch: ext.torch,
+      focusMode: ext.focusMode,
+      focusDistance: ext.focusDistance,
+      exposureMode: ext.exposureMode,
+      exposureTime: ext.exposureTime,
+      exposureCompensation: ext.exposureCompensation,
+      whiteBalanceMode: ext.whiteBalanceMode,
+      brightness: ext.brightness,
+      contrast: ext.contrast,
+      saturation: ext.saturation,
+      sharpness: ext.sharpness,
+      iso: ext.iso,
     }
   } catch {
-    return { width: undefined, height: undefined, aspectRatio: undefined, facingMode: undefined, deviceId: undefined, zoom: undefined }
+    return {
+      width: undefined,
+      height: undefined,
+      aspectRatio: undefined,
+      facingMode: undefined,
+      deviceId: undefined,
+      zoom: undefined,
+      torch: undefined,
+      focusMode: undefined,
+      focusDistance: undefined,
+      exposureMode: undefined,
+      exposureTime: undefined,
+      exposureCompensation: undefined,
+      whiteBalanceMode: undefined,
+      brightness: undefined,
+      contrast: undefined,
+      saturation: undefined,
+      sharpness: undefined,
+      iso: undefined,
+    }
   }
 }
 

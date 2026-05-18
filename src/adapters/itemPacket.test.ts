@@ -69,12 +69,14 @@ describe('IndexedDbItemPacketStore', () => {
       sku: 'SKU-123',
       note: 'Test note',
       weight: '1.5kg',
+      dimensions: '12 x 8 x 6 in',
     })
 
     const updated = await store.getItem(item.id)
     expect(updated?.sku).toBe('SKU-123')
     expect(updated?.note).toBe('Test note')
     expect(updated?.weight).toBe('1.5kg')
+    expect(updated?.dimensions).toBe('12 x 8 x 6 in')
   })
 
   it('finalizes item status to complete', async () => {

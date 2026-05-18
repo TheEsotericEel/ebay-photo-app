@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CameraPreview, CameraPreviewHandle } from '../components/CameraPreview'
+import { CameraTestDrawer } from '../components/CameraTestDrawer'
+import { CaptureMetadataOverlay } from '../components/CaptureMetadataOverlay'
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
 import { PhotoDetailModal } from '../components/PhotoDetailModal'
 import { PhotoList } from '../components/PhotoList'
@@ -13,7 +15,8 @@ import { calculateRetentionWindow, getRetentionModeLabel, RemoteRetentionMode } 
 import { deleteEligibleRemotePhotos, getRemoteCleanupReport, RemoteCleanupProgress } from '../adapters/remoteCleanup'
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
-import { CameraCapabilities, CaptureDiagnostics } from '../adapters/camera'
+import { CameraCapabilities, CameraDeviceInfo, CameraTestConstraintSet, CaptureDiagnostics } from '../adapters/camera'
+import { runCameraProbe, formatProbeReport, summarizeProbeForLog } from '../adapters/cameraProbe'
 import { supabase } from '../lib/supabase'
 import { APP_NAME, SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
 import { loadCameraPermissionGranted, saveCameraPermissionGranted } from '../lib/cameraPermission'
@@ -30,6 +33,71 @@ const secureContextInfo: SecureContextInfo = probeSecureContext()
 type CameraState = 'idle' | 'starting' | 'active' | 'stopped' | 'error'
 type QueueFilter = 'all' | ListingStatus
 export type { DesktopMode }
+
+interface ExtendedMediaTrackCapabilities extends MediaTrackCapabilities {
+  zoom?: { min: number; max: number; step: number }
+  focusMode?: string[]
+  focusDistance?: { min: number; max: number; step: number }
+  pointsOfInterest?: { x: number; y: number }[]
+  torch?: boolean
+  exposureMode?: string[]
+  exposureTime?: { min: number; max: number; step: number }
+  exposureCompensation?: { min: number; max: number; step: number }
+  whiteBalanceMode?: string[]
+  brightness?: { min: number; max: number; step: number }
+  contrast?: { min: number; max: number; step: number }
+  saturation?: { min: number; max: number; step: number }
+  sharpness?: { min: number; max: number; step: number }
+  iso?: { min: number; max: number; step: number }
+}
+
+function formatCameraTestValue(value: number | string | boolean | undefined | null): string {
+  if (value === undefined || value === null) return '?'
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return '?'
+    if (Math.abs(value) >= 10) return value.toFixed(0)
+    if (Math.abs(value) >= 1) return value.toFixed(2)
+    return value.toFixed(3)
+  }
+  return String(value)
+}
+
+function describeCameraTestSettings(settings: CameraCapabilities['trackSettings'] | null | undefined): string {
+  if (!settings) return 'settings unavailable'
+  const parts = [
+    `${settings.width ?? '?'}x${settings.height ?? '?'}`,
+    `ratio=${formatCameraTestValue(settings.aspectRatio)}`,
+    `device=${settings.deviceId || '?'}`,
+    `facing=${settings.facingMode || '?'}`,
+    `zoom=${formatCameraTestValue(settings.zoom)}`,
+    `torch=${formatCameraTestValue(settings.torch)}`,
+    settings.focusMode ? `focus=${settings.focusMode}` : null,
+    `focusDistance=${formatCameraTestValue(settings.focusDistance)}`,
+    settings.exposureMode ? `exposure=${settings.exposureMode}` : null,
+    `exposureTime=${formatCameraTestValue(settings.exposureTime)}`,
+    `exposureCompensation=${formatCameraTestValue(settings.exposureCompensation)}`,
+    settings.whiteBalanceMode ? `wb=${settings.whiteBalanceMode}` : null,
+    `brightness=${formatCameraTestValue(settings.brightness)}`,
+    `contrast=${formatCameraTestValue(settings.contrast)}`,
+    `saturation=${formatCameraTestValue(settings.saturation)}`,
+    `sharpness=${formatCameraTestValue(settings.sharpness)}`,
+    `iso=${formatCameraTestValue(settings.iso)}`,
+  ].filter(Boolean)
+
+  return parts.join(' • ')
+}
+
+function summarizeCameraTestConstraint(constraint: CameraTestConstraintSet): string {
+  const entries = Object.entries(constraint).map(([key, value]) => {
+    if (typeof value === 'object' && value !== null) {
+      return `${key}=${JSON.stringify(value)}`
+    }
+    return `${key}=${String(value)}`
+  })
+
+  return entries.length > 0 ? entries.join(', ') : 'no constraints'
+}
+
 const s: Record<string, React.CSSProperties> = {
   screen: {
     display: 'flex',
@@ -398,6 +466,52 @@ const s: Record<string, React.CSSProperties> = {
     gap: 8,
     flexWrap: 'wrap',
   },
+  mobileCameraSession: {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+    minHeight: '100dvh',
+    overflow: 'hidden',
+    background: '#000',
+  },
+  mobileCameraViewport: {
+    position: 'absolute',
+    inset: 0,
+    background: '#000',
+    touchAction: 'none',
+  },
+  mobileCameraTopBar: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 3,
+    display: 'grid',
+    gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+    gap: 8,
+    alignItems: 'center',
+  },
+  mobileCameraTopCenter: {
+    display: 'grid',
+    gap: 2,
+    justifyItems: 'center',
+    padding: '8px 10px',
+    borderRadius: 14,
+    background: 'rgba(8, 8, 8, 0.88)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+  },
+  mobileTopButton: {
+    background: 'rgba(12, 12, 12, 0.92)',
+    color: '#f2f2f2',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+  },
+  mobileTopActions: {
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
   mobileCameraShell: {
     display: 'flex',
     flexDirection: 'column',
@@ -439,10 +553,30 @@ const s: Record<string, React.CSSProperties> = {
     color: '#9ca3af',
     lineHeight: 1.5,
   },
+  mobileCameraBottomBar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    zIndex: 3,
+    display: 'grid',
+    gap: 10,
+  },
+  mobileCaptureStatus: {
+    fontSize: 12,
+    color: '#e5e7eb',
+    lineHeight: 1.45,
+    textShadow: '0 1px 2px rgba(0, 0, 0, 0.65)',
+  },
   mobileRatioRow: {
     display: 'grid',
     gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
     gap: 6,
+  },
+  mobileCaptureActions: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.9fr)',
+    gap: 8,
   },
   mobileSmallButton: {
     padding: '10px 10px',
@@ -1142,8 +1276,323 @@ function MobileWorkspaceStatusStrip({
   )
 }
 
+function MobileWorkspace({
+  mobileMode,
+  selectedStore,
+  selectedBatch,
+  batchUploadSummary,
+  cameraPermissionRemembered,
+  cameraState,
+  capabilities,
+  cameraTestOpen,
+  cameraDevices,
+  cameraTestMessage,
+  cameraTestError,
+  currentItem,
+  currentItemReadiness,
+  supabaseReady,
+  session,
+  authLoading,
+  cameraPreviewRatio,
+  selectedRatio,
+  cameraRef,
+  handleCameraError,
+  handleCameraStarted,
+  setCameraState,
+  handleRatioChange,
+  handlePreviewClick,
+  handlePreviewTouchStart,
+  handlePreviewTouchMove,
+  handlePreviewTouchEnd,
+  handleOpenCameraTest,
+  handleCloseCameraTest,
+  handleSelectCameraDevice,
+  handleApplyCameraTestConstraint,
+  handleChangeCameraTestPreviewRatio,
+  handleToggleFullQualityPreview,
+  cameraTestLogText,
+  handleCopyCameraTestLog,
+  handleRunCameraProbe,
+  cameraTestFullQualityPreview,
+  capturing,
+  selectedStoreId,
+  selectedBatchId,
+  handleCapture,
+  statusMsg,
+  handleNextItem,
+  handleDoneSession,
+  itemSku,
+  itemWeight,
+  itemDimensions,
+  setItemSku,
+  setItemWeight,
+  setItemDimensions,
+  metadataOverlayOpen,
+  setMetadataOverlayOpen,
+  handleOpenCamera,
+  handleSyncBatch,
+  setMobileMode,
+}: {
+  mobileMode: 'home' | 'camera'
+  selectedStore: StoreRecord | null
+  selectedBatch: BatchRecord | null
+  batchUploadSummary: ReturnType<typeof getBatchUploadStateSummary>
+  cameraPermissionRemembered: boolean
+  cameraState: CameraState
+  capabilities: CameraCapabilities | null
+  cameraTestOpen: boolean
+  cameraDevices: CameraDeviceInfo[]
+  cameraTestMessage: string
+  cameraTestError: string
+  currentItem: ItemPacket | null
+  currentItemReadiness: ReturnType<typeof getItemReadiness> | null
+  supabaseReady: boolean
+  session: { user: { email?: string | null; id: string } } | null
+  authLoading: boolean
+  cameraPreviewRatio: OutputRatio
+  selectedRatio: OutputRatio
+  cameraRef: React.RefObject<CameraPreviewHandle>
+  handleCameraError: (msg: string) => void
+  handleCameraStarted: () => void
+  setCameraState: (state: CameraState) => void
+  handleRatioChange: (ratio: OutputRatio) => void
+  handlePreviewClick: (event: React.MouseEvent<HTMLDivElement>) => void
+  handlePreviewTouchStart: (event: React.TouchEvent<HTMLDivElement>) => void
+  handlePreviewTouchMove: (event: React.TouchEvent<HTMLDivElement>) => void
+  handlePreviewTouchEnd: () => void
+  handleOpenCameraTest: () => void
+  handleCloseCameraTest: () => void
+  handleSelectCameraDevice: (deviceId: string) => void
+  handleApplyCameraTestConstraint: (constraint: CameraTestConstraintSet) => Promise<void>
+  handleChangeCameraTestPreviewRatio: (ratio: OutputRatio) => void
+  handleToggleFullQualityPreview: () => void
+  cameraTestLogText: string
+  handleCopyCameraTestLog: () => void
+  handleRunCameraProbe: () => Promise<void>
+  cameraTestFullQualityPreview: boolean
+  capturing: boolean
+  selectedStoreId: string
+  selectedBatchId: string
+  handleCapture: () => Promise<void>
+  statusMsg: string
+  handleNextItem: () => Promise<void>
+  handleDoneSession: () => Promise<void>
+  itemSku: string
+  itemWeight: string
+  itemDimensions: string
+  setItemSku: (value: string) => void
+  setItemWeight: (value: string) => void
+  setItemDimensions: (value: string) => void
+  metadataOverlayOpen: boolean
+  setMetadataOverlayOpen: React.Dispatch<React.SetStateAction<boolean>>
+  handleOpenCamera: () => Promise<void>
+  handleSyncBatch: () => Promise<void>
+  setMobileMode: React.Dispatch<React.SetStateAction<'home' | 'camera'>>
+}) {
+  if (mobileMode === 'camera') {
+    return (
+      <div style={{ ...s.mobileScreen, padding: 0, maxWidth: 'none' }}>
+        <div style={s.mobileCameraSession}>
+          <div
+            style={s.mobileCameraViewport}
+            onClick={handlePreviewClick}
+            onTouchStart={handlePreviewTouchStart}
+            onTouchMove={handlePreviewTouchMove}
+            onTouchEnd={handlePreviewTouchEnd}
+            onTouchCancel={handlePreviewTouchEnd}
+          >
+            <CameraPreview
+              ref={cameraRef}
+              onError={handleCameraError}
+              onStarted={handleCameraStarted}
+              onStopped={() => setCameraState('stopped')}
+              ratio={cameraPreviewRatio}
+              fit="full-frame"
+            />
+          </div>
+
+          <div style={s.mobileCameraTopBar}>
+            <button
+              style={{ ...s.button, ...s.buttonSmall, ...s.mobileTopButton }}
+              onClick={() => {
+                if (metadataOverlayOpen) {
+                  setMetadataOverlayOpen(false)
+                  return
+                }
+                setMobileMode('home')
+              }}
+            >
+              Back
+            </button>
+            <div style={s.mobileCameraTopCenter}>
+              <div style={s.mobileCameraTitle}>
+                {currentItem ? `Item ${currentItem.itemNumber}` : 'Capture'}
+              </div>
+              <div style={s.mobileCameraMeta}>
+                {selectedStore?.name || 'Store'} / {selectedBatch?.name || 'Batch'}
+                {' '}• {currentItemReadiness?.readyForHandoff ? 'Ready' : 'Needs info'}
+              </div>
+            </div>
+            <div style={s.mobileTopActions}>
+              <button
+                style={{ ...s.button, ...s.buttonSmall, ...s.mobileTopButton }}
+                onClick={() => setMetadataOverlayOpen((open) => !open)}
+              >
+                Details
+              </button>
+              <button
+                style={{
+                  ...s.button,
+                  ...s.buttonSmall,
+                  ...s.mobileTopButton,
+                  ...(cameraTestOpen ? s.buttonPrimary : {}),
+                }}
+                onClick={() => {
+                  if (cameraTestOpen) {
+                    handleCloseCameraTest()
+                  } else {
+                    handleOpenCameraTest()
+                  }
+                }}
+              >
+                Test
+              </button>
+            </div>
+          </div>
+
+          <div style={s.mobileCameraBottomBar}>
+            <div style={s.mobileCaptureStatus}>{statusMsg}</div>
+            <div style={s.mobileRatioRow}>
+              {(['full', '1:1', '4:3', '16:9'] as OutputRatio[]).map((ratio) => (
+                <button
+                  key={ratio}
+                  style={{
+                    ...s.button,
+                    ...s.mobileSmallButton,
+                    ...(selectedRatio === ratio ? s.buttonPrimary : {}),
+                  }}
+                  onClick={() => handleRatioChange(ratio)}
+                >
+                  {ratio === 'full' ? 'Full' : ratio}
+                </button>
+              ))}
+            </div>
+
+            <div style={s.mobileCaptureActions}>
+              <button
+                style={{ ...s.button, ...s.buttonPrimary, ...s.mobilePrimaryButton }}
+                disabled={capturing || cameraState !== 'active' || !selectedStoreId || !selectedBatchId}
+                onClick={handleCapture}
+              >
+                {capturing ? 'Capturing…' : '⊙ Capture'}
+              </button>
+              <button
+                style={s.button}
+                disabled={!currentItem || currentItem.photoIds.length === 0}
+                onClick={() => { void handleNextItem() }}
+              >
+                Next Item
+              </button>
+              <button
+                style={s.button}
+                onClick={() => { void handleDoneSession() }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+
+          <CaptureMetadataOverlay
+            open={metadataOverlayOpen}
+            itemLabel={currentItem ? `Item ${currentItem.itemNumber}` : 'New item'}
+            sku={itemSku}
+            weight={itemWeight}
+            dimensions={itemDimensions}
+            onChangeSku={setItemSku}
+            onChangeWeight={setItemWeight}
+            onChangeDimensions={setItemDimensions}
+            onClose={() => setMetadataOverlayOpen(false)}
+          />
+
+          <CameraTestDrawer
+            open={cameraTestOpen}
+            capabilities={capabilities}
+            devices={cameraDevices}
+            previewRatio={cameraPreviewRatio}
+            fullQualityPreviewEnabled={cameraTestFullQualityPreview}
+            logText={cameraTestLogText}
+            onClose={handleCloseCameraTest}
+            onChangePreviewRatio={handleChangeCameraTestPreviewRatio}
+            onToggleFullQualityPreview={handleToggleFullQualityPreview}
+            onSelectDevice={(deviceId) => { void handleSelectCameraDevice(deviceId) }}
+            onApplyConstraint={(constraint) => handleApplyCameraTestConstraint(constraint)}
+            onCopyLog={handleCopyCameraTestLog}
+            onRunProbe={handleRunCameraProbe}
+            statusMessage={cameraTestMessage}
+            errorMessage={cameraTestError}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={s.mobileScreen}>
+      <div style={s.mobileHome}>
+        <div style={s.mobileHero}>
+          <div>
+            <div style={s.mobileHeroTitle}>Capture</div>
+            <div style={s.mobileHeroCopy}>
+              Tap once to open the camera. Quick status stays visible, everything else stays out of the way.
+            </div>
+          </div>
+        </div>
+
+        <MobileWorkspaceStatusStrip
+          mode="home"
+          selectedStore={selectedStore}
+          selectedBatch={selectedBatch}
+          batchUploadSummary={batchUploadSummary}
+          cameraPermissionRemembered={cameraPermissionRemembered}
+          cameraState={cameraState}
+          currentItem={currentItem}
+          currentItemReadiness={currentItemReadiness}
+          supabaseReady={supabaseReady}
+          session={session}
+          authLoading={authLoading}
+        />
+
+        <div style={s.mobileLaunchArea}>
+          <button
+            style={{ ...s.button, ...s.buttonPrimary, ...s.mobileLaunchButton }}
+            onClick={() => { void handleOpenCamera() }}
+          >
+            {cameraPermissionRemembered ? 'Resume Camera' : 'Open Camera'}
+          </button>
+          <button
+            style={{ ...s.button, ...s.buttonSmall }}
+            onClick={() => { void handleSyncBatch() }}
+            disabled={!supabaseReady || !session || authLoading || !selectedStoreId || !selectedBatchId}
+          >
+            {authLoading ? 'Syncing…' : 'Sync Batch'}
+          </button>
+          {cameraPermissionRemembered && (
+            <div style={s.mobileSubtle}>
+              Camera permission is remembered for this browser.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function WorkspaceScreen() {
   const cameraRef = useRef<CameraPreviewHandle>(null)
+  const pinchStartDistanceRef = useRef<number | null>(null)
+  const pinchStartZoomRef = useRef<number | null>(null)
+  const pinchLastAppliedZoomRef = useRef<number | null>(null)
+  const pinchApplyingRef = useRef(false)
   const isMobile = useIsMobile()
   const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
@@ -1163,6 +1612,15 @@ export function WorkspaceScreen() {
   const [itemSku, setItemSku] = useState('')
   const [itemNote, setItemNote] = useState('')
   const [itemWeight, setItemWeight] = useState('')
+  const [itemDimensions, setItemDimensions] = useState('')
+  const [metadataOverlayOpen, setMetadataOverlayOpen] = useState(false)
+  const [cameraTestOpen, setCameraTestOpen] = useState(false)
+  const [cameraDevices, setCameraDevices] = useState<CameraDeviceInfo[]>([])
+  const [cameraTestMessage, setCameraTestMessage] = useState('Open Camera Test to inspect controls.')
+  const [cameraTestError, setCameraTestError] = useState('')
+  const [cameraTestPreviewRatio, setCameraTestPreviewRatio] = useState<OutputRatio>('full')
+  const [cameraTestFullQualityPreview, setCameraTestFullQualityPreview] = useState(false)
+  const [cameraTestLogEntries, setCameraTestLogEntries] = useState<string[]>([])
   const [capturing, setCapturing] = useState(false)
   const [statusMsg, setStatusMsg] = useState('Workspace ready')
   const [selectedPhoto, setSelectedPhoto] = useState<StoredPhoto | null>(null)
@@ -1177,18 +1635,13 @@ export function WorkspaceScreen() {
   const [uploading, setUploading] = useState(false)
   const [remoteCleaning, setRemoteCleaning] = useState(false)
   const [cleanupMessage, setCleanupMessage] = useState('')
+  const cameraTestPreviewBaselineRef = useRef<CameraCapabilities['trackSettings'] | null>(null)
 
   useEffect(() => {
     if (!isMobile) {
       setMobileMode('home')
     }
   }, [isMobile])
-
-  useEffect(() => {
-    if (isMobile && cameraPermissionRemembered) {
-      setMobileMode('camera')
-    }
-  }, [cameraPermissionRemembered, isMobile])
 
   useEffect(() => {
     saveWorkspacePreferences({ desktopMode })
@@ -1223,6 +1676,53 @@ export function WorkspaceScreen() {
     setBatches(batchesData)
   }, [])
 
+  const refreshCameraTestState = useCallback(async () => {
+    const caps = cameraRef.current?.getCapabilities() ?? null
+    const dims = cameraRef.current?.getVideoDimensions() ?? null
+    if (caps && dims) {
+      setCapabilities({
+        ...caps,
+        trackSettings: caps.trackSettings
+          ? {
+              ...caps.trackSettings,
+              width: caps.trackSettings.width ?? dims.videoWidth,
+              height: caps.trackSettings.height ?? dims.videoHeight,
+            }
+          : {
+              width: dims.videoWidth,
+              height: dims.videoHeight,
+              aspectRatio: undefined,
+              facingMode: undefined,
+              deviceId: undefined,
+              zoom: undefined,
+              torch: undefined,
+              focusMode: undefined,
+              focusDistance: undefined,
+              exposureMode: undefined,
+              exposureTime: undefined,
+              exposureCompensation: undefined,
+              whiteBalanceMode: undefined,
+              brightness: undefined,
+              contrast: undefined,
+              saturation: undefined,
+              sharpness: undefined,
+              iso: undefined,
+            },
+          })
+    } else {
+      setCapabilities(caps)
+    }
+
+    try {
+      const devices = await cameraRef.current?.listVideoInputDevices()
+      setCameraDevices(devices || [])
+    } catch {
+      setCameraDevices([])
+    }
+
+    return caps
+  }, [])
+
   useEffect(() => {
     async function bootstrap() {
       try {
@@ -1248,6 +1748,7 @@ export function WorkspaceScreen() {
           setItemSku(current.sku || '')
           setItemNote(current.note || '')
           setItemWeight(current.weight || '')
+          setItemDimensions(current.dimensions || '')
         }
         setStatusMsg(`Ready on ${preferredStore.name} / ${preferredBatch.name}`)
       } catch (err) {
@@ -1275,11 +1776,13 @@ export function WorkspaceScreen() {
         setItemSku('')
         setItemNote('')
         setItemWeight('')
+        setItemDimensions('')
         return
       }
       setItemSku(item.sku || '')
       setItemNote(item.note || '')
       setItemWeight(item.weight || '')
+      setItemDimensions(item.dimensions || '')
     })
   }, [selectedBatchId, selectedStoreId])
 
@@ -1296,12 +1799,57 @@ export function WorkspaceScreen() {
     setSelectedQueueItemId(nextSelected?.id || '')
   }, [allItems, queueFilter, selectedBatchId, selectedQueueItemId, selectedStoreId])
 
+  const ensureCurrentItem = useCallback(async () => {
+    if (currentItem) {
+      return currentItem
+    }
+    if (!selectedStoreId || !selectedBatchId) {
+      return null
+    }
+
+    const draft = await itemPacketStore.createItem(selectedStoreId, selectedBatchId)
+    setCurrentItem(draft)
+    setItemSku('')
+    setItemNote('')
+    setItemWeight('')
+    setItemDimensions('')
+    return draft
+  }, [currentItem, selectedBatchId, selectedStoreId])
+
+  useEffect(() => {
+    if (mobileMode !== 'camera' || currentItem || !selectedStoreId || !selectedBatchId) {
+      return
+    }
+
+    ensureCurrentItem().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      setStorageErrors((prev) => [...prev, `Draft creation failed: ${msg}`])
+    })
+  }, [currentItem, ensureCurrentItem, mobileMode, selectedBatchId, selectedStoreId])
+
+  const handleOpenCamera = useCallback(async () => {
+    try {
+      await ensureCurrentItem()
+      setMetadataOverlayOpen(false)
+      setCameraTestOpen(false)
+      setMobileMode('camera')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setStorageErrors((prev) => [...prev, `Open camera failed: ${msg}`])
+    }
+  }, [ensureCurrentItem])
+
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current || capturing || !selectedStoreId || !selectedBatchId) return
     setCapturing(true)
     setStatusMsg('Capturing…')
 
     try {
+      const item = await ensureCurrentItem()
+      if (!item) {
+        throw new Error('No active item available')
+      }
+
       const frame = await cameraRef.current.captureFrame()
       const processed = await imageProcessor.process(frame.blob, frame.capturedAt, selectedRatio, frame.width, frame.height)
       const id = `photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -1332,12 +1880,6 @@ export function WorkspaceScreen() {
 
       const stored = await photoStore.save(photoRecord)
 
-      let item = currentItem
-      if (!item) {
-        item = await itemPacketStore.createItem(selectedStoreId, selectedBatchId)
-        setCurrentItem(item)
-      }
-
       await itemPacketStore.addItemPhoto(item.id, id)
       const itemWithMetadata = {
         ...item,
@@ -1349,6 +1891,7 @@ export function WorkspaceScreen() {
         sku: itemSku || undefined,
         note: itemNote || undefined,
         weight: itemWeight || undefined,
+        dimensions: itemDimensions || undefined,
       })
 
       if (frame.diagnostics) {
@@ -1372,7 +1915,7 @@ export function WorkspaceScreen() {
     } finally {
       setCapturing(false)
     }
-  }, [capturing, currentItem, itemNote, itemSku, itemWeight, loadData, selectedBatchId, selectedRatio, selectedStoreId])
+  }, [capturing, ensureCurrentItem, itemDimensions, itemNote, itemSku, itemWeight, loadData, selectedBatchId, selectedRatio, selectedStoreId])
 
   const handleRatioChange = useCallback((ratio: OutputRatio) => {
     setSelectedRatio(ratio)
@@ -1410,13 +1953,14 @@ export function WorkspaceScreen() {
     setStatusMsg(`Created ${batch.name}`)
   }, [reloadBatches, selectedStoreId])
 
-  const handleDoneNext = useCallback(async () => {
-    if (!currentItem) return
+  const handleNextItem = useCallback(async () => {
+    if (!currentItem || currentItem.photoIds.length === 0) return
     try {
       await itemPacketStore.updateItemMetadata(currentItem.id, {
         sku: itemSku || undefined,
         note: itemNote || undefined,
         weight: itemWeight || undefined,
+        dimensions: itemDimensions || undefined,
       })
       await itemPacketStore.finalizeItem(currentItem.id)
       const next = await itemPacketStore.createItem(selectedStoreId, selectedBatchId)
@@ -1424,13 +1968,45 @@ export function WorkspaceScreen() {
       setItemSku('')
       setItemNote('')
       setItemWeight('')
+      setItemDimensions('')
       await loadData()
       setStatusMsg(`Saved Item ${currentItem.itemNumber} and started Item ${next.itemNumber}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      setStorageErrors((prev) => [...prev, `Done/Next failed: ${msg}`])
+      setStorageErrors((prev) => [...prev, `Next failed: ${msg}`])
     }
-  }, [currentItem, itemNote, itemSku, itemWeight, loadData, selectedBatchId, selectedStoreId])
+  }, [currentItem, itemDimensions, itemNote, itemSku, itemWeight, loadData, selectedBatchId, selectedStoreId])
+
+  const handleDoneSession = useCallback(async () => {
+    if (!currentItem) return
+
+    try {
+      await itemPacketStore.updateItemMetadata(currentItem.id, {
+        sku: itemSku || undefined,
+        note: itemNote || undefined,
+        weight: itemWeight || undefined,
+        dimensions: itemDimensions || undefined,
+      })
+
+      if (currentItem.photoIds.length > 0) {
+        await itemPacketStore.finalizeItem(currentItem.id)
+        setCurrentItem(null)
+        setItemSku('')
+        setItemNote('')
+        setItemWeight('')
+        setItemDimensions('')
+      }
+
+      await loadData()
+      setStatusMsg('Capture session saved locally')
+      setMobileMode('home')
+      setMetadataOverlayOpen(false)
+      setCameraTestOpen(false)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setStorageErrors((prev) => [...prev, `Done failed: ${msg}`])
+    }
+  }, [currentItem, itemDimensions, itemNote, itemSku, itemWeight, loadData])
 
   const handleReset = useCallback(async () => {
     try {
@@ -1445,6 +2021,9 @@ export function WorkspaceScreen() {
       setItemSku('')
       setItemNote('')
       setItemWeight('')
+      setItemDimensions('')
+      setMetadataOverlayOpen(false)
+      setCameraTestOpen(false)
       setStatusMsg('Workspace data reset')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -1631,37 +2210,57 @@ export function WorkspaceScreen() {
     }
   }, [])
 
+  const appendCameraTestLog = useCallback((entry: string) => {
+    const line = `[${new Date().toISOString()}] ${entry}`
+    setCameraTestLogEntries((prev) => [...prev.slice(-59), line])
+  }, [])
+
+  const handleCopyCameraTestLog = useCallback(() => {
+    void handleCopyText(cameraTestLogEntries.join('\n\n'), 'Camera test log')
+  }, [cameraTestLogEntries, handleCopyText])
+
+  const handleRunCameraProbe = useCallback(async () => {
+    const track = cameraRef.current?.getActiveTrack() ?? null
+    setCameraTestMessage('Running capability probe…')
+    setCameraTestError('')
+    appendCameraTestLog('Capability probe started')
+    try {
+      const result = await runCameraProbe(track)
+      const summary = summarizeProbeForLog(result)
+      const report = formatProbeReport(result)
+      appendCameraTestLog(`Capability probe complete | ${summary}`)
+      appendCameraTestLog(report)
+
+      let clipboardOk = false
+      try {
+        await navigator.clipboard.writeText(report)
+        clipboardOk = true
+      } catch {
+        // clipboard silently unavailable (e.g. iOS without user-gesture context)
+      }
+
+      setCameraTestMessage(
+        clipboardOk
+          ? 'Probe complete — report in log and copied to clipboard.'
+          : 'Probe complete — report in log. Tap Copy log to copy.',
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCameraTestError(msg)
+      setCameraTestMessage('Probe failed.')
+      appendCameraTestLog(`Capability probe failed | error=${msg}`)
+    }
+  }, [appendCameraTestLog, cameraRef])
+
   const handleCameraStarted = useCallback(() => {
     setCameraState('active')
     setCameraPermissionRemembered(true)
     saveCameraPermissionGranted(true)
 
-    const caps = cameraRef.current?.getCapabilities() ?? null
-    const dims = cameraRef.current?.getVideoDimensions() ?? null
-    if (caps && dims) {
-      setCapabilities({
-        ...caps,
-        trackSettings: caps.trackSettings
-          ? {
-              ...caps.trackSettings,
-              width: caps.trackSettings.width ?? dims.videoWidth,
-              height: caps.trackSettings.height ?? dims.videoHeight,
-            }
-          : {
-              width: dims.videoWidth,
-              height: dims.videoHeight,
-              aspectRatio: undefined,
-              facingMode: undefined,
-              deviceId: undefined,
-              zoom: undefined,
-            },
-      })
-    } else {
-      setCapabilities(caps)
-    }
+    void refreshCameraTestState()
 
     setStatusMsg('Camera active')
-  }, [])
+  }, [refreshCameraTestState])
 
   const handleCameraError = useCallback((msg: string) => {
     setCameraState('error')
@@ -1672,6 +2271,268 @@ export function WorkspaceScreen() {
       saveCameraPermissionGranted(false)
     }
   }, [])
+
+  const handleOpenCameraTest = useCallback(() => {
+    setCameraTestError('')
+    setCameraTestMessage('Temporary controls are open.')
+    setMetadataOverlayOpen(false)
+    setCameraTestPreviewRatio(selectedRatio)
+    setCameraTestOpen(true)
+    appendCameraTestLog(`Camera Test opened | snapshot=${describeCameraTestSettings(capabilities?.trackSettings)}`)
+    void refreshCameraTestState()
+  }, [appendCameraTestLog, capabilities?.trackSettings, refreshCameraTestState, selectedRatio])
+
+  const handleCloseCameraTest = useCallback(() => {
+    setCameraTestOpen(false)
+    setCameraTestError('')
+    setCameraTestMessage('Camera Test closed.')
+    appendCameraTestLog('Camera Test closed')
+  }, [appendCameraTestLog])
+
+  const handleApplyCameraTestConstraint = useCallback(async (constraint: CameraTestConstraintSet) => {
+    if (!cameraRef.current) {
+      setCameraTestError('Camera not started')
+      setCameraTestMessage('Camera setting failed.')
+      appendCameraTestLog(`Apply failed | requested=${summarizeCameraTestConstraint(constraint)} | error=Camera not started`)
+      return
+    }
+
+    try {
+      setCameraTestError('')
+      if ('aspectRatio' in constraint && constraint.aspectRatio !== undefined) {
+        appendCameraTestLog(
+          `Aspect ratio preview only | requested=${summarizeCameraTestConstraint(constraint)} | before=${describeCameraTestSettings(capabilities?.trackSettings)}`,
+        )
+        setCameraTestMessage('Aspect ratio preview only.')
+        return
+      }
+
+      const before = describeCameraTestSettings(capabilities?.trackSettings)
+      appendCameraTestLog(`Apply requested | requested=${summarizeCameraTestConstraint(constraint)} | before=${before}`)
+      await cameraRef.current.applyTestConstraints(constraint)
+      const refreshed = await refreshCameraTestState()
+      const after = describeCameraTestSettings(refreshed?.trackSettings ?? cameraRef.current.getCapabilities()?.trackSettings)
+
+      if (typeof constraint.torch === 'boolean') {
+        const verified = refreshed?.trackSettings?.torch === constraint.torch
+        if (!verified) {
+          const msg = `Torch request ignored by browser (requested ${constraint.torch ? 'on' : 'off'}, got ${formatCameraTestValue(refreshed?.trackSettings?.torch)})`
+          setCameraTestError(msg)
+          setCameraTestMessage('Camera setting failed.')
+          appendCameraTestLog(`Apply failed | requested=${summarizeCameraTestConstraint(constraint)} | after=${after} | error=${msg}`)
+          return
+        }
+      }
+
+      setCameraTestMessage('Applied camera test setting.')
+      appendCameraTestLog(`Apply success | requested=${summarizeCameraTestConstraint(constraint)} | after=${after}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCameraTestError(msg)
+      setCameraTestMessage('Camera setting failed.')
+      appendCameraTestLog(`Apply failed | requested=${summarizeCameraTestConstraint(constraint)} | error=${msg}`)
+    }
+  }, [appendCameraTestLog, capabilities?.trackSettings, refreshCameraTestState])
+
+  const handleSelectCameraDevice = useCallback(async (deviceId: string) => {
+    if (!cameraRef.current) {
+      setCameraTestError('Camera not started')
+      setCameraTestMessage('Device switch failed.')
+      appendCameraTestLog(`Device switch failed | requested=${deviceId} | error=Camera not started`)
+      return
+    }
+
+    try {
+      setCameraTestError('')
+      setCameraTestMessage('Switching camera device…')
+      appendCameraTestLog(`Device switch requested | requested=${deviceId} | before=${describeCameraTestSettings(capabilities?.trackSettings)}`)
+      await cameraRef.current.switchCameraDevice(deviceId)
+      const refreshed = await refreshCameraTestState()
+      setCameraTestMessage('Camera device switched.')
+      appendCameraTestLog(`Device switch success | requested=${deviceId} | after=${describeCameraTestSettings(refreshed?.trackSettings ?? cameraRef.current.getCapabilities()?.trackSettings)}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCameraTestError(msg)
+      setCameraTestMessage('Device switch failed.')
+      appendCameraTestLog(`Device switch failed | requested=${deviceId} | error=${msg}`)
+    }
+  }, [appendCameraTestLog, capabilities?.trackSettings, refreshCameraTestState])
+
+  const handleChangeCameraTestPreviewRatio = useCallback((ratio: OutputRatio) => {
+    setCameraTestPreviewRatio(ratio)
+    appendCameraTestLog(`Preview ratio changed | requested=${ratio} | preview only | current=${describeCameraTestSettings(capabilities?.trackSettings)}`)
+  }, [appendCameraTestLog, capabilities?.trackSettings])
+
+  const handleToggleFullQualityPreview = useCallback(async () => {
+    if (!cameraRef.current) {
+      setCameraTestError('Camera not started')
+      setCameraTestMessage('Full-quality preview failed.')
+      appendCameraTestLog('Full-quality preview toggle failed | error=Camera not started')
+      return
+    }
+
+    const nextEnabled = !cameraTestFullQualityPreview
+    const currentCaps = cameraRef.current.getCapabilities() ?? capabilities
+    const currentSettings = currentCaps?.trackSettings ?? null
+
+    if (nextEnabled) {
+      const raw = currentCaps?.raw as ExtendedMediaTrackCapabilities | null
+      const maxWidth = raw?.width?.max ?? currentSettings?.width
+      const maxHeight = raw?.height?.max ?? currentSettings?.height
+      if (!maxWidth || !maxHeight) {
+        const msg = 'Full-quality preview not supported by this browser.'
+        setCameraTestError(msg)
+        setCameraTestMessage('Full-quality preview unavailable.')
+        appendCameraTestLog(`Full-quality preview unavailable | current=${describeCameraTestSettings(currentSettings)}`)
+        return
+      }
+
+      cameraTestPreviewBaselineRef.current = currentSettings ? { ...currentSettings } : null
+      appendCameraTestLog(`Full-quality preview requested ON | before=${describeCameraTestSettings(currentSettings)} | target=${maxWidth}x${maxHeight}`)
+      try {
+        await handleApplyCameraTestConstraint({
+          width: { ideal: maxWidth },
+          height: { ideal: maxHeight },
+        })
+        setCameraTestFullQualityPreview(true)
+        appendCameraTestLog(`Full-quality preview enabled | after=${describeCameraTestSettings(cameraRef.current.getCapabilities()?.trackSettings)}`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setCameraTestError(msg)
+        setCameraTestMessage('Full-quality preview failed.')
+        appendCameraTestLog(`Full-quality preview enable failed | error=${msg}`)
+      }
+      return
+    }
+
+    const baseline = cameraTestPreviewBaselineRef.current
+    if (!baseline?.width || !baseline?.height) {
+      setCameraTestFullQualityPreview(false)
+      setCameraTestMessage('Full-quality preview off.')
+      appendCameraTestLog(`Full-quality preview requested OFF | before=${describeCameraTestSettings(currentSettings)} | note=no baseline available`)
+      return
+    }
+
+    appendCameraTestLog(`Full-quality preview requested OFF | before=${describeCameraTestSettings(currentSettings)} | target=${baseline.width}x${baseline.height}`)
+    try {
+      await handleApplyCameraTestConstraint({
+        width: { ideal: baseline.width },
+        height: { ideal: baseline.height },
+      })
+      setCameraTestFullQualityPreview(false)
+      appendCameraTestLog(`Full-quality preview disabled | after=${describeCameraTestSettings(cameraRef.current.getCapabilities()?.trackSettings)}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCameraTestError(msg)
+      setCameraTestMessage('Full-quality preview failed.')
+      appendCameraTestLog(`Full-quality preview disable failed | error=${msg}`)
+    }
+  }, [appendCameraTestLog, capabilities, cameraRef, cameraTestFullQualityPreview, handleApplyCameraTestConstraint])
+
+  const canTapToFocus = useMemo(() => {
+    const raw = capabilities?.raw as ExtendedMediaTrackCapabilities | null
+    return Boolean(raw?.pointsOfInterest?.length)
+  }, [capabilities])
+
+  const canPinchToZoom = useMemo(() => {
+    const raw = capabilities?.raw as ExtendedMediaTrackCapabilities | null
+    return Boolean(raw?.zoom)
+  }, [capabilities])
+
+  const getPreviewPoint = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
+    return { x, y }
+  }, [])
+
+  const handlePreviewClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!cameraTestOpen || !canTapToFocus) {
+      return
+    }
+    if (event.button !== 0) {
+      return
+    }
+
+    const { x, y } = getPreviewPoint(event)
+    void handleApplyCameraTestConstraint({
+      pointsOfInterest: { x, y },
+      focusMode: (capabilities?.raw as ExtendedMediaTrackCapabilities | null)?.focusMode?.[0] || 'single-shot',
+    }).catch(() => undefined)
+    setCameraTestMessage(`Tap-to-focus test at ${Math.round(x * 100)}%, ${Math.round(y * 100)}%.`)
+  }, [cameraTestOpen, canTapToFocus, capabilities, getPreviewPoint, handleApplyCameraTestConstraint])
+
+  const handlePreviewTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!cameraTestOpen || !canPinchToZoom) {
+      return
+    }
+    if (event.touches.length !== 2) {
+      return
+    }
+
+    const raw = capabilities?.raw as ExtendedMediaTrackCapabilities | null
+    const zoomCap = raw?.zoom
+    if (!zoomCap) {
+      return
+    }
+
+    const [a, b] = [event.touches[0], event.touches[1]]
+    const dx = a.clientX - b.clientX
+    const dy = a.clientY - b.clientY
+    pinchStartDistanceRef.current = Math.max(1, Math.hypot(dx, dy))
+    pinchStartZoomRef.current = capabilities?.trackSettings?.zoom ?? zoomCap.min ?? 1
+    pinchLastAppliedZoomRef.current = pinchStartZoomRef.current
+  }, [cameraTestOpen, canPinchToZoom, capabilities])
+
+  const handlePreviewTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!cameraTestOpen || !canPinchToZoom) {
+      return
+    }
+    if (event.touches.length !== 2 || pinchApplyingRef.current) {
+      return
+    }
+
+    const raw = capabilities?.raw as ExtendedMediaTrackCapabilities | null
+    const zoomCap = raw?.zoom
+    if (!zoomCap || pinchStartDistanceRef.current === null || pinchStartZoomRef.current === null) {
+      return
+    }
+
+    event.preventDefault()
+
+    const [a, b] = [event.touches[0], event.touches[1]]
+    const dx = a.clientX - b.clientX
+    const dy = a.clientY - b.clientY
+    const distance = Math.max(1, Math.hypot(dx, dy))
+    const ratio = distance / pinchStartDistanceRef.current
+    const nextZoom = Math.min(zoomCap.max, Math.max(zoomCap.min, pinchStartZoomRef.current * ratio))
+
+    if (pinchLastAppliedZoomRef.current !== null && Math.abs(nextZoom - pinchLastAppliedZoomRef.current) < (zoomCap.step || 0.1) / 2) {
+      return
+    }
+
+    pinchLastAppliedZoomRef.current = nextZoom
+    pinchApplyingRef.current = true
+    void handleApplyCameraTestConstraint({ zoom: nextZoom })
+      .catch(() => undefined)
+      .finally(() => {
+        pinchApplyingRef.current = false
+      })
+  }, [cameraTestOpen, canPinchToZoom, capabilities, handleApplyCameraTestConstraint])
+
+  const handlePreviewTouchEnd = useCallback(() => {
+    pinchStartDistanceRef.current = null
+    pinchStartZoomRef.current = null
+    pinchLastAppliedZoomRef.current = null
+  }, [])
+
+  useEffect(() => {
+    if (mobileMode !== 'camera' || !cameraTestOpen || cameraState !== 'active') {
+      return
+    }
+
+    refreshCameraTestState().catch(() => undefined)
+  }, [cameraState, cameraTestOpen, mobileMode, refreshCameraTestState])
 
   const queueItems = useMemo(() => {
     const items = allItems.filter((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId)
@@ -1780,143 +2641,66 @@ export function WorkspaceScreen() {
     return getItemReadiness(currentItem, allPhotos)
   }, [allPhotos, currentItem])
 
-  function MobileWorkspace() {
-    if (mobileMode === 'camera') {
-      return (
-        <div style={{ ...s.mobileScreen, padding: 12 }}>
-          <div style={s.mobileCameraShell}>
-            <div style={s.mobileCameraTop}>
-              <button
-                style={{ ...s.button, ...s.buttonSmall }}
-                onClick={() => setMobileMode('home')}
-              >
-                Back
-              </button>
-              <div style={{ textAlign: 'right' }}>
-                <div style={s.mobileCameraTitle}>Camera</div>
-                <div style={s.mobileCameraMeta}>
-                  {selectedStore?.name || 'Store'} / {selectedBatch?.name || 'Batch'}
-                </div>
-              </div>
-            </div>
-
-            <MobileWorkspaceStatusStrip
-              mode="camera"
-              selectedStore={selectedStore}
-              selectedBatch={selectedBatch}
-              batchUploadSummary={batchUploadSummary}
-              cameraPermissionRemembered={cameraPermissionRemembered}
-              cameraState={cameraState}
-              currentItem={currentItem}
-              currentItemReadiness={currentItemReadiness}
-              supabaseReady={supabaseReady}
-              session={session}
-              authLoading={authLoading}
-            />
-
-            <div style={s.mobileCameraCard}>
-              <CameraPreview
-                ref={cameraRef}
-                onError={handleCameraError}
-                onStarted={handleCameraStarted}
-                onStopped={() => setCameraState('stopped')}
-                ratio={selectedRatio}
-              />
-            </div>
-
-            <div style={s.mobileFooter}>
-              <div style={s.mobileStatusLine}>{statusMsg}</div>
-
-              <div style={s.mobileRatioRow}>
-                {(['full', '1:1', '4:3', '16:9'] as OutputRatio[]).map((ratio) => (
-                  <button
-                    key={ratio}
-                    style={{
-                      ...s.button,
-                      ...s.mobileSmallButton,
-                      ...(selectedRatio === ratio ? s.buttonPrimary : {}),
-                    }}
-                    onClick={() => handleRatioChange(ratio)}
-                  >
-                    {ratio === 'full' ? 'Full' : ratio}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                style={{ ...s.button, ...s.buttonPrimary, ...s.mobilePrimaryButton }}
-                disabled={capturing || cameraState !== 'active' || !selectedStoreId || !selectedBatchId}
-                onClick={handleCapture}
-              >
-                {capturing ? 'Capturing…' : '⊙ Capture'}
-              </button>
-
-              <button
-                style={s.button}
-                disabled={!currentItem || currentItem.photoIds.length === 0}
-                onClick={handleDoneNext}
-              >
-                Done / Next Item
-              </button>
-            </div>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <div style={s.mobileScreen}>
-        <div style={s.mobileHome}>
-          <div style={s.mobileHero}>
-            <div>
-              <div style={s.mobileHeroTitle}>Capture</div>
-              <div style={s.mobileHeroCopy}>
-                Tap once to open the camera. Quick status stays visible, everything else stays out of the way.
-              </div>
-            </div>
-          </div>
-
-            <MobileWorkspaceStatusStrip
-              mode="home"
-              selectedStore={selectedStore}
-              selectedBatch={selectedBatch}
-              batchUploadSummary={batchUploadSummary}
-              cameraPermissionRemembered={cameraPermissionRemembered}
-              cameraState={cameraState}
-              currentItem={currentItem}
-              currentItemReadiness={currentItemReadiness}
-              supabaseReady={supabaseReady}
-              session={session}
-              authLoading={authLoading}
-            />
-
-          <div style={s.mobileLaunchArea}>
-            <button
-              style={{ ...s.button, ...s.buttonPrimary, ...s.mobileLaunchButton }}
-              onClick={() => setMobileMode('camera')}
-            >
-              {cameraPermissionRemembered ? 'Resume Camera' : 'Open Camera'}
-            </button>
-            <button
-              style={{ ...s.button, ...s.buttonSmall }}
-              onClick={handleSyncBatch}
-              disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
-            >
-              {uploading ? 'Syncing…' : 'Sync Batch'}
-            </button>
-            {cameraPermissionRemembered && (
-              <div style={s.mobileSubtle}>
-                Camera permission is remembered for this browser.
-              </div>
-            )}
-          </div>
-        </div>
-        </div>
-      )
-    }
-
   if (isMobile) {
-    return <MobileWorkspace />
+    return (
+      <MobileWorkspace
+        mobileMode={mobileMode}
+        selectedStore={selectedStore}
+        selectedBatch={selectedBatch}
+        batchUploadSummary={batchUploadSummary}
+        cameraPermissionRemembered={cameraPermissionRemembered}
+        cameraState={cameraState}
+        capabilities={capabilities}
+        cameraTestOpen={cameraTestOpen}
+        cameraDevices={cameraDevices}
+        cameraTestMessage={cameraTestMessage}
+        cameraTestError={cameraTestError}
+        currentItem={currentItem}
+        currentItemReadiness={currentItemReadiness}
+        supabaseReady={supabaseReady}
+        session={session}
+        authLoading={authLoading}
+        cameraPreviewRatio={cameraTestOpen ? cameraTestPreviewRatio : selectedRatio}
+        selectedRatio={selectedRatio}
+        cameraRef={cameraRef}
+        handleCameraError={handleCameraError}
+        handleCameraStarted={handleCameraStarted}
+        setCameraState={setCameraState}
+        handleRatioChange={handleRatioChange}
+        handlePreviewClick={handlePreviewClick}
+        handlePreviewTouchStart={handlePreviewTouchStart}
+        handlePreviewTouchMove={handlePreviewTouchMove}
+        handlePreviewTouchEnd={handlePreviewTouchEnd}
+        handleOpenCameraTest={handleOpenCameraTest}
+        handleCloseCameraTest={handleCloseCameraTest}
+        handleSelectCameraDevice={handleSelectCameraDevice}
+        handleApplyCameraTestConstraint={handleApplyCameraTestConstraint}
+        handleChangeCameraTestPreviewRatio={handleChangeCameraTestPreviewRatio}
+        handleToggleFullQualityPreview={handleToggleFullQualityPreview}
+        cameraTestLogText={cameraTestLogEntries.join('\n\n')}
+        handleCopyCameraTestLog={handleCopyCameraTestLog}
+        handleRunCameraProbe={handleRunCameraProbe}
+        cameraTestFullQualityPreview={cameraTestFullQualityPreview}
+        capturing={capturing}
+        selectedStoreId={selectedStoreId}
+        selectedBatchId={selectedBatchId}
+        handleCapture={handleCapture}
+        statusMsg={statusMsg}
+        handleNextItem={handleNextItem}
+        handleDoneSession={handleDoneSession}
+        itemSku={itemSku}
+        itemWeight={itemWeight}
+        itemDimensions={itemDimensions}
+        setItemSku={setItemSku}
+        setItemWeight={setItemWeight}
+        setItemDimensions={setItemDimensions}
+        metadataOverlayOpen={metadataOverlayOpen}
+        setMetadataOverlayOpen={setMetadataOverlayOpen}
+        handleOpenCamera={handleOpenCamera}
+        handleSyncBatch={handleSyncBatch}
+        setMobileMode={setMobileMode}
+      />
+    )
   }
 
   return (
@@ -2049,15 +2833,22 @@ export function WorkspaceScreen() {
                     <button
                       style={s.button}
                       disabled={!currentItem || currentItem.photoIds.length === 0}
-                      onClick={handleDoneNext}
+                      onClick={handleNextItem}
                     >
-                      Done / Next Item
+                      Next Item
+                    </button>
+                    <button
+                      style={s.button}
+                      onClick={handleDoneSession}
+                    >
+                      Done Session
                     </button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <input style={s.select} placeholder="SKU (optional)" value={itemSku} onChange={(e) => setItemSku(e.target.value)} />
                     <input style={s.select} placeholder="Note (optional)" value={itemNote} onChange={(e) => setItemNote(e.target.value)} />
                     <input style={s.select} placeholder="Weight (optional)" value={itemWeight} onChange={(e) => setItemWeight(e.target.value)} />
+                    <input style={s.select} placeholder="Dimensions (optional)" value={itemDimensions} onChange={(e) => setItemDimensions(e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -2523,6 +3314,8 @@ function QueueCard({
           {item.sku ? `SKU: ${item.sku}` : 'SKU missing'}
           <br />
           {item.weight ? `Weight: ${item.weight}` : 'Weight missing'}
+          <br />
+          {item.dimensions ? `Dimensions: ${item.dimensions}` : 'Dimensions missing'}
         </div>
         <div style={s.queueActions}>
           <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onUpdateStatus('new')}>New</button>
@@ -2608,6 +3401,8 @@ function DesktopItemDetail({
           <br />
           Weight: {item.weight || 'missing'}
           <br />
+          Dimensions: {item.dimensions || 'missing'}
+          <br />
           {item.listingStatus === 'listed'
             ? `Listed: ${item.listedAt ? new Date(item.listedAt).toLocaleString() : 'pending'}`
             : 'Listed: not marked'}
@@ -2627,6 +3422,9 @@ function DesktopItemDetail({
           </button>
           <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onCopyText(item.weight || '', 'Weight')} disabled={!item.weight}>
             Copy Weight
+          </button>
+          <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onCopyText(item.dimensions || '', 'Dimensions')} disabled={!item.dimensions}>
+            Copy Dimensions
           </button>
         </div>
       </div>

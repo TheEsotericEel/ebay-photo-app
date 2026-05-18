@@ -4,11 +4,14 @@ This app moves from camera spike into the first real handoff workflow.
 The current implementation is split into a mobile capture screen that opens the camera on demand and a desktop management shell that opens on Queue and can scroll naturally where needed.
 Once the user accepts camera access, the app remembers it in the browser and can resume the camera without forcing another prompt.
 The app also remembers the last desktop tab and the selected store and batch.
+The mobile capture flow now keeps the live preview on screen while SKU, weight, and dimensions are edited in an overlay.
+`Next` advances to the next item in the same session and `Done` ends the capture session for now so the user can come back to the camera later.
 
 ## Added in this repo
 
 - store and batch records in IndexedDB
 - mobile capture surface with upload/cleanup status
+- mobile camera overlay for SKU, weight, and dimensions
 - desktop tabbed shell with batch drilldown, item detail, and upload tools
 - Supabase Auth magic-link bootstrap
 - batch sync into Supabase tables and private storage

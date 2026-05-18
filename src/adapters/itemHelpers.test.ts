@@ -147,12 +147,14 @@ describe('itemHelpers', () => {
         status: 'complete',
         sku: 'ABC-123',
         weight: '1.5kg',
+        dimensions: '12 x 8 x 6 in',
       }
       
       const result = getItemReadiness(completeItem, mockPhotos)
       
       expect(result.hasSku).toBe(true)
       expect(result.hasWeight).toBe(true)
+      expect(result.hasDimensions).toBe(true)
       expect(result.photoCount).toBe(3)
       expect(result.hasPhotos).toBe(true)
       expect(result.isComplete).toBe(true)
@@ -200,12 +202,29 @@ describe('itemHelpers', () => {
       expect(result.readyForHandoff).toBe(false)
     })
 
+    it('calculates readiness for item with missing dimensions', () => {
+      const itemWithoutDimensions: ItemPacket = {
+        ...mockItem,
+        status: 'complete',
+        sku: 'ABC-123',
+        weight: '1.5kg',
+      }
+
+      const result = getItemReadiness(itemWithoutDimensions, mockPhotos)
+
+      expect(result.hasSku).toBe(true)
+      expect(result.hasWeight).toBe(true)
+      expect(result.hasDimensions).toBe(false)
+      expect(result.readyForHandoff).toBe(false)
+    })
+
     it('calculates readiness for item with no photos', () => {
       const itemWithoutPhotos: ItemPacket = {
         ...mockItem,
         status: 'complete',
         sku: 'ABC-123',
         weight: '1.5kg',
+        dimensions: '12 x 8 x 6 in',
         photoIds: [],
       }
       
@@ -222,6 +241,7 @@ describe('itemHelpers', () => {
         status: 'complete',
         sku: 'ABC-123',
         weight: '1.5kg',
+        dimensions: '12 x 8 x 6 in',
         photoIds: ['photo-001', 'photo-missing', 'photo-003'],
       }
       
@@ -238,6 +258,7 @@ describe('itemHelpers', () => {
         status: 'complete',
         sku: '',
         weight: '1.5kg',
+        dimensions: '12 x 8 x 6 in',
       }
       
       const result = getItemReadiness(itemWithEmptySku, mockPhotos)
@@ -252,6 +273,7 @@ describe('itemHelpers', () => {
         status: 'complete',
         sku: '   ',
         weight: '1.5kg',
+        dimensions: '12 x 8 x 6 in',
       }
       
       const result = getItemReadiness(itemWithWhitespaceSku, mockPhotos)
@@ -269,6 +291,7 @@ describe('itemHelpers', () => {
         status: 'complete',
         sku: 'ABC-123',
         weight: '1.5kg',
+        dimensions: '12 x 8 x 6 in',
         createdAt: '2026-05-17T00:00:00.000Z',
       },
       {
@@ -277,6 +300,7 @@ describe('itemHelpers', () => {
         status: 'draft',
         sku: 'DEF-456',
         weight: '2.0kg',
+        dimensions: '10 x 7 x 4 in',
         createdAt: '2026-05-17T01:00:00.000Z',
       },
       {
@@ -285,6 +309,7 @@ describe('itemHelpers', () => {
         status: 'complete',
         sku: '',
         weight: '1.0kg',
+        dimensions: '9 x 6 x 4 in',
         createdAt: '2026-05-17T02:00:00.000Z',
       },
     ]
