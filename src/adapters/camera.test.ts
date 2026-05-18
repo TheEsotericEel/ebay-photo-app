@@ -15,6 +15,7 @@ type MockSettings = MediaTrackSettings & {
   saturation?: number
   sharpness?: number
   iso?: number
+  frameRate?: number
 }
 
 type MockCapabilityRange = { min: number; max: number; step: number }
@@ -93,6 +94,11 @@ function makeTrack(
           ? advanced.focusDistance
           : (advanced.focusDistance as ConstrainDoubleRange).ideal as number | undefined
       }
+      if (advanced.frameRate !== undefined) {
+        state.frameRate = typeof advanced.frameRate === 'number'
+          ? advanced.frameRate
+          : (advanced.frameRate as ConstrainDoubleRange).ideal as number | undefined
+      }
     }),
     stop: vi.fn(),
     addEventListener: vi.fn(),
@@ -152,6 +158,7 @@ describe('BrowserCameraAdapter', () => {
         deviceId: 'cam-a',
         zoom: 1.5,
         torch: true,
+        frameRate: 24,
         focusMode: 'single-shot',
         focusDistance: 0.42,
         exposureMode: 'auto',
@@ -193,14 +200,36 @@ describe('BrowserCameraAdapter', () => {
     await adapter.start(videoEl)
 
     expect(getUserMedia).toHaveBeenCalledTimes(1)
+    expect(track.applyConstraints).toHaveBeenCalledTimes(1)
+    expect(track.applyConstraints).toHaveBeenCalledWith({
+      advanced: [
+        expect.objectContaining({
+          width: { ideal: 4032 },
+          height: { ideal: 3024 },
+          frameRate: { ideal: 60, max: 60 },
+          aspectRatio: { ideal: 4 / 3 },
+        }),
+        expect.objectContaining({
+          width: { ideal: 1920 },
+          height: { ideal: 1440 },
+          frameRate: { ideal: 30, max: 60 },
+        }),
+        expect.objectContaining({
+          width: { ideal: 1280 },
+          height: { ideal: 960 },
+          frameRate: { ideal: 30, max: 60 },
+        }),
+      ],
+    })
     expect(adapter.getCapabilities()?.trackSettings).toMatchObject({
-      width: 1280,
-      height: 960,
-      aspectRatio: 1.333,
+      width: 4032,
+      height: 3024,
+      aspectRatio: 4 / 3,
       facingMode: 'environment',
       deviceId: 'cam-a',
       zoom: 1.5,
       torch: true,
+      frameRate: 60,
       focusMode: 'single-shot',
       focusDistance: 0.42,
       exposureMode: 'auto',
@@ -246,10 +275,10 @@ describe('BrowserCameraAdapter', () => {
     await adapter.applyTestConstraints({ width: 640, height: 480, zoom: 2 } as CameraTestConstraintSet)
 
     expect(getUserMedia).toHaveBeenCalledTimes(1)
-    expect(track.applyConstraints).toHaveBeenCalledTimes(1)
+    expect(track.applyConstraints).toHaveBeenCalledTimes(2)
     expect(adapter.getCapabilities()?.trackSettings).toMatchObject({
-      width: 1280,
-      height: 960,
+      width: 4032,
+      height: 3024,
       zoom: 2,
     })
   })
@@ -283,7 +312,7 @@ describe('BrowserCameraAdapter', () => {
     await adapter.start(videoEl)
     await adapter.applyTestConstraints({ torch: false })
 
-    expect(track.applyConstraints).toHaveBeenCalledTimes(1)
+    expect(track.applyConstraints).toHaveBeenCalledTimes(2)
     expect(adapter.getCapabilities()?.trackSettings?.torch).toBe(false)
   })
 
@@ -316,7 +345,7 @@ describe('BrowserCameraAdapter', () => {
     await adapter.applyTestConstraints({ aspectRatio: 1 })
 
     expect(getUserMedia).toHaveBeenCalledTimes(1)
-    expect(track.applyConstraints).toHaveBeenCalledTimes(1)
+    expect(track.applyConstraints).toHaveBeenCalledTimes(2)
   })
 
   it('restarts only when switching to a different device', async () => {

@@ -41,6 +41,7 @@ describe('cameraTestLog', () => {
         saturation: undefined,
         sharpness: undefined,
         iso: undefined,
+        frameRate: 30,
       },
       afterSettings: {
         width: 1170,
@@ -61,6 +62,7 @@ describe('cameraTestLog', () => {
         saturation: undefined,
         sharpness: undefined,
         iso: undefined,
+        frameRate: 30,
       },
       settings: {
         width: 1170,
@@ -81,6 +83,7 @@ describe('cameraTestLog', () => {
         saturation: undefined,
         sharpness: undefined,
         iso: undefined,
+        frameRate: 30,
       },
     })
 
@@ -96,6 +99,7 @@ describe('cameraTestLog', () => {
     expect(line).toContain('zoom=2')
     expect(line).toContain('torch=false')
     expect(line).toContain('wb=continuous')
+    expect(line).toContain('fps=30')
     expect(line).toContain('note=browser reflected torch off')
   })
 

@@ -156,6 +156,7 @@ export function Phase0Screen() {
               saturation: undefined,
               sharpness: undefined,
               iso: undefined,
+              frameRate: undefined,
             },
       })
     } else {

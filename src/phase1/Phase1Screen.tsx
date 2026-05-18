@@ -2087,6 +2087,7 @@ export function WorkspaceScreen() {
               saturation: undefined,
               sharpness: undefined,
               iso: undefined,
+              frameRate: undefined,
             },
           })
     } else {

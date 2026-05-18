@@ -55,6 +55,9 @@ function formatSettings(settings: CameraCapabilities['trackSettings'] | null | u
   if (settings.focusDistance !== undefined) {
     parts.push(`focusDistance=${formatMaybe(settings.focusDistance)}`)
   }
+  if (settings.frameRate !== undefined) {
+    parts.push(`fps=${formatMaybe(settings.frameRate)}`)
+  }
 
   return parts.join(' ')
 }

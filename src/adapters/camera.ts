@@ -21,6 +21,11 @@ export interface CaptureDiagnostics {
   initialStreamHeight?: number
   capabilitiesWidthMax?: number
   capabilitiesHeightMax?: number
+  previewQualityAttempted?: boolean
+  previewQualityRequestedConstraints?: string[]
+  previewQualityApplied?: boolean
+  previewQualityError?: string
+  previewQualityTrackSettings?: TrackSettings
   maxConstraintCandidatesAttempted?: string[]
   finalStreamWidth?: number
   finalStreamHeight?: number
@@ -68,6 +73,7 @@ export interface TrackSettings {
   saturation: number | undefined
   sharpness: number | undefined
   iso: number | undefined
+  frameRate: number | undefined
 }
 
 export interface CameraCapabilities {
@@ -176,9 +182,12 @@ export class BrowserCameraAdapter implements CameraAdapter {
     this.diagnostics.capabilitiesHeightMax = rawCaps.height?.max
     console.log(`Stage A - Capabilities max: ${rawCaps.width?.max}x${rawCaps.height?.max}`)
 
-    // Stage B: DISABLED - Keep preview lightweight for battery/performance
-    // ImageCapture.takePhoto() can still return high-res from low-res preview streams
-    // Only enable temporary constraint upgrade if evidence shows takePhoto returns low-res
+    await this.applyBestEffortPreviewQualityUpgrade(track)
+
+    this.capabilities = probeCapabilities(track, videoEl)
+    this.diagnostics.finalStreamWidth = videoEl.videoWidth
+    this.diagnostics.finalStreamHeight = videoEl.videoHeight
+    console.log(`Stage A - Final stream after preview quality pass: ${videoEl.videoWidth}x${videoEl.videoHeight}`)
   }
 
   stop(): void {
@@ -478,6 +487,31 @@ export class BrowserCameraAdapter implements CameraAdapter {
     return this.capabilities
   }
 
+  private async applyBestEffortPreviewQualityUpgrade(track: MediaStreamTrack): Promise<void> {
+    const requestedAdvanced = buildBestEffortPreviewQualityConstraints(track)
+    this.diagnostics.previewQualityAttempted = true
+    this.diagnostics.previewQualityRequestedConstraints = requestedAdvanced.map((entry) => JSON.stringify(entry))
+    console.log(`Preview quality request: ${this.diagnostics.previewQualityRequestedConstraints.join(' | ')}`)
+
+    try {
+      await track.applyConstraints({
+        advanced: requestedAdvanced as MediaTrackConstraintSet[],
+      })
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      this.diagnostics.previewQualityApplied = true
+      this.diagnostics.previewQualityTrackSettings = readTrackSettings(track)
+      console.log(
+        `Preview quality applied: ${this.diagnostics.previewQualityTrackSettings.width ?? '?'}x${this.diagnostics.previewQualityTrackSettings.height ?? '?'}` +
+          ` @ ${this.diagnostics.previewQualityTrackSettings.frameRate ?? '?'}fps`,
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.diagnostics.previewQualityApplied = false
+      this.diagnostics.previewQualityError = msg
+      console.warn(`Preview quality request failed: ${msg}`)
+    }
+  }
+
   async switchDevice(deviceId: string): Promise<CameraCapabilities | null> {
     const videoEl = this.videoEl
     if (!videoEl) {
@@ -571,6 +605,7 @@ function probeCapabilities(track: MediaStreamTrack, videoEl?: HTMLVideoElement):
       saturation: ext.saturation,
       sharpness: ext.sharpness,
       iso: ext.iso,
+      frameRate: s.frameRate,
     }
     if (videoEl) {
       trackSettings.width = trackSettings.width ?? (videoEl.videoWidth || undefined)
@@ -628,6 +663,7 @@ function readTrackSettings(track: MediaStreamTrack): TrackSettings {
       saturation: ext.saturation,
       sharpness: ext.sharpness,
       iso: ext.iso,
+      frameRate: s.frameRate,
     }
   } catch {
     return {
@@ -649,8 +685,42 @@ function readTrackSettings(track: MediaStreamTrack): TrackSettings {
       saturation: undefined,
       sharpness: undefined,
       iso: undefined,
+      frameRate: undefined,
     }
   }
+}
+
+function buildBestEffortPreviewQualityConstraints(track: MediaStreamTrack): Array<Record<string, unknown>> {
+  let rawCaps: (MediaTrackCapabilities & { width?: { max?: number }; height?: { max?: number } }) | null = null
+  try {
+    rawCaps = track.getCapabilities() as MediaTrackCapabilities & { width?: { max?: number }; height?: { max?: number } }
+  } catch {
+    rawCaps = null
+  }
+
+  const widthMax = rawCaps?.width?.max
+  const heightMax = rawCaps?.height?.max
+  const idealWidth = widthMax && widthMax >= 1920 ? widthMax : 4032
+  const idealHeight = heightMax && heightMax >= 1440 ? heightMax : 3024
+
+  return [
+    {
+      width: { ideal: idealWidth },
+      height: { ideal: idealHeight },
+      frameRate: { ideal: 60, max: 60 },
+      aspectRatio: { ideal: 4 / 3 },
+    },
+    {
+      width: { ideal: 1920 },
+      height: { ideal: 1440 },
+      frameRate: { ideal: 30, max: 60 },
+    },
+    {
+      width: { ideal: 1280 },
+      height: { ideal: 960 },
+      frameRate: { ideal: 30, max: 60 },
+    },
+  ]
 }
 
 // Shutter-time high-res track upgrade.
