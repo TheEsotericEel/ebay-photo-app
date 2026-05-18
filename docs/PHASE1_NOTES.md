@@ -2,6 +2,7 @@
 
 This workspace moves the app from camera spike into the first real handoff workflow.
 The current implementation is split into a mobile home screen that opens the camera on demand and a desktop tabbed shell with fixed Capture, Queue, and Tools panels.
+Once the user accepts camera access, the workspace remembers it in the browser and can resume the camera without forcing another prompt.
 
 ## Added in this repo
 

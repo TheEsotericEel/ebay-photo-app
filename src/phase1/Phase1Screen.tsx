@@ -16,6 +16,7 @@ import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/wo
 import { CameraCapabilities, CaptureDiagnostics } from '../adapters/camera'
 import { supabase } from '../lib/supabase'
 import { APP_NAME, SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
+import { loadCameraPermissionGranted, saveCameraPermissionGranted } from '../lib/cameraPermission'
 import { useSupabaseSession } from '../lib/useSupabaseSession'
 import { useIsMobile } from '../lib/useViewportMode'
 
@@ -579,6 +580,7 @@ export function WorkspaceScreen() {
   const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
   const [desktopMode, setDesktopMode] = useState<'capture' | 'queue' | 'tools'>('capture')
+  const [cameraPermissionRemembered, setCameraPermissionRemembered] = useState(() => loadCameraPermissionGranted())
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
   const [captureErrors, setCaptureErrors] = useState<string[]>([])
@@ -614,6 +616,12 @@ export function WorkspaceScreen() {
       setDesktopMode('capture')
     }
   }, [isMobile])
+
+  useEffect(() => {
+    if (isMobile && cameraPermissionRemembered) {
+      setMobileMode('camera')
+    }
+  }, [cameraPermissionRemembered, isMobile])
 
   const loadData = useCallback(async () => {
     const [storesData, photosData, itemsData] = await Promise.all([
@@ -1030,6 +1038,48 @@ export function WorkspaceScreen() {
     }
   }, [])
 
+  const handleCameraStarted = useCallback(() => {
+    setCameraState('active')
+    setCameraPermissionRemembered(true)
+    saveCameraPermissionGranted(true)
+
+    const caps = cameraRef.current?.getCapabilities() ?? null
+    const dims = cameraRef.current?.getVideoDimensions() ?? null
+    if (caps && dims) {
+      setCapabilities({
+        ...caps,
+        trackSettings: caps.trackSettings
+          ? {
+              ...caps.trackSettings,
+              width: caps.trackSettings.width ?? dims.videoWidth,
+              height: caps.trackSettings.height ?? dims.videoHeight,
+            }
+          : {
+              width: dims.videoWidth,
+              height: dims.videoHeight,
+              aspectRatio: undefined,
+              facingMode: undefined,
+              deviceId: undefined,
+              zoom: undefined,
+            },
+      })
+    } else {
+      setCapabilities(caps)
+    }
+
+    setStatusMsg('Camera active')
+  }, [])
+
+  const handleCameraError = useCallback((msg: string) => {
+    setCameraState('error')
+    setCaptureErrors((prev) => [...prev, msg])
+
+    if (/permission|denied|notallowed/i.test(msg)) {
+      setCameraPermissionRemembered(false)
+      saveCameraPermissionGranted(false)
+    }
+  }, [])
+
   const queueItems = useMemo(() => {
     const items = allItems.filter((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId)
     const filtered = queueFilter === 'all' ? items : items.filter((item) => (item.listingStatus || 'new') === queueFilter)
@@ -1171,37 +1221,8 @@ export function WorkspaceScreen() {
             <div style={s.mobileCameraCard}>
               <CameraPreview
                 ref={cameraRef}
-                onError={(msg) => {
-                  setCameraState('error')
-                  setCaptureErrors((prev) => [...prev, msg])
-                }}
-                onStarted={() => {
-                  setCameraState('active')
-                  const caps = cameraRef.current?.getCapabilities() ?? null
-                  const dims = cameraRef.current?.getVideoDimensions() ?? null
-                  if (caps && dims) {
-                    setCapabilities({
-                      ...caps,
-                      trackSettings: caps.trackSettings
-                        ? {
-                            ...caps.trackSettings,
-                            width: caps.trackSettings.width ?? dims.videoWidth,
-                            height: caps.trackSettings.height ?? dims.videoHeight,
-                          }
-                        : {
-                            width: dims.videoWidth,
-                            height: dims.videoHeight,
-                            aspectRatio: undefined,
-                            facingMode: undefined,
-                            deviceId: undefined,
-                            zoom: undefined,
-                          },
-                    })
-                  } else {
-                    setCapabilities(caps)
-                  }
-                  setStatusMsg('Camera active')
-                }}
+                onError={handleCameraError}
+                onStarted={handleCameraStarted}
                 onStopped={() => setCameraState('stopped')}
                 ratio={selectedRatio}
               />
@@ -1281,7 +1302,7 @@ export function WorkspaceScreen() {
               style={{ ...s.button, ...s.buttonPrimary, ...s.mobileLaunchButton }}
               onClick={() => setMobileMode('camera')}
             >
-              Open Camera
+              {cameraPermissionRemembered ? 'Resume Camera' : 'Open Camera'}
             </button>
             <button
               style={{ ...s.button, ...s.buttonSmall }}
@@ -1290,6 +1311,11 @@ export function WorkspaceScreen() {
             >
               {uploading ? 'Syncing…' : 'Sync Batch'}
             </button>
+            {cameraPermissionRemembered && (
+              <div style={s.mobileSubtle}>
+                Camera permission is remembered for this browser.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1386,37 +1412,8 @@ export function WorkspaceScreen() {
               <div style={{ ...s.desktopStack, gridTemplateRows: 'minmax(0, 1fr) auto' }}>
                 <CameraPreview
                   ref={cameraRef}
-                  onError={(msg) => {
-                    setCameraState('error')
-                    setCaptureErrors((prev) => [...prev, msg])
-                  }}
-                  onStarted={() => {
-                    setCameraState('active')
-                    const caps = cameraRef.current?.getCapabilities() ?? null
-                    const dims = cameraRef.current?.getVideoDimensions() ?? null
-                    if (caps && dims) {
-                      setCapabilities({
-                        ...caps,
-                        trackSettings: caps.trackSettings
-                          ? {
-                              ...caps.trackSettings,
-                              width: caps.trackSettings.width ?? dims.videoWidth,
-                              height: caps.trackSettings.height ?? dims.videoHeight,
-                            }
-                          : {
-                              width: dims.videoWidth,
-                              height: dims.videoHeight,
-                              aspectRatio: undefined,
-                              facingMode: undefined,
-                              deviceId: undefined,
-                              zoom: undefined,
-                            },
-                      })
-                    } else {
-                      setCapabilities(caps)
-                    }
-                    setStatusMsg('Camera active')
-                  }}
+                  onError={handleCameraError}
+                  onStarted={handleCameraStarted}
                   onStopped={() => setCameraState('stopped')}
                   ratio={selectedRatio}
                 />
