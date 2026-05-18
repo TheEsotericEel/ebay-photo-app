@@ -6,12 +6,14 @@ import { PhotoList } from '../components/PhotoList'
 import { CanvasImageProcessingAdapter, OutputRatio, loadDefaultRatioFromStorage, saveDefaultRatioToStorage } from '../adapters/imageProcessing'
 import { IndexedDbPhotoStore, StoredPhoto } from '../adapters/localPhotoStore'
 import { IndexedDbItemPacketStore, ItemPacket, ListingStatus } from '../adapters/itemPacket'
+import { syncBatchToSupabase, BatchUploadProgress } from '../adapters/supabaseUpload'
 import { attachOrderedPhotosToItem, getItemReadiness, sortItems } from '../adapters/itemHelpers'
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
 import { CameraCapabilities, CaptureDiagnostics } from '../adapters/camera'
-import { supabaseConfig } from '../lib/supabase'
+import { supabase, supabaseConfig } from '../lib/supabase'
 import { APP_NAME, SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
+import { useSupabaseSession } from '../lib/useSupabaseSession'
 
 const imageProcessor = new CanvasImageProcessingAdapter()
 const photoStore = new IndexedDbPhotoStore()
@@ -242,6 +244,38 @@ const s: Record<string, React.CSSProperties> = {
     color: '#111',
     borderColor: '#e5e7eb',
   },
+  authPanel: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    border: '1px solid #2a2a2a',
+    background: '#151515',
+    display: 'grid',
+    gap: 10,
+  },
+  authGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+    gap: 8,
+    alignItems: 'center',
+  },
+  authLine: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: 12,
+    fontSize: 12,
+    color: '#a8a8a8',
+    flexWrap: 'wrap',
+  },
+  progressBox: {
+    padding: 10,
+    borderRadius: 10,
+    border: '1px solid #27303a',
+    background: '#111827',
+    color: '#cbd5e1',
+    fontSize: 12,
+    lineHeight: 1.5,
+  },
   empty: {
     fontSize: 13,
     color: '#777',
@@ -260,6 +294,7 @@ const s: Record<string, React.CSSProperties> = {
 
 export function Phase1Screen() {
   const cameraRef = useRef<CameraPreviewHandle>(null)
+  const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
   const [captureErrors, setCaptureErrors] = useState<string[]>([])
@@ -280,6 +315,10 @@ export function Phase1Screen() {
   const [selectedRatio, setSelectedRatio] = useState<OutputRatio>(() => loadDefaultRatioFromStorage())
   const [lastCaptureDiagnostics, setLastCaptureDiagnostics] = useState<CaptureDiagnostics | null>(null)
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const [uploadProgress, setUploadProgress] = useState<BatchUploadProgress | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   const loadData = useCallback(async () => {
     const [storesData, photosData, itemsData] = await Promise.all([
@@ -502,6 +541,73 @@ export function Phase1Screen() {
     }
   }, [loadData])
 
+  const handleSendMagicLink = useCallback(async () => {
+    try {
+      setAuthMessage('')
+      await sendMagicLink(authEmail)
+      setAuthMessage(`Magic link sent to ${authEmail.trim()}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setAuthMessage(`Auth failed: ${msg}`)
+    }
+  }, [authEmail, sendMagicLink])
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await signOut()
+      setAuthMessage('Signed out')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setAuthMessage(`Sign out failed: ${msg}`)
+    }
+  }, [signOut])
+
+  const handleSyncBatch = useCallback(async () => {
+    if (!supabase || !session || uploading) {
+      return
+    }
+
+    const store = stores.find((entry) => entry.id === selectedStoreId)
+    const batch = batches.find((entry) => entry.id === selectedBatchId)
+
+    if (!store || !batch) {
+      setStorageErrors((prev) => [...prev, 'Sync failed: selected store or batch is missing'])
+      return
+    }
+
+    setUploading(true)
+    setUploadProgress({
+      stage: 'idle',
+      message: 'Preparing batch sync',
+    })
+
+    try {
+      const result = await syncBatchToSupabase({
+        client: supabase,
+        store,
+        batch,
+        items: allItems,
+        photos: allPhotos,
+        itemStore: itemPacketStore,
+        photoStore,
+        bucket: SUPABASE_STORAGE_BUCKET,
+        onProgress: setUploadProgress,
+      })
+
+      await loadData()
+      setStatusMsg(`Synced ${result.uploadedItems} item${result.uploadedItems === 1 ? '' : 's'} to Supabase`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setStorageErrors((prev) => [...prev, `Sync failed: ${msg}`])
+      setUploadProgress({
+        stage: 'error',
+        message: `Sync failed: ${msg}`,
+      })
+    } finally {
+      setUploading(false)
+    }
+  }, [allItems, allPhotos, batches, loadData, photoStore, selectedBatchId, selectedStoreId, session, stores, uploading])
+
   const queueItems = useMemo(() => {
     const items = allItems.filter((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId)
     const filtered = queueFilter === 'all' ? items : items.filter((item) => (item.listingStatus || 'new') === queueFilter)
@@ -543,6 +649,13 @@ export function Phase1Screen() {
             <button style={{ ...s.button, ...s.buttonDanger }} onClick={handleReset}>Reset</button>
             <button style={{ ...s.button, ...s.buttonPrimary }} onClick={handleCreateStore}>New Store</button>
             <button style={s.button} onClick={handleCreateBatch} disabled={!selectedStoreId}>New Batch</button>
+            <button
+              style={{ ...s.button, ...s.buttonPrimary }}
+              onClick={handleSyncBatch}
+              disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
+            >
+              {uploading ? 'Syncing…' : 'Sync Batch'}
+            </button>
           </div>
         </div>
 
@@ -597,6 +710,80 @@ export function Phase1Screen() {
 
         <div style={{ marginTop: 10, fontSize: 12, color: supabaseConfig.ready ? '#4ade80' : '#f59e0b' }}>
           Supabase client: {supabaseConfig.ready ? 'configured' : 'missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY'}
+        </div>
+        <div style={s.authPanel}>
+          <div style={s.authLine}>
+            <span>Supabase auth</span>
+            <span>
+              {authLoading
+                ? 'loading session'
+                : session
+                  ? `signed in as ${session.user.email || session.user.id}`
+                  : 'signed out'}
+            </span>
+          </div>
+          {authError && <div style={{ fontSize: 12, color: '#f87171' }}>{authError}</div>}
+          {authMessage && <div style={{ fontSize: 12, color: '#93c5fd' }}>{authMessage}</div>}
+          {!supabaseReady ? (
+            <div style={{ fontSize: 12, color: '#f59e0b' }}>
+              Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable auth and upload.
+            </div>
+          ) : session ? (
+            <div style={s.authGrid}>
+              <div style={{ fontSize: 12, color: '#a8a8a8' }}>
+                Ready to sync as {session.user.email || session.user.id}
+              </div>
+              <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleSyncBatch} disabled={uploading}>
+                {uploading ? 'Syncing…' : 'Upload Batch'}
+              </button>
+              <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleSignOut}>
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <div style={s.authGrid}>
+              <input
+                style={s.select}
+                placeholder="Email for magic link"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                type="email"
+              />
+              <button
+                style={{ ...s.button, ...s.buttonPrimary }}
+                onClick={handleSendMagicLink}
+                disabled={!authEmail.trim()}
+              >
+                Send link
+              </button>
+              <button
+                style={s.button}
+                onClick={handleSyncBatch}
+                disabled
+                title="Sign in to enable upload"
+              >
+                Upload Batch
+              </button>
+            </div>
+          )}
+          {uploadProgress && (
+            <div style={s.progressBox}>
+              <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                Sync status
+              </div>
+              <div>{uploadProgress.message}</div>
+              {(uploadProgress.itemCount !== undefined || uploadProgress.photoCount !== undefined) && (
+                <div style={{ marginTop: 4, color: '#94a3b8' }}>
+                  {uploadProgress.itemIndex !== undefined && uploadProgress.itemCount !== undefined && (
+                    <div>Item {uploadProgress.itemIndex} / {uploadProgress.itemCount}</div>
+                  )}
+                  {uploadProgress.photoIndex !== undefined && uploadProgress.photoCount !== undefined && (
+                    <div>Photo {uploadProgress.photoIndex} / {uploadProgress.photoCount}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -782,6 +969,8 @@ function QueueCard({
         </div>
         <div style={s.queueMeta}>
           {item.photoIds.length} photo{item.photoIds.length === 1 ? '' : 's'} • {readiness.readyForHandoff ? 'ready' : 'needs info'}
+          <br />
+          Upload: {item.uploadStatus || 'local'}
           <br />
           {item.note ? `Note: ${item.note}` : 'Note missing'}
           <br />

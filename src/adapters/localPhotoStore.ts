@@ -5,11 +5,14 @@ const STORE_NAME = PHOTO_STORE_NAME
 
 export interface StoredPhoto {
   id: string
+  remoteId?: string
   blob: Blob
   mimeType: string
   size: number
   capturedAt: string
   savedAt: string
+  uploadStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'failed'
+  remoteStatus?: 'not_uploaded' | 'uploaded' | 'verified' | 'delete_eligible' | 'deleting' | 'deleted' | 'failed'
   // Optional metadata for diagnostics - backward compatible
   sourceWidth?: number
   sourceHeight?: number
@@ -40,6 +43,8 @@ export interface StoredPhoto {
 export interface LocalPhotoStore {
   save(photo: Omit<StoredPhoto, 'savedAt'>): Promise<StoredPhoto>
   getAll(): Promise<StoredPhoto[]>
+  getPhoto(id: string): Promise<StoredPhoto | null>
+  updatePhoto(id: string, patch: Partial<StoredPhoto>): Promise<void>
   delete(id: string): Promise<void>
   clearAll(): Promise<void>
   count(): Promise<number>
@@ -118,6 +123,31 @@ export class IndexedDbPhotoStore implements LocalPhotoStore {
       req.onsuccess = () => resolve(req.result as StoredPhoto[])
       req.onerror = () => reject(req.error)
     })
+  }
+
+  async getPhoto(id: string): Promise<StoredPhoto | null> {
+    const db = await this.dbPromise
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.storeName, 'readonly')
+      const store = tx.objectStore(this.storeName)
+      const req = store.get(id)
+      req.onsuccess = () => resolve((req.result as StoredPhoto) || null)
+      req.onerror = () => reject(req.error)
+    })
+  }
+
+  async updatePhoto(id: string, patch: Partial<StoredPhoto>): Promise<void> {
+    const current = await this.getPhoto(id)
+    if (!current) {
+      throw new Error(`Photo ${id} not found`)
+    }
+
+    const updated: StoredPhoto = {
+      ...current,
+      ...patch,
+    }
+
+    await this.tx('readwrite', (store) => store.put(updated))
   }
 
   async delete(id: string): Promise<void> {

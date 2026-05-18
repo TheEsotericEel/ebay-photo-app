@@ -6,13 +6,14 @@ Phase 1 moves the app from camera spike into the first real handoff workflow.
 
 - store and batch records in IndexedDB
 - queue-oriented Phase 1 screen
+- Supabase Auth magic-link bootstrap
+- batch sync into Supabase tables and private storage
 - item listing status controls
 - default store and batch seed data
 
 ## Still to build
 
-- Supabase client integration
-- upload queue
-- storage upload/cleanup flow
-- remote verification and safe-to-clear logic
+- upload retry/resume queue
+- storage cleanup flow after verified remote upload
+- stronger remote verification and safe-to-clear logic
 - desktop-first batch and item review behavior

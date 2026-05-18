@@ -13,6 +13,7 @@ export interface PhotoReference {
 
 export interface ItemPacket {
   id: string
+  remoteId?: string
   storeId: string
   batchId: string
   itemNumber: number
@@ -21,7 +22,9 @@ export interface ItemPacket {
   status: ItemStatus
   photoIds: string[]
   listingStatus?: ListingStatus
-  uploadStatus?: 'local' | 'queued' | 'uploaded' | 'failed'
+  uploadStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'failed'
+  remoteStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'failed'
+  remoteUpdatedAt?: string
   // Optional metadata
   sku?: string
   note?: string
@@ -33,6 +36,7 @@ export interface LocalItemPacketStore {
   addItemPhoto(itemId: string, photoId: string): Promise<void>
   updateItemMetadata(itemId: string, metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight'>>): Promise<void>
   setListingStatus(itemId: string, listingStatus: ListingStatus): Promise<void>
+  updateItem(itemId: string, patch: Partial<ItemPacket>): Promise<void>
   finalizeItem(itemId: string): Promise<void>
   getCurrentItem(storeId?: string, batchId?: string): Promise<ItemPacket | null>
   getAllItems(): Promise<ItemPacket[]>
@@ -148,21 +152,14 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
     itemId: string,
     metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight'>>,
   ): Promise<void> {
-    const item = await this.getItem(itemId)
-    if (!item) {
-      throw new Error(`Item ${itemId} not found`)
-    }
-
-    const updatedItem: ItemPacket = {
-      ...item,
-      ...metadata,
-      updatedAt: new Date().toISOString(),
-    }
-
-    await this.tx('readwrite', (store) => store.put(updatedItem))
+    await this.updateItem(itemId, metadata)
   }
 
   async setListingStatus(itemId: string, listingStatus: ListingStatus): Promise<void> {
+    await this.updateItem(itemId, { listingStatus })
+  }
+
+  async updateItem(itemId: string, patch: Partial<ItemPacket>): Promise<void> {
     const item = await this.getItem(itemId)
     if (!item) {
       throw new Error(`Item ${itemId} not found`)
@@ -170,7 +167,7 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
 
     const updatedItem: ItemPacket = {
       ...item,
-      listingStatus,
+      ...patch,
       updatedAt: new Date().toISOString(),
     }
 
@@ -178,18 +175,7 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
   }
 
   async finalizeItem(itemId: string): Promise<void> {
-    const item = await this.getItem(itemId)
-    if (!item) {
-      throw new Error(`Item ${itemId} not found`)
-    }
-
-    const updatedItem: ItemPacket = {
-      ...item,
-      status: 'complete',
-      updatedAt: new Date().toISOString(),
-    }
-
-    await this.tx('readwrite', (store) => store.put(updatedItem))
+    await this.updateItem(itemId, { status: 'complete' })
   }
 
   async getCurrentItem(storeId?: string, batchId?: string): Promise<ItemPacket | null> {

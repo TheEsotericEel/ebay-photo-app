@@ -34,8 +34,14 @@ VITE_SUPABASE_URL=https://wchoxagxpsejwrotvnsx.supabase.co
 VITE_SUPABASE_ANON_KEY=your_anon_key
 ```
 
+## App login and sync
+
+- Phase 1 uses Supabase Auth magic-link login.
+- Sign in with an email address in the app, then use `Sync Batch` to push the current store/batch/items/photos into Supabase.
+- The app writes uploaded assets into the private `photo-assets` bucket and records photo variants in `public.photo_variants`.
+
 ## Notes
 
 - The project is configured for authenticated access only.
 - Storage is private by default.
-- The next app step is client integration against the linked project.
+- The next app step after this slice is retry/resume plus cleanup verification.
