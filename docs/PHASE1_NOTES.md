@@ -1,13 +1,13 @@
 # Workspace Notes
 
 This workspace moves the app from camera spike into the first real handoff workflow.
-The current implementation is split into a mobile home screen that opens the camera on demand and a desktop queue surface.
+The current implementation is split into a mobile home screen that opens the camera on demand and a desktop tabbed shell with fixed Capture, Queue, and Tools panels.
 
 ## Added in this repo
 
 - store and batch records in IndexedDB
 - mobile capture surface with upload/cleanup status
-- desktop queue surface with batch drilldown and item detail
+- desktop tabbed shell with batch drilldown, item detail, and upload tools
 - Supabase Auth magic-link bootstrap
 - batch sync into Supabase tables and private storage
 - single shared account across capture and lister devices

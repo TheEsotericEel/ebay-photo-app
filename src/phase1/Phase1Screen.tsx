@@ -14,7 +14,7 @@ import { deleteEligibleRemotePhotos, getRemoteCleanupReport, RemoteCleanupProgre
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
 import { CameraCapabilities, CaptureDiagnostics } from '../adapters/camera'
-import { supabase, supabaseConfig } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { APP_NAME, SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
 import { useSupabaseSession } from '../lib/useSupabaseSession'
 import { useIsMobile } from '../lib/useViewportMode'
@@ -424,6 +424,153 @@ const s: Record<string, React.CSSProperties> = {
     display: 'grid',
     gap: 10,
   },
+  desktopScreen: {
+    height: '100dvh',
+    minHeight: '100dvh',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    padding: 12,
+    gap: 12,
+  },
+  desktopFrame: {
+    flex: 1,
+    minHeight: 0,
+    display: 'grid',
+    gridTemplateRows: 'auto auto 1fr',
+    gap: 12,
+    overflow: 'hidden',
+  },
+  desktopTopBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: 12,
+    alignItems: 'center',
+    padding: '14px 16px',
+    background: '#121212',
+    border: '1px solid #242424',
+    borderRadius: 16,
+    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.22)',
+  },
+  desktopTitleBlock: {
+    display: 'grid',
+    gap: 4,
+  },
+  desktopTitle: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: '#f2f2f2',
+    letterSpacing: -0.2,
+  },
+  desktopSubtitle: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  desktopTabs: {
+    display: 'flex',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  desktopTab: {
+    padding: '10px 14px',
+    borderRadius: 999,
+    border: '1px solid #2b2b2b',
+    background: '#161616',
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  desktopTabActive: {
+    background: '#e5e7eb',
+    color: '#111',
+    borderColor: '#e5e7eb',
+  },
+  desktopContext: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr)',
+    gap: 12,
+    minHeight: 0,
+    overflow: 'hidden',
+  },
+  desktopContextCard: {
+    background: '#121212',
+    border: '1px solid #242424',
+    borderRadius: 16,
+    padding: 14,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  desktopContextTitle: {
+    fontSize: 12,
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#a8a8a8',
+  },
+  desktopContextBody: {
+    display: 'grid',
+    gap: 10,
+    minHeight: 0,
+  },
+  desktopPanel: {
+    background: '#121212',
+    border: '1px solid #242424',
+    borderRadius: 16,
+    padding: 14,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.22)',
+  },
+  desktopPanelHead: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: 12,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  desktopPanelTitle: {
+    fontSize: 18,
+    fontWeight: 800,
+    color: '#f2f2f2',
+    letterSpacing: -0.2,
+  },
+  desktopPanelMeta: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  desktopGrid: {
+    display: 'grid',
+    gap: 12,
+    minHeight: 0,
+    flex: 1,
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+  },
+  desktopStack: {
+    display: 'grid',
+    gap: 12,
+    minHeight: 0,
+    flex: 1,
+    gridTemplateRows: 'minmax(0, 1fr) minmax(0, 1fr)',
+  },
+  desktopScrollList: {
+    minHeight: 0,
+    overflow: 'auto',
+    paddingRight: 6,
+  },
+  desktopToolsGrid: {
+    display: 'grid',
+    gap: 12,
+    minHeight: 0,
+    flex: 1,
+    gridTemplateColumns: 'minmax(0, 360px) minmax(0, 1fr)',
+  },
 }
 
 export function WorkspaceScreen() {
@@ -431,6 +578,7 @@ export function WorkspaceScreen() {
   const isMobile = useIsMobile()
   const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
+  const [desktopMode, setDesktopMode] = useState<'capture' | 'queue' | 'tools'>('capture')
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
   const [captureErrors, setCaptureErrors] = useState<string[]>([])
@@ -463,6 +611,7 @@ export function WorkspaceScreen() {
   useEffect(() => {
     if (!isMobile) {
       setMobileMode('home')
+      setDesktopMode('capture')
     }
   }, [isMobile])
 
@@ -1152,470 +1301,592 @@ export function WorkspaceScreen() {
   }
 
   return (
-    <div style={s.screen}>
-      <div style={{ ...s.panel, margin: '0 12px' }}>
-        <div style={s.header}>
-          <div>
-            <div style={s.title}>Photo Workspace</div>
-            <div style={s.subtitle}>
+    <div style={s.desktopScreen}>
+      <div style={s.desktopFrame}>
+        <div style={s.desktopTopBar}>
+          <div style={s.desktopTitleBlock}>
+            <div style={s.desktopTitle}>Photo Workspace</div>
+            <div style={s.desktopSubtitle}>
               {APP_NAME} connected to Supabase bucket `{SUPABASE_STORAGE_BUCKET}` with capture, queue, and cleanup workflows.
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button style={{ ...s.button, ...s.buttonDanger }} onClick={handleReset}>Reset</button>
-            <button style={{ ...s.button, ...s.buttonPrimary }} onClick={handleCreateStore}>New Store</button>
-            <button style={s.button} onClick={handleCreateBatch} disabled={!selectedStoreId}>New Batch</button>
-            <button
-              style={{ ...s.button, ...s.buttonPrimary }}
-              onClick={handleSyncBatch}
-              disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
-            >
-              {uploading ? 'Syncing…' : 'Sync Batch'}
-            </button>
+          <div style={s.desktopTabs}>
+            {([
+              ['capture', 'Capture'],
+              ['queue', 'Queue'],
+              ['tools', 'Tools'],
+            ] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                style={{
+                  ...s.desktopTab,
+                  ...(desktopMode === mode ? s.desktopTabActive : {}),
+                }}
+                onClick={() => setDesktopMode(mode)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div style={s.split}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <div style={s.label}>Store</div>
-              <select style={s.select} value={selectedStoreId} onChange={(e) => handleStoreChange(e.target.value)}>
-                {stores.map((store) => (
-                  <option key={store.id} value={store.id}>{store.name} ({store.shortCode})</option>
-                ))}
-              </select>
+        <div style={s.desktopContext}>
+          <div style={s.desktopContextCard}>
+            <div style={s.desktopContextTitle}>Context</div>
+            <div style={s.desktopContextBody}>
+              <div>
+                <div style={s.label}>Store</div>
+                <select style={s.select} value={selectedStoreId} onChange={(e) => handleStoreChange(e.target.value)}>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>{store.name} ({store.shortCode})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div style={s.label}>Batch</div>
+                <select style={s.select} value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)}>
+                  {selectedStoreBatches.map((batch) => (
+                    <option key={batch.id} value={batch.id}>{batch.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <div style={s.label}>Batch</div>
-              <select style={s.select} value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)}>
-                {selectedStoreBatches.map((batch) => (
-                  <option key={batch.id} value={batch.id}>{batch.name}</option>
-                ))}
-              </select>
-            </div>
+          </div>
+
+          <div style={s.desktopContextCard}>
+            <div style={s.desktopContextTitle}>Batch status</div>
             <div style={s.statGrid}>
-              <div style={s.stat}><div style={s.statValue}>{queueStats.itemCount}</div><div style={s.statLabel}>Items in batch</div></div>
-              <div style={s.stat}><div style={s.statValue}>{queueStats.photoCount}</div><div style={s.statLabel}>Photos in batch</div></div>
-              <div style={s.stat}><div style={s.statValue}>{queueStats.readyCount}</div><div style={s.statLabel}>Ready for handoff</div></div>
+              <div style={s.stat}><div style={s.statValue}>{queueStats.itemCount}</div><div style={s.statLabel}>Items</div></div>
+              <div style={s.stat}><div style={s.statValue}>{queueStats.photoCount}</div><div style={s.statLabel}>Photos</div></div>
+              <div style={s.stat}><div style={s.statValue}>{queueStats.readyCount}</div><div style={s.statLabel}>Ready</div></div>
               <div style={s.stat}><div style={s.statValue}>{queueStats.listed}</div><div style={s.statLabel}>Listed</div></div>
             </div>
           </div>
-
-          <div>
-            <div style={s.label}>Capture ratio</div>
-            <div style={{ ...s.row, marginBottom: 12 }}>
-              {(['full', '1:1', '4:3', '16:9'] as OutputRatio[]).map((ratio) => (
-                <button
-                  key={ratio}
-                  style={{
-                    ...s.button,
-                    ...(selectedRatio === ratio ? s.buttonPrimary : {}),
-                    flex: 1,
-                  }}
-                  onClick={() => handleRatioChange(ratio)}
-                >
-                  {ratio === 'full' ? 'Full' : ratio}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontSize: 12, color: '#8b8b8b', lineHeight: 1.6 }}>
-              The camera path is still the browser capture implementation. The workspace adds store, batch, queue, and cleanup context around it.
-            </div>
-          </div>
         </div>
 
-        <div style={{ marginTop: 10, fontSize: 12, color: supabaseConfig.ready ? '#4ade80' : '#f59e0b' }}>
-          Supabase client: {supabaseConfig.ready ? 'configured' : 'missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY'}
-        </div>
-        <div style={s.authPanel}>
-          <div style={s.authLine}>
-            <span>Supabase auth</span>
-            <span>
-              {authLoading
-                ? 'loading session'
-                : session
-                  ? `signed in as ${session.user.email || session.user.id}`
-                  : 'signed out'}
-            </span>
-          </div>
-          {authError && <div style={{ fontSize: 12, color: '#f87171' }}>{authError}</div>}
-          {authMessage && <div style={{ fontSize: 12, color: '#93c5fd' }}>{authMessage}</div>}
-          {!supabaseReady ? (
-            <div style={{ fontSize: 12, color: '#f59e0b' }}>
-              Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable auth and upload.
-            </div>
-          ) : session ? (
-            <div style={s.authGrid}>
-              <div style={{ fontSize: 12, color: '#a8a8a8' }}>
-                Ready to sync as {session.user.email || session.user.id}
-              </div>
-              <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleSyncBatch} disabled={uploading}>
-                {uploading ? 'Syncing…' : 'Upload Batch'}
-              </button>
-              <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleSignOut}>
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <div style={s.authGrid}>
-              <input
-                style={s.select}
-                placeholder="Email for magic link"
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                type="email"
-              />
-              <button
-                style={{ ...s.button, ...s.buttonPrimary }}
-                onClick={handleSendMagicLink}
-                disabled={!authEmail.trim()}
-              >
-                Send link
-              </button>
-              <button
-                style={s.button}
-                onClick={handleSyncBatch}
-                disabled
-                title="Sign in to enable upload"
-              >
-                Upload Batch
-              </button>
-            </div>
-          )}
-          {uploadProgress && (
-            <div style={s.progressBox}>
-              <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
-                Sync status
-              </div>
-              <div>{uploadProgress.message}</div>
-              {(uploadProgress.itemCount !== undefined || uploadProgress.photoCount !== undefined) && (
-                <div style={{ marginTop: 4, color: '#94a3b8' }}>
-                  {uploadProgress.itemIndex !== undefined && uploadProgress.itemCount !== undefined && (
-                    <div>Item {uploadProgress.itemIndex} / {uploadProgress.itemCount}</div>
-                  )}
-                  {uploadProgress.photoIndex !== undefined && uploadProgress.photoCount !== undefined && (
-                    <div>Photo {uploadProgress.photoIndex} / {uploadProgress.photoCount}</div>
-                  )}
+        {desktopMode === 'capture' && (
+          <div style={s.desktopGrid}>
+            <div style={{ ...s.desktopPanel, minHeight: 0 }}>
+              <div style={s.desktopPanelHead}>
+                <div>
+                  <div style={s.desktopPanelTitle}>Capture</div>
+                  <div style={s.desktopPanelMeta}>Camera-first workspace for the current store and batch.</div>
                 </div>
-              )}
-            </div>
-          )}
-          {remoteCleanupProgress && (
-            <div style={s.progressBox}>
-              <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
-                Remote cleanup
-              </div>
-              <div>{remoteCleanupProgress.message}</div>
-              {remoteCleanupProgress.photoCount !== undefined && remoteCleanupProgress.photoIndex !== undefined && (
-                <div style={{ marginTop: 4, color: '#94a3b8' }}>
-                  Photo {remoteCleanupProgress.photoIndex} / {remoteCleanupProgress.photoCount}
-                </div>
-              )}
-            </div>
-          )}
-          <div style={s.progressBox}>
-            <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
-              Upload / cleanup
-            </div>
-            <div>Total photos: {batchUploadSummary.totalPhotos}</div>
-            <div>Verified: {batchUploadSummary.verifiedPhotos}</div>
-            <div>Pending: {batchUploadSummary.pendingPhotos}</div>
-            <div>Failed: {batchUploadSummary.failedPhotos}</div>
-            <div>Safe to clear: {cleanupReport.safeToClear ? 'yes' : 'no'}</div>
-            <div>Remote cleanup eligible: {remoteCleanupReport?.eligiblePhotos || 0}</div>
-            <div>Remote cleanup blocked: {remoteCleanupReport?.blockedPhotos || 0}</div>
-            <div>Retention: {getRetentionModeLabel(selectedBatch?.remoteRetentionMode || 'delete_7d_after_listed')}</div>
-            {remoteCleanupReport?.nextEligibleAt && (
-              <div>Next eligible: {new Date(remoteCleanupReport.nextEligibleAt).toLocaleString()}</div>
-            )}
-            {cleanupReport.issues.length > 0 && (
-              <div style={{ marginTop: 4, color: '#fca5a5' }}>
-                {cleanupReport.issues.map((issue) => (
-                  <div key={issue.reason}>
-                    {issue.count} {issue.reason}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-              <button
-                style={{ ...s.button, ...s.buttonSmall }}
-                onClick={handleSyncBatch}
-                disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
-              >
-                Retry upload
-              </button>
-              <button
-                style={{ ...s.button, ...s.buttonSmall }}
-                onClick={handleRemoteCleanup}
-                disabled={!supabase || !session || remoteCleaning || !selectedBatch || (remoteCleanupReport?.eligiblePhotos || 0) === 0}
-                title={remoteCleanupReport?.eligiblePhotos ? 'Delete remote assets for listed items whose retention window has expired' : 'No remote photos are eligible yet'}
-              >
-                {remoteCleaning ? 'Cleaning…' : 'Delete remote assets'}
-              </button>
-              <button
-                style={{ ...s.button, ...s.buttonSmall }}
-                onClick={handleClearVerifiedLocalCopies}
-                disabled={!cleanupReport.safeToClear}
-                title={cleanupReport.safeToClear ? 'Remove verified local copies' : 'Uploads must be verified first'}
-              >
-                Clear local copies
-              </button>
-            </div>
-            {cleanupMessage && <div style={{ marginTop: 6, color: '#cbd5e1' }}>{cleanupMessage}</div>}
-          </div>
-        </div>
-      </div>
-
-      <div style={s.shell}>
-        <div style={s.panel}>
-          <CameraPreview
-            ref={cameraRef}
-            onError={(msg) => {
-              setCameraState('error')
-              setCaptureErrors((prev) => [...prev, msg])
-            }}
-            onStarted={() => {
-              setCameraState('active')
-              const caps = cameraRef.current?.getCapabilities() ?? null
-              const dims = cameraRef.current?.getVideoDimensions() ?? null
-              if (caps && dims) {
-                setCapabilities({
-                  ...caps,
-                  trackSettings: caps.trackSettings
-                    ? {
-                        ...caps.trackSettings,
-                        width: caps.trackSettings.width ?? dims.videoWidth,
-                        height: caps.trackSettings.height ?? dims.videoHeight,
-                      }
-                    : {
-                        width: dims.videoWidth,
-                        height: dims.videoHeight,
-                        aspectRatio: undefined,
-                        facingMode: undefined,
-                        deviceId: undefined,
-                        zoom: undefined,
-                      },
-                })
-              } else {
-                setCapabilities(caps)
-              }
-              setStatusMsg('Camera active')
-            }}
-            onStopped={() => setCameraState('stopped')}
-            ratio={selectedRatio}
-          />
-
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {currentItem && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, color: '#a8a8a8' }}>
-                <span>Item {currentItem.itemNumber}</span>
-                <span>{currentItem.photoIds.length} photo{currentItem.photoIds.length === 1 ? '' : 's'}</span>
-              </div>
-            )}
-
-            <div style={{ fontSize: 12, color: '#8b8b8b' }}>{statusMsg}</div>
-
-            <button
-              style={{ ...s.button, ...s.buttonPrimary, padding: '18px 12px', fontSize: 18 }}
-              disabled={capturing || cameraState !== 'active' || !selectedStoreId || !selectedBatchId}
-              onClick={handleCapture}
-            >
-              {capturing ? 'Capturing…' : '⊙ Capture'}
-            </button>
-
-            <button
-              style={s.button}
-              disabled={!currentItem || currentItem.photoIds.length === 0}
-              onClick={handleDoneNext}
-            >
-              Done / Next Item
-            </button>
-
-            <div style={{ display: 'grid', gap: 8 }}>
-              <input
-                style={s.select}
-                placeholder="SKU (optional)"
-                value={itemSku}
-                onChange={(e) => setItemSku(e.target.value)}
-              />
-              <input
-                style={s.select}
-                placeholder="Note (optional)"
-                value={itemNote}
-                onChange={(e) => setItemNote(e.target.value)}
-              />
-              <input
-                style={s.select}
-                placeholder="Weight (optional)"
-                value={itemWeight}
-                onChange={(e) => setItemWeight(e.target.value)}
-              />
-            </div>
-
-            <PhotoList photos={currentItemPhotos} onPhotoClick={(photo) => setSelectedPhoto(photo)} />
-          </div>
-
-          <details style={{ marginTop: 12 }}>
-            <summary style={{ cursor: 'pointer', color: '#a8a8a8', fontSize: 13, fontWeight: 700 }}>
-              Developer diagnostics
-            </summary>
-            <div style={{ marginTop: 12 }}>
-              <DiagnosticsPanel
-                cameraState={cameraState}
-                capabilities={capabilities}
-                captureErrors={captureErrors}
-                storageErrors={storageErrors}
-                secureContext={secureContextInfo}
-                lastCaptureDiagnostics={lastCaptureDiagnostics}
-              />
-            </div>
-          </details>
-        </div>
-
-        <div style={s.panel}>
-          <div style={s.sectionTitle}>Desktop queue</div>
-
-          <div style={{ display: 'grid', gap: 12 }}>
-            <div>
-              <div style={s.label}>Stores</div>
-              <div style={{ display: 'grid', gap: 8 }}>
-                {desktopStoreCards.length === 0 ? (
-                  <div style={s.empty}>No stores yet.</div>
-                ) : (
-                  desktopStoreCards.map(({ store, activeBatchCount, batchCount, itemCount, photoCount, unlistedCount, needsRetakeCount, incompleteUploadCount }) => (
-                    <button
-                      key={store.id}
-                      onClick={() => void handleStoreChange(store.id)}
-                      style={{
-                        ...s.queueItem,
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        borderColor: selectedStoreId === store.id ? '#60a5fa' : '#242424',
-                        outline: 'none',
-                      }}
-                    >
-                      <div style={{ ...s.queueContent, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ ...s.queueTitle, marginBottom: 0 }}>
-                          <div style={s.queueNumber}>{store.name} ({store.shortCode})</div>
-                          <span style={{ ...s.queueBadge, ...s.badgeUnknown }}>{activeBatchCount} active</span>
-                        </div>
-                        <div style={s.queueMeta}>
-                          {batchCount} batch{batchCount === 1 ? '' : 'es'} • {itemCount} item{itemCount === 1 ? '' : 's'} • {photoCount} photo{photoCount === 1 ? '' : 's'}
-                          <br />
-                          Unlisted: {unlistedCount} • Needs retake: {needsRetakeCount} • Incomplete uploads: {incompleteUploadCount}
-                        </div>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div style={s.label}>Batches</div>
-              <div style={{ display: 'grid', gap: 8 }}>
-                {desktopBatchCards.length === 0 ? (
-                  <div style={s.empty}>No batches for this store yet.</div>
-                ) : (
-                  desktopBatchCards.map(({ batch, itemCount, photoCount, readyCount, uploadSummary }) => (
-                    <button
-                      key={batch.id}
-                      onClick={() => {
-                        setSelectedBatchId(batch.id)
-                        setSelectedQueueItemId('')
-                      }}
-                      style={{
-                        ...s.queueItem,
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        borderColor: selectedBatchId === batch.id ? '#60a5fa' : '#242424',
-                        outline: 'none',
-                      }}
-                    >
-                      <div style={{ ...s.queueContent, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ ...s.queueTitle, marginBottom: 0 }}>
-                          <div style={s.queueNumber}>{batch.name}</div>
-                          <span style={{ ...s.queueBadge, ...s.badgeUnknown }}>
-                            {batch.status}
-                          </span>
-                        </div>
-                        <div style={s.queueMeta}>
-                          {itemCount} item{itemCount === 1 ? '' : 's'} • {photoCount} photo{photoCount === 1 ? '' : 's'} • {readyCount} ready
-                          <br />
-                          Upload: {uploadSummary.failedPhotos > 0 ? 'needs attention' : uploadSummary.pendingPhotos > 0 ? 'pending' : 'verified'}
-                          {' '}• Safe to clear: {uploadSummary.safeToClearPhotos > 0 ? 'yes' : 'no'}
-                        </div>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div style={s.label}>Items</div>
-              <div style={s.filterRow}>
-                {(['all', 'new', 'listed', 'hold', 'needs_retake'] as QueueFilter[]).map((filter) => (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button style={{ ...s.button, ...s.buttonDanger }} onClick={handleReset}>Reset</button>
                   <button
-                    key={filter}
-                    onClick={() => setQueueFilter(filter)}
-                    style={{
-                      ...s.filterButton,
-                      ...(queueFilter === filter ? s.filterButtonActive : {}),
-                    }}
+                    style={{ ...s.button, ...s.buttonPrimary }}
+                    onClick={handleSyncBatch}
+                    disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
                   >
-                    {filter === 'needs_retake' ? 'Needs retake' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                    {uploading ? 'Syncing…' : 'Sync Batch'}
                   </button>
-                ))}
-              </div>
-
-              {queueItems.length === 0 ? (
-                <div style={s.empty}>
-                  No items in this batch yet. Capture an item to start the queue.
                 </div>
-              ) : (
-                queueItems.map((item) => {
-                  const fullItem = attachOrderedPhotosToItem(item, allPhotos)
-                  const readiness = getItemReadiness(item, allPhotos)
-                  const coverPhoto = fullItem.coverPhoto
-                  return (
-                    <QueueCard
-                      key={item.id}
-                      item={item}
-                      readiness={readiness}
-                      coverPhoto={coverPhoto}
-                      isSelected={selectedQueueItemId === item.id}
-                      onSelect={() => setSelectedQueueItemId(item.id)}
-                      onPhotoClick={(photo) => setSelectedPhoto(photo)}
-                      onUpdateStatus={async (status) => {
-                        await handleUpdateListingStatus(item, status)
-                      }}
-                    />
-                  )
-                })
-              )}
+              </div>
+              <div style={{ ...s.desktopStack, gridTemplateRows: 'minmax(0, 1fr) auto' }}>
+                <CameraPreview
+                  ref={cameraRef}
+                  onError={(msg) => {
+                    setCameraState('error')
+                    setCaptureErrors((prev) => [...prev, msg])
+                  }}
+                  onStarted={() => {
+                    setCameraState('active')
+                    const caps = cameraRef.current?.getCapabilities() ?? null
+                    const dims = cameraRef.current?.getVideoDimensions() ?? null
+                    if (caps && dims) {
+                      setCapabilities({
+                        ...caps,
+                        trackSettings: caps.trackSettings
+                          ? {
+                              ...caps.trackSettings,
+                              width: caps.trackSettings.width ?? dims.videoWidth,
+                              height: caps.trackSettings.height ?? dims.videoHeight,
+                            }
+                          : {
+                              width: dims.videoWidth,
+                              height: dims.videoHeight,
+                              aspectRatio: undefined,
+                              facingMode: undefined,
+                              deviceId: undefined,
+                              zoom: undefined,
+                            },
+                      })
+                    } else {
+                      setCapabilities(caps)
+                    }
+                    setStatusMsg('Camera active')
+                  }}
+                  onStopped={() => setCameraState('stopped')}
+                  ratio={selectedRatio}
+                />
+
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, color: '#a8a8a8' }}>
+                    <span>{selectedStore?.name || 'Store'} / {selectedBatch?.name || 'Batch'}</span>
+                    {currentItem && <span>Item {currentItem.itemNumber} • {currentItem.photoIds.length} photo{currentItem.photoIds.length === 1 ? '' : 's'}</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {(['full', '1:1', '4:3', '16:9'] as OutputRatio[]).map((ratio) => (
+                      <button
+                        key={ratio}
+                        style={{
+                          ...s.button,
+                          ...s.buttonSmall,
+                          ...(selectedRatio === ratio ? s.buttonPrimary : {}),
+                        }}
+                        onClick={() => handleRatioChange(ratio)}
+                      >
+                        {ratio === 'full' ? 'Full' : ratio}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      style={{ ...s.button, ...s.buttonPrimary }}
+                      disabled={capturing || cameraState !== 'active' || !selectedStoreId || !selectedBatchId}
+                      onClick={handleCapture}
+                    >
+                      {capturing ? 'Capturing…' : '⊙ Capture'}
+                    </button>
+                    <button
+                      style={s.button}
+                      disabled={!currentItem || currentItem.photoIds.length === 0}
+                      onClick={handleDoneNext}
+                    >
+                      Done / Next Item
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <input style={s.select} placeholder="SKU (optional)" value={itemSku} onChange={(e) => setItemSku(e.target.value)} />
+                    <input style={s.select} placeholder="Note (optional)" value={itemNote} onChange={(e) => setItemNote(e.target.value)} />
+                    <input style={s.select} placeholder="Weight (optional)" value={itemWeight} onChange={(e) => setItemWeight(e.target.value)} />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <div style={s.label}>Item detail</div>
+            <div style={s.desktopStack}>
+              <div style={s.desktopPanel}>
+                <div style={s.desktopPanelHead}>
+                  <div>
+                    <div style={s.desktopPanelTitle}>Status</div>
+                    <div style={s.desktopPanelMeta}>{statusMsg}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleCreateStore}>New Store</button>
+                    <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleCreateBatch} disabled={!selectedStoreId}>New Batch</button>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gap: 10, minHeight: 0 }}>
+                  <PhotoList photos={currentItemPhotos} onPhotoClick={(photo) => setSelectedPhoto(photo)} />
+                  <details>
+                    <summary style={{ cursor: 'pointer', color: '#a8a8a8', fontSize: 13, fontWeight: 700 }}>
+                      Diagnostics
+                    </summary>
+                    <div style={{ marginTop: 12 }}>
+                      <DiagnosticsPanel
+                        cameraState={cameraState}
+                        capabilities={capabilities}
+                        captureErrors={captureErrors}
+                        storageErrors={storageErrors}
+                        secureContext={secureContextInfo}
+                        lastCaptureDiagnostics={lastCaptureDiagnostics}
+                      />
+                    </div>
+                  </details>
+                </div>
+              </div>
+
+              <div style={s.desktopPanel}>
+                <div style={s.desktopPanelHead}>
+                  <div>
+                    <div style={s.desktopPanelTitle}>Upload</div>
+                    <div style={s.desktopPanelMeta}>Remote sync, cleanup, and retention state.</div>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gap: 10, minHeight: 0 }}>
+                  <div style={s.authLine}>
+                    <span>Supabase auth</span>
+                    <span>
+                      {authLoading
+                        ? 'loading session'
+                        : session
+                          ? `signed in as ${session.user.email || session.user.id}`
+                          : 'signed out'}
+                    </span>
+                  </div>
+                  {authError && <div style={{ fontSize: 12, color: '#f87171' }}>{authError}</div>}
+                  {authMessage && <div style={{ fontSize: 12, color: '#93c5fd' }}>{authMessage}</div>}
+                  {!supabaseReady ? (
+                    <div style={{ fontSize: 12, color: '#f59e0b' }}>
+                      Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable auth and upload.
+                    </div>
+                  ) : session ? (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleSyncBatch} disabled={uploading}>
+                        {uploading ? 'Syncing…' : 'Upload Batch'}
+                      </button>
+                      <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleSignOut}>
+                        Sign out
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <input
+                        style={s.select}
+                        placeholder="Email for magic link"
+                        value={authEmail}
+                        onChange={(e) => setAuthEmail(e.target.value)}
+                        type="email"
+                      />
+                      <button
+                        style={{ ...s.button, ...s.buttonPrimary }}
+                        onClick={handleSendMagicLink}
+                        disabled={!authEmail.trim()}
+                      >
+                        Send link
+                      </button>
+                    </div>
+                  )}
+
+                  {uploadProgress && (
+                    <div style={s.progressBox}>
+                      <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                        Sync status
+                      </div>
+                      <div>{uploadProgress.message}</div>
+                    </div>
+                  )}
+                  {remoteCleanupProgress && (
+                    <div style={s.progressBox}>
+                      <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                        Remote cleanup
+                      </div>
+                      <div>{remoteCleanupProgress.message}</div>
+                    </div>
+                  )}
+                  <div style={s.progressBox}>
+                    <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                      Upload / cleanup
+                    </div>
+                    <div>Total photos: {batchUploadSummary.totalPhotos}</div>
+                    <div>Verified: {batchUploadSummary.verifiedPhotos}</div>
+                    <div>Pending: {batchUploadSummary.pendingPhotos}</div>
+                    <div>Failed: {batchUploadSummary.failedPhotos}</div>
+                    <div>Safe to clear: {cleanupReport.safeToClear ? 'yes' : 'no'}</div>
+                    <div>Remote cleanup eligible: {remoteCleanupReport?.eligiblePhotos || 0}</div>
+                    <div>Remote cleanup blocked: {remoteCleanupReport?.blockedPhotos || 0}</div>
+                    <div>Retention: {getRetentionModeLabel(selectedBatch?.remoteRetentionMode || 'delete_7d_after_listed')}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {desktopMode === 'queue' && (
+          <div style={s.desktopGrid}>
+            <div style={s.desktopPanel}>
+              <div style={s.desktopPanelHead}>
+                <div>
+                  <div style={s.desktopPanelTitle}>Queue</div>
+                  <div style={s.desktopPanelMeta}>Stores, batches, and item lists.</div>
+                </div>
+              </div>
+              <div style={s.desktopScrollList}>
+                <div style={s.label}>Stores</div>
+                <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+                  {desktopStoreCards.length === 0 ? (
+                    <div style={s.empty}>No stores yet.</div>
+                  ) : (
+                    desktopStoreCards.map(({ store, activeBatchCount, batchCount, itemCount, photoCount, unlistedCount, needsRetakeCount, incompleteUploadCount }) => (
+                      <button
+                        key={store.id}
+                        onClick={() => void handleStoreChange(store.id)}
+                        style={{
+                          ...s.queueItem,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          borderColor: selectedStoreId === store.id ? '#60a5fa' : '#242424',
+                          outline: 'none',
+                        }}
+                      >
+                        <div style={{ ...s.queueContent, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <div style={{ ...s.queueTitle, marginBottom: 0 }}>
+                            <div style={s.queueNumber}>{store.name} ({store.shortCode})</div>
+                            <span style={{ ...s.queueBadge, ...s.badgeUnknown }}>{activeBatchCount} active</span>
+                          </div>
+                          <div style={s.queueMeta}>
+                            {batchCount} batch{batchCount === 1 ? '' : 'es'} • {itemCount} item{itemCount === 1 ? '' : 's'} • {photoCount} photo{photoCount === 1 ? '' : 's'}
+                            <br />
+                            Unlisted: {unlistedCount} • Needs retake: {needsRetakeCount} • Incomplete uploads: {incompleteUploadCount}
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                <div style={s.label}>Batches</div>
+                <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+                  {desktopBatchCards.length === 0 ? (
+                    <div style={s.empty}>No batches for this store yet.</div>
+                  ) : (
+                    desktopBatchCards.map(({ batch, itemCount, photoCount, readyCount, uploadSummary }) => (
+                      <button
+                        key={batch.id}
+                        onClick={() => {
+                          setSelectedBatchId(batch.id)
+                          setSelectedQueueItemId('')
+                        }}
+                        style={{
+                          ...s.queueItem,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          borderColor: selectedBatchId === batch.id ? '#60a5fa' : '#242424',
+                          outline: 'none',
+                        }}
+                      >
+                        <div style={{ ...s.queueContent, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <div style={{ ...s.queueTitle, marginBottom: 0 }}>
+                            <div style={s.queueNumber}>{batch.name}</div>
+                            <span style={{ ...s.queueBadge, ...s.badgeUnknown }}>{batch.status}</span>
+                          </div>
+                          <div style={s.queueMeta}>
+                            {itemCount} item{itemCount === 1 ? '' : 's'} • {photoCount} photo{photoCount === 1 ? '' : 's'} • {readyCount} ready
+                            <br />
+                            Upload: {uploadSummary.failedPhotos > 0 ? 'needs attention' : uploadSummary.pendingPhotos > 0 ? 'pending' : 'verified'}
+                            {' '}• Safe to clear: {uploadSummary.safeToClearPhotos > 0 ? 'yes' : 'no'}
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                <div style={s.label}>Items</div>
+                <div style={s.filterRow}>
+                  {(['all', 'new', 'listed', 'hold', 'needs_retake'] as QueueFilter[]).map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => setQueueFilter(filter)}
+                      style={{
+                        ...s.filterButton,
+                        ...(queueFilter === filter ? s.filterButtonActive : {}),
+                      }}
+                    >
+                      {filter === 'needs_retake' ? 'Needs retake' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {queueItems.length === 0 ? (
+                  <div style={s.empty}>No items in this batch yet. Capture an item to start the queue.</div>
+                ) : (
+                  queueItems.map((item) => {
+                    const fullItem = attachOrderedPhotosToItem(item, allPhotos)
+                    const readiness = getItemReadiness(item, allPhotos)
+                    const coverPhoto = fullItem.coverPhoto
+                    return (
+                      <QueueCard
+                        key={item.id}
+                        item={item}
+                        readiness={readiness}
+                        coverPhoto={coverPhoto}
+                        isSelected={selectedQueueItemId === item.id}
+                        onSelect={() => setSelectedQueueItemId(item.id)}
+                        onPhotoClick={(photo) => setSelectedPhoto(photo)}
+                        onUpdateStatus={async (status) => {
+                          await handleUpdateListingStatus(item, status)
+                        }}
+                      />
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            <div style={s.desktopPanel}>
+              <div style={s.desktopPanelHead}>
+                <div>
+                  <div style={s.desktopPanelTitle}>Item detail</div>
+                  <div style={s.desktopPanelMeta}>Current item status, photos, and metadata.</div>
+                </div>
+              </div>
               {!selectedDesktopItem ? (
                 <div style={s.empty}>Select an item to inspect its photos and metadata.</div>
               ) : (
-                <DesktopItemDetail
-                  item={selectedDesktopItem}
-                  photos={selectedDesktopItemPhotos}
-                  readiness={selectedDesktopItemReadiness}
-                  onPhotoClick={(photo) => setSelectedPhoto(photo)}
-                  onUpdateStatus={async (status) => {
-                    await handleUpdateListingStatus(selectedDesktopItem, status)
-                  }}
-                  onCopyText={handleCopyText}
-                />
+                <div style={s.desktopScrollList}>
+                  <DesktopItemDetail
+                    item={selectedDesktopItem}
+                    photos={selectedDesktopItemPhotos}
+                    readiness={selectedDesktopItemReadiness}
+                    onPhotoClick={(photo) => setSelectedPhoto(photo)}
+                    onUpdateStatus={async (status) => {
+                      await handleUpdateListingStatus(selectedDesktopItem, status)
+                    }}
+                    onCopyText={handleCopyText}
+                  />
+                </div>
               )}
             </div>
           </div>
-        </div>
+        )}
+
+        {desktopMode === 'tools' && (
+          <div style={s.desktopToolsGrid}>
+            <div style={s.desktopPanel}>
+              <div style={s.desktopPanelHead}>
+                <div>
+                  <div style={s.desktopPanelTitle}>Upload and cleanup</div>
+                  <div style={s.desktopPanelMeta}>Auth, retry, cleanup, and retention state.</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: 12, minHeight: 0 }}>
+                <div style={s.authLine}>
+                  <span>Supabase auth</span>
+                  <span>
+                    {authLoading
+                      ? 'loading session'
+                      : session
+                        ? `signed in as ${session.user.email || session.user.id}`
+                        : 'signed out'}
+                  </span>
+                </div>
+                {authError && <div style={{ fontSize: 12, color: '#f87171' }}>{authError}</div>}
+                {authMessage && <div style={{ fontSize: 12, color: '#93c5fd' }}>{authMessage}</div>}
+                {!supabaseReady ? (
+                  <div style={{ fontSize: 12, color: '#f59e0b' }}>
+                    Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable auth and upload.
+                  </div>
+                ) : session ? (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleSyncBatch} disabled={uploading}>
+                      {uploading ? 'Syncing…' : 'Upload Batch'}
+                    </button>
+                    <button style={{ ...s.button, ...s.buttonSmall }} onClick={handleSignOut}>Sign out</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <input
+                      style={s.select}
+                      placeholder="Email for magic link"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      type="email"
+                    />
+                    <button
+                      style={{ ...s.button, ...s.buttonPrimary }}
+                      onClick={handleSendMagicLink}
+                      disabled={!authEmail.trim()}
+                    >
+                      Send link
+                    </button>
+                  </div>
+                )}
+
+                {uploadProgress && <div style={s.progressBox}>{uploadProgress.message}</div>}
+                {remoteCleanupProgress && <div style={s.progressBox}>{remoteCleanupProgress.message}</div>}
+
+                <div style={s.progressBox}>
+                  <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                    Upload / cleanup
+                  </div>
+                  <div>Total photos: {batchUploadSummary.totalPhotos}</div>
+                  <div>Verified: {batchUploadSummary.verifiedPhotos}</div>
+                  <div>Pending: {batchUploadSummary.pendingPhotos}</div>
+                  <div>Failed: {batchUploadSummary.failedPhotos}</div>
+                  <div>Safe to clear: {cleanupReport.safeToClear ? 'yes' : 'no'}</div>
+                  <div>Remote cleanup eligible: {remoteCleanupReport?.eligiblePhotos || 0}</div>
+                  <div>Remote cleanup blocked: {remoteCleanupReport?.blockedPhotos || 0}</div>
+                  <div>Retention: {getRetentionModeLabel(selectedBatch?.remoteRetentionMode || 'delete_7d_after_listed')}</div>
+                  {remoteCleanupReport?.nextEligibleAt && (
+                    <div>Next eligible: {new Date(remoteCleanupReport.nextEligibleAt).toLocaleString()}</div>
+                  )}
+                  {cleanupReport.issues.length > 0 && (
+                    <div style={{ marginTop: 4, color: '#fca5a5' }}>
+                      {cleanupReport.issues.map((issue) => (
+                        <div key={issue.reason}>{issue.count} {issue.reason}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    style={{ ...s.button, ...s.buttonSmall }}
+                    onClick={handleSyncBatch}
+                    disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
+                  >
+                    Retry upload
+                  </button>
+                  <button
+                    style={{ ...s.button, ...s.buttonSmall }}
+                    onClick={handleRemoteCleanup}
+                    disabled={!supabase || !session || remoteCleaning || !selectedBatch || (remoteCleanupReport?.eligiblePhotos || 0) === 0}
+                  >
+                    {remoteCleaning ? 'Cleaning…' : 'Delete remote assets'}
+                  </button>
+                  <button
+                    style={{ ...s.button, ...s.buttonSmall }}
+                    onClick={handleClearVerifiedLocalCopies}
+                    disabled={!cleanupReport.safeToClear}
+                  >
+                    Clear local copies
+                  </button>
+                </div>
+
+                {cleanupMessage && <div style={s.progressBox}>{cleanupMessage}</div>}
+
+                <div style={{ display: 'grid', gap: 8, flex: 1, minHeight: 0 }}>
+                  <details open>
+                    <summary style={{ cursor: 'pointer', color: '#a8a8a8', fontSize: 13, fontWeight: 700 }}>
+                      Diagnostics
+                    </summary>
+                    <div style={{ marginTop: 12 }}>
+                      <DiagnosticsPanel
+                        cameraState={cameraState}
+                        capabilities={capabilities}
+                        captureErrors={captureErrors}
+                        storageErrors={storageErrors}
+                        secureContext={secureContextInfo}
+                        lastCaptureDiagnostics={lastCaptureDiagnostics}
+                      />
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+
+            <div style={s.desktopPanel}>
+              <div style={s.desktopPanelHead}>
+                <div>
+                  <div style={s.desktopPanelTitle}>Current item</div>
+                  <div style={s.desktopPanelMeta}>{currentItem ? `Item ${currentItem.itemNumber}` : 'No current item'}</div>
+                </div>
+              </div>
+              <div style={{ minHeight: 0, display: 'grid', gap: 10 }}>
+                {currentItem ? (
+                  <>
+                    <PhotoList photos={currentItemPhotos} onPhotoClick={(photo) => setSelectedPhoto(photo)} />
+                    <div style={s.queueMeta}>
+                      SKU: {itemSku || 'missing'}
+                      <br />
+                      Note: {itemNote || 'missing'}
+                      <br />
+                      Weight: {itemWeight || 'missing'}
+                      <br />
+                      {statusMsg}
+                    </div>
+                  </>
+                ) : (
+                  <div style={s.empty}>Capture or select an item to see current item details.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <PhotoDetailModal photo={selectedPhoto} onClose={() => setSelectedPhoto(null)} />
