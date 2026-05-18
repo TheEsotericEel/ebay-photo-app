@@ -1,7 +1,7 @@
 # Workspace Notes
 
 This workspace moves the app from camera spike into the first real handoff workflow.
-The current implementation is split into a mobile capture surface and a desktop queue surface.
+The current implementation is split into a mobile home screen that opens the camera on demand and a desktop queue surface.
 
 ## Added in this repo
 
