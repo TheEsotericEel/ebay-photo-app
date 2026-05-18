@@ -143,6 +143,8 @@ Needs:
 
 The Mac/desktop user manually creating eBay listings.
 
+For MVP, the photographer and lister are the same person using the same shared account.
+
 Needs:
 
 - store-separated queue
@@ -427,6 +429,12 @@ These should not be guaranteed until tested on the target iPhone/Safari/PWA conf
 - manual white balance
 - pro camera UI
 - advanced focus slider
+
+The following are also out of MVP scope for now:
+
+- multi-user auth
+- team permissions
+- separate phone and desktop accounts
 
 ### 10.4 Square Capture Rule
 
@@ -1624,3 +1632,33 @@ Fallback:
 ```
 
 The project is ready to start building if the first milestone is the camera feasibility spike, followed immediately by an ugly end-to-end vertical slice.
+
+---
+
+## 25. Current MVP Gap
+
+The app is close enough to the spec’s MVP slice that the remaining work should stay narrow.
+
+### What Is In Place
+
+- camera capture
+- item packet grouping
+- store/batch context
+- Supabase auth
+- batch sync to remote tables
+- retry/resume for uploads
+- local cleanup after verified upload
+- desktop store/batch/item queue
+- item detail view
+- single shared account on phone and desktop
+
+### What Still Needs Work
+
+- photo retention dates and visibility on the desktop queue
+- remote cleanup/retention actions after listing is complete
+- stronger item availability state for listed vs retained photos
+- one more real-world batch test on phone + desktop before calling it done
+
+### Next Spec-Aligned Step
+
+Add photo-retention state to the desktop queue and item detail view, then wire the remote cleanup policy around listed/completed batches.
