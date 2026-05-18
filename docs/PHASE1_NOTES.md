@@ -14,6 +14,8 @@ The workspace also remembers the last desktop tab and the selected store and bat
 - batch sync into Supabase tables and private storage
 - single shared account across capture and lister devices
 - retention dates and remote cleanup for listed items
+- a compact workspace status strip for camera, auth, sync, cleanup, and workspace selection
+- lifecycle chips on queue items and item detail so capture, upload, and cleanup state are visible without extra scrolling
 - item listing status controls
 - default store and batch seed data
 

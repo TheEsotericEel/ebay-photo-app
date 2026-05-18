@@ -439,7 +439,7 @@ const s: Record<string, React.CSSProperties> = {
     flex: 1,
     minHeight: 0,
     display: 'grid',
-    gridTemplateRows: 'auto auto 1fr',
+    gridTemplateRows: 'auto auto auto 1fr',
     gap: 12,
     overflow: 'hidden',
   },
@@ -490,7 +490,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   desktopContext: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr)',
+    gridTemplateColumns: 'minmax(0, 1fr)',
     gap: 12,
     minHeight: 0,
     overflow: 'hidden',
@@ -517,6 +517,55 @@ const s: Record<string, React.CSSProperties> = {
     display: 'grid',
     gap: 10,
     minHeight: 0,
+  },
+  desktopStatusStrip: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: 10,
+    minHeight: 0,
+  },
+  statusChip: {
+    background: '#121212',
+    border: '1px solid #242424',
+    borderRadius: 14,
+    padding: 12,
+    minHeight: 0,
+    display: 'grid',
+    gap: 4,
+  },
+  statusChipLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    color: '#9ca3af',
+    fontWeight: 800,
+  },
+  statusChipValue: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: '#f2f2f2',
+    lineHeight: 1.2,
+  },
+  statusChipMeta: {
+    fontSize: 12,
+    color: '#94a3b8',
+    lineHeight: 1.35,
+  },
+  statusToneGood: {
+    borderColor: '#1f4d2f',
+    background: '#0f1712',
+  },
+  statusToneWarn: {
+    borderColor: '#5a4314',
+    background: '#17130c',
+  },
+  statusToneBad: {
+    borderColor: '#5a1e1e',
+    background: '#180f0f',
+  },
+  statusToneNeutral: {
+    borderColor: '#242424',
+    background: '#121212',
   },
   desktopPanel: {
     background: '#121212',
@@ -573,6 +622,371 @@ const s: Record<string, React.CSSProperties> = {
     flex: 1,
     gridTemplateColumns: 'minmax(0, 360px) minmax(0, 1fr)',
   },
+}
+
+type StatusTone = 'good' | 'warn' | 'bad' | 'neutral'
+
+interface StatusChipModel {
+  label: string
+  value: string
+  meta: string
+  tone: StatusTone
+}
+
+function getUploadLifecycleLabel(item: ItemPacket): StatusChipModel {
+  if (item.remoteStatus === 'deleted') {
+    return {
+      label: 'Upload',
+      value: 'Deleted',
+      meta: 'Remote object already removed',
+      tone: 'neutral',
+    }
+  }
+
+  if (item.uploadStatus === 'failed' || item.remoteStatus === 'failed') {
+    return {
+      label: 'Upload',
+      value: 'Failed',
+      meta: 'Retry sync to repair the batch',
+      tone: 'bad',
+    }
+  }
+
+  if (item.uploadStatus === 'verified' && item.remoteStatus === 'verified') {
+    return {
+      label: 'Upload',
+      value: 'Verified',
+      meta: 'Local and remote copies match',
+      tone: 'good',
+    }
+  }
+
+  if (item.uploadStatus === 'uploading' || item.remoteStatus === 'uploading') {
+    return {
+      label: 'Upload',
+      value: 'Uploading',
+      meta: 'Photos are moving to Supabase',
+      tone: 'warn',
+    }
+  }
+
+  if (item.uploadStatus === 'queued' || item.remoteStatus === 'queued') {
+    return {
+      label: 'Upload',
+      value: 'Queued',
+      meta: 'Waiting for the next sync pass',
+      tone: 'warn',
+    }
+  }
+
+  return {
+    label: 'Upload',
+    value: 'Local',
+    meta: 'Captured locally, not synced yet',
+    tone: 'neutral',
+  }
+}
+
+function getCleanupLifecycleLabel(item: ItemPacket): StatusChipModel {
+  if (item.remoteStatus === 'deleted') {
+    return {
+      label: 'Cleanup',
+      value: 'Deleted',
+      meta: 'Remote assets are gone',
+      tone: 'neutral',
+    }
+  }
+
+  if (item.listingStatus !== 'listed') {
+    return {
+      label: 'Cleanup',
+      value: 'Not listed',
+      meta: 'Remote cleanup waits for listing',
+      tone: 'neutral',
+    }
+  }
+
+  if (item.remoteExpiresAt) {
+    const expiresAt = new Date(item.remoteExpiresAt)
+    const expired = expiresAt.getTime() <= Date.now()
+    return {
+      label: 'Cleanup',
+      value: expired ? 'Eligible now' : 'Waiting',
+      meta: expired
+        ? `Delete allowed since ${expiresAt.toLocaleDateString()}`
+        : `Delete after ${expiresAt.toLocaleDateString()}`,
+      tone: expired ? 'good' : 'warn',
+    }
+  }
+
+  return {
+    label: 'Cleanup',
+    value: 'Pending',
+    meta: 'Retention date not assigned yet',
+    tone: 'warn',
+  }
+}
+
+function getHandoffLifecycleLabel(readiness: ReturnType<typeof getItemReadiness>): StatusChipModel {
+  return readiness.readyForHandoff
+    ? {
+        label: 'Capture',
+        value: 'Ready',
+        meta: `${readiness.photoCount} ordered • ${readiness.missingPhotoCount} missing`,
+        tone: 'good',
+      }
+    : {
+        label: 'Capture',
+        value: 'Needs info',
+        meta: `${readiness.photoCount} ordered • ${readiness.missingPhotoCount} missing`,
+        tone: 'warn',
+      }
+}
+
+function getUploadBatchLabel(summary: ReturnType<typeof getBatchUploadStateSummary>): StatusChipModel {
+  if (summary.failedPhotos > 0) {
+    return {
+      label: 'Batch sync',
+      value: 'Needs retry',
+      meta: `${summary.verifiedPhotos}/${summary.totalPhotos} verified`,
+      tone: 'bad',
+    }
+  }
+
+  if (summary.pendingPhotos > 0) {
+    return {
+      label: 'Batch sync',
+      value: 'Pending',
+      meta: `${summary.verifiedPhotos}/${summary.totalPhotos} verified`,
+      tone: 'warn',
+    }
+  }
+
+  if (summary.totalPhotos === 0) {
+    return {
+      label: 'Batch sync',
+      value: 'Empty',
+      meta: 'Capture an item to start',
+      tone: 'neutral',
+    }
+  }
+
+  return {
+    label: 'Batch sync',
+    value: 'Verified',
+    meta: `${summary.verifiedPhotos}/${summary.totalPhotos} verified`,
+    tone: 'good',
+  }
+}
+
+function WorkspaceStatusStrip({
+  cameraState,
+  cameraPermissionRemembered,
+  authLoading,
+  authError,
+  supabaseReady,
+  session,
+  uploading,
+  uploadProgress,
+  batchUploadSummary,
+  cleanupReport,
+  remoteCleanupReport,
+  remoteCleaning,
+  selectedStore,
+  selectedBatch,
+}: {
+  cameraState: CameraState
+  cameraPermissionRemembered: boolean
+  authLoading: boolean
+  authError: string | null
+  supabaseReady: boolean
+  session: { user: { email?: string | null; id: string } } | null
+  uploading: boolean
+  uploadProgress: BatchUploadProgress | null
+  batchUploadSummary: ReturnType<typeof getBatchUploadStateSummary>
+  cleanupReport: ReturnType<typeof getCleanupReport>
+  remoteCleanupReport: ReturnType<typeof getRemoteCleanupReport> | null
+  remoteCleaning: boolean
+  selectedStore: StoreRecord | null
+  selectedBatch: BatchRecord | null
+}) {
+  const cameraChip: StatusChipModel = cameraState === 'active'
+    ? {
+        label: 'Camera',
+        value: 'Ready',
+        meta: cameraPermissionRemembered ? 'Permission remembered' : 'Permission granted',
+        tone: 'good',
+      }
+    : cameraState === 'starting'
+      ? {
+          label: 'Camera',
+          value: 'Starting',
+          meta: 'Waiting for the live feed',
+          tone: 'warn',
+        }
+      : cameraState === 'error'
+        ? {
+            label: 'Camera',
+            value: 'Error',
+            meta: 'Open diagnostics if capture fails',
+            tone: 'bad',
+          }
+        : {
+            label: 'Camera',
+            value: cameraPermissionRemembered ? 'Saved' : 'Idle',
+            meta: cameraPermissionRemembered ? 'Ready to resume' : 'Tap capture to request access',
+            tone: 'neutral',
+          }
+
+  const authChip: StatusChipModel = authLoading
+    ? {
+        label: 'Auth',
+        value: 'Loading',
+        meta: 'Checking session',
+        tone: 'neutral',
+      }
+    : !supabaseReady
+      ? {
+          label: 'Auth',
+          value: 'Setup needed',
+          meta: 'Missing Supabase env vars',
+          tone: 'warn',
+        }
+      : session
+        ? {
+            label: 'Auth',
+            value: 'Signed in',
+            meta: session.user.email || session.user.id,
+            tone: 'good',
+          }
+        : {
+            label: 'Auth',
+            value: 'Signed out',
+            meta: authError || 'Magic link sign-in ready',
+            tone: authError ? 'bad' : 'neutral',
+          }
+
+  const uploadChip = uploading
+    ? ({
+        label: 'Batch sync',
+        value: uploadProgress?.message || 'Syncing',
+        meta: selectedBatch ? `${selectedStore?.name || 'Store'} / ${selectedBatch.name}` : 'Preparing upload',
+        tone: 'warn',
+      } satisfies StatusChipModel)
+    : getUploadBatchLabel(batchUploadSummary)
+
+  const cleanupChip: StatusChipModel = remoteCleaning
+    ? {
+        label: 'Cleanup',
+        value: 'Deleting',
+        meta: 'Remote assets are being removed',
+        tone: 'warn',
+      }
+    : cleanupReport.safeToClear && (remoteCleanupReport?.eligiblePhotos || 0) > 0
+      ? {
+          label: 'Cleanup',
+          value: 'Ready',
+          meta: `${remoteCleanupReport?.eligiblePhotos || 0} remote photos eligible`,
+          tone: 'good',
+        }
+      : cleanupReport.safeToClear
+        ? {
+            label: 'Cleanup',
+            value: 'Local clear ready',
+            meta: 'Verified photos can be removed locally',
+            tone: 'good',
+          }
+        : cleanupReport.issues.length > 0
+          ? {
+              label: 'Cleanup',
+              value: 'Blocked',
+              meta: `${cleanupReport.issues.map((issue) => `${issue.count} ${issue.reason}`).join(' • ')}`,
+              tone: 'bad',
+            }
+          : {
+              label: 'Cleanup',
+              value: 'Waiting',
+              meta: remoteCleanupReport?.nextEligibleAt
+                ? `Next eligible ${new Date(remoteCleanupReport.nextEligibleAt).toLocaleDateString()}`
+                : getRetentionModeLabel(selectedBatch?.remoteRetentionMode || 'delete_7d_after_listed'),
+              tone: 'neutral',
+            }
+
+  const batchChip: StatusChipModel = selectedStore && selectedBatch
+    ? {
+        label: 'Workspace',
+        value: `${selectedStore.shortCode} / ${selectedBatch.name}`,
+        meta: `${batchUploadSummary.totalItems} items • ${batchUploadSummary.totalPhotos} photos`,
+        tone: 'neutral',
+      }
+    : {
+        label: 'Workspace',
+        value: 'Unselected',
+        meta: 'Choose a store and batch',
+        tone: 'neutral',
+      }
+
+  return (
+    <div style={s.desktopStatusStrip}>
+      {[cameraChip, authChip, uploadChip, cleanupChip, batchChip].map((chip) => (
+        <div
+          key={`${chip.label}-${chip.value}`}
+          style={{
+            ...s.statusChip,
+            ...(chip.tone === 'good'
+              ? s.statusToneGood
+              : chip.tone === 'warn'
+                ? s.statusToneWarn
+                : chip.tone === 'bad'
+                  ? s.statusToneBad
+                  : s.statusToneNeutral),
+          }}
+        >
+          <div style={s.statusChipLabel}>{chip.label}</div>
+          <div style={s.statusChipValue}>{chip.value}</div>
+          <div style={s.statusChipMeta}>{chip.meta}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ItemLifecycleStrip({
+  item,
+  readiness,
+  compact = false,
+}: {
+  item: ItemPacket
+  readiness: ReturnType<typeof getItemReadiness>
+  compact?: boolean
+}) {
+  const uploadChip = getUploadLifecycleLabel(item)
+  const cleanupChip = getCleanupLifecycleLabel(item)
+  const captureChip = getHandoffLifecycleLabel(readiness)
+
+  return (
+    <div style={{ ...s.desktopStatusStrip, gridTemplateColumns: compact ? 'repeat(auto-fit, minmax(140px, 1fr))' : s.desktopStatusStrip.gridTemplateColumns }}>
+      {[captureChip, uploadChip, cleanupChip].map((chip) => (
+        <div
+          key={`${chip.label}-${chip.value}`}
+          style={{
+            ...s.statusChip,
+            ...(chip.tone === 'good'
+              ? s.statusToneGood
+              : chip.tone === 'warn'
+                ? s.statusToneWarn
+                : chip.tone === 'bad'
+                  ? s.statusToneBad
+                  : s.statusToneNeutral),
+          }}
+        >
+          <div style={s.statusChipLabel}>{chip.label}</div>
+          <div style={s.statusChipValue}>{chip.value}</div>
+          <div style={s.statusChipMeta}>{chip.meta}</div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function WorkspaceScreen() {
@@ -1224,6 +1638,11 @@ export function WorkspaceScreen() {
     return allPhotos.filter((photo) => currentItem.photoIds.includes(photo.id))
   }, [allPhotos, currentItem])
 
+  const currentItemReadiness = useMemo(() => {
+    if (!currentItem) return null
+    return getItemReadiness(currentItem, allPhotos)
+  }, [allPhotos, currentItem])
+
   function MobileWorkspace() {
     if (mobileMode === 'camera') {
       return (
@@ -1382,6 +1801,23 @@ export function WorkspaceScreen() {
           </div>
         </div>
 
+        <WorkspaceStatusStrip
+          cameraState={cameraState}
+          cameraPermissionRemembered={cameraPermissionRemembered}
+          authLoading={authLoading}
+          authError={authError}
+          supabaseReady={supabaseReady}
+          session={session}
+          uploading={uploading}
+          uploadProgress={uploadProgress}
+          batchUploadSummary={batchUploadSummary}
+          cleanupReport={cleanupReport}
+          remoteCleanupReport={remoteCleanupReport}
+          remoteCleaning={remoteCleaning}
+          selectedStore={selectedStore}
+          selectedBatch={selectedBatch}
+        />
+
         <div style={s.desktopContext}>
           <div style={s.desktopContextCard}>
             <div style={s.desktopContextTitle}>Context</div>
@@ -1402,16 +1838,6 @@ export function WorkspaceScreen() {
                   ))}
                 </select>
               </div>
-            </div>
-          </div>
-
-          <div style={s.desktopContextCard}>
-            <div style={s.desktopContextTitle}>Batch status</div>
-            <div style={s.statGrid}>
-              <div style={s.stat}><div style={s.statValue}>{queueStats.itemCount}</div><div style={s.statLabel}>Items</div></div>
-              <div style={s.stat}><div style={s.statValue}>{queueStats.photoCount}</div><div style={s.statLabel}>Photos</div></div>
-              <div style={s.stat}><div style={s.statValue}>{queueStats.readyCount}</div><div style={s.statLabel}>Ready</div></div>
-              <div style={s.stat}><div style={s.statValue}>{queueStats.listed}</div><div style={s.statLabel}>Listed</div></div>
             </div>
           </div>
         </div>
@@ -1524,8 +1950,8 @@ export function WorkspaceScreen() {
               <div style={s.desktopPanel}>
                 <div style={s.desktopPanelHead}>
                   <div>
-                    <div style={s.desktopPanelTitle}>Upload</div>
-                    <div style={s.desktopPanelMeta}>Remote sync, cleanup, and retention state.</div>
+                    <div style={s.desktopPanelTitle}>Control center</div>
+                    <div style={s.desktopPanelMeta}>Auth, sync, cleanup, and diagnostics live here.</div>
                   </div>
                 </div>
                 <div style={{ display: 'grid', gap: 10, minHeight: 0 }}>
@@ -1573,35 +1999,33 @@ export function WorkspaceScreen() {
                     </div>
                   )}
 
-                  {uploadProgress && (
-                    <div style={s.progressBox}>
-                      <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
-                        Sync status
-                      </div>
-                      <div>{uploadProgress.message}</div>
-                    </div>
-                  )}
-                  {remoteCleanupProgress && (
-                    <div style={s.progressBox}>
-                      <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
-                        Remote cleanup
-                      </div>
-                      <div>{remoteCleanupProgress.message}</div>
-                    </div>
-                  )}
-                  <div style={s.progressBox}>
-                    <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
-                      Upload / cleanup
-                    </div>
-                    <div>Total photos: {batchUploadSummary.totalPhotos}</div>
-                    <div>Verified: {batchUploadSummary.verifiedPhotos}</div>
-                    <div>Pending: {batchUploadSummary.pendingPhotos}</div>
-                    <div>Failed: {batchUploadSummary.failedPhotos}</div>
-                    <div>Safe to clear: {cleanupReport.safeToClear ? 'yes' : 'no'}</div>
-                    <div>Remote cleanup eligible: {remoteCleanupReport?.eligiblePhotos || 0}</div>
-                    <div>Remote cleanup blocked: {remoteCleanupReport?.blockedPhotos || 0}</div>
-                    <div>Retention: {getRetentionModeLabel(selectedBatch?.remoteRetentionMode || 'delete_7d_after_listed')}</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      style={{ ...s.button, ...s.buttonSmall }}
+                      onClick={handleSyncBatch}
+                      disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
+                    >
+                      {uploading ? 'Syncing…' : 'Retry upload'}
+                    </button>
+                    <button
+                      style={{ ...s.button, ...s.buttonSmall }}
+                      onClick={handleRemoteCleanup}
+                      disabled={!supabase || !session || remoteCleaning || !selectedBatch || (remoteCleanupReport?.eligiblePhotos || 0) === 0}
+                    >
+                      {remoteCleaning ? 'Cleaning…' : 'Delete remote assets'}
+                    </button>
+                    <button
+                      style={{ ...s.button, ...s.buttonSmall }}
+                      onClick={handleClearVerifiedLocalCopies}
+                      disabled={!cleanupReport.safeToClear}
+                    >
+                      Clear local copies
+                    </button>
                   </div>
+
+                  {uploadProgress && <div style={s.progressBox}>{uploadProgress.message}</div>}
+                  {remoteCleanupProgress && <div style={s.progressBox}>{remoteCleanupProgress.message}</div>}
+                  {cleanupMessage && <div style={s.progressBox}>{cleanupMessage}</div>}
                 </div>
               </div>
             </div>
@@ -1762,8 +2186,8 @@ export function WorkspaceScreen() {
             <div style={s.desktopPanel}>
               <div style={s.desktopPanelHead}>
                 <div>
-                  <div style={s.desktopPanelTitle}>Upload and cleanup</div>
-                  <div style={s.desktopPanelMeta}>Auth, retry, cleanup, and retention state.</div>
+                  <div style={s.desktopPanelTitle}>Control center</div>
+                  <div style={s.desktopPanelMeta}>Auth, sync, cleanup, and diagnostics live here.</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gap: 12, minHeight: 0 }}>
@@ -1809,33 +2233,6 @@ export function WorkspaceScreen() {
                   </div>
                 )}
 
-                {uploadProgress && <div style={s.progressBox}>{uploadProgress.message}</div>}
-                {remoteCleanupProgress && <div style={s.progressBox}>{remoteCleanupProgress.message}</div>}
-
-                <div style={s.progressBox}>
-                  <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
-                    Upload / cleanup
-                  </div>
-                  <div>Total photos: {batchUploadSummary.totalPhotos}</div>
-                  <div>Verified: {batchUploadSummary.verifiedPhotos}</div>
-                  <div>Pending: {batchUploadSummary.pendingPhotos}</div>
-                  <div>Failed: {batchUploadSummary.failedPhotos}</div>
-                  <div>Safe to clear: {cleanupReport.safeToClear ? 'yes' : 'no'}</div>
-                  <div>Remote cleanup eligible: {remoteCleanupReport?.eligiblePhotos || 0}</div>
-                  <div>Remote cleanup blocked: {remoteCleanupReport?.blockedPhotos || 0}</div>
-                  <div>Retention: {getRetentionModeLabel(selectedBatch?.remoteRetentionMode || 'delete_7d_after_listed')}</div>
-                  {remoteCleanupReport?.nextEligibleAt && (
-                    <div>Next eligible: {new Date(remoteCleanupReport.nextEligibleAt).toLocaleString()}</div>
-                  )}
-                  {cleanupReport.issues.length > 0 && (
-                    <div style={{ marginTop: 4, color: '#fca5a5' }}>
-                      {cleanupReport.issues.map((issue) => (
-                        <div key={issue.reason}>{issue.count} {issue.reason}</div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     style={{ ...s.button, ...s.buttonSmall }}
@@ -1860,6 +2257,8 @@ export function WorkspaceScreen() {
                   </button>
                 </div>
 
+                {uploadProgress && <div style={s.progressBox}>{uploadProgress.message}</div>}
+                {remoteCleanupProgress && <div style={s.progressBox}>{remoteCleanupProgress.message}</div>}
                 {cleanupMessage && <div style={s.progressBox}>{cleanupMessage}</div>}
 
                 <div style={{ display: 'grid', gap: 8, flex: 1, minHeight: 0 }}>
@@ -1882,16 +2281,19 @@ export function WorkspaceScreen() {
               </div>
             </div>
 
-            <div style={s.desktopPanel}>
-              <div style={s.desktopPanelHead}>
-                <div>
-                  <div style={s.desktopPanelTitle}>Current item</div>
-                  <div style={s.desktopPanelMeta}>{currentItem ? `Item ${currentItem.itemNumber}` : 'No current item'}</div>
+              <div style={s.desktopPanel}>
+                <div style={s.desktopPanelHead}>
+                  <div>
+                    <div style={s.desktopPanelTitle}>Current item</div>
+                    <div style={s.desktopPanelMeta}>{currentItem ? `Item ${currentItem.itemNumber}` : 'No current item'}</div>
+                  </div>
                 </div>
-              </div>
               <div style={{ minHeight: 0, display: 'grid', gap: 10 }}>
                 {currentItem ? (
                   <>
+                    {currentItemReadiness && (
+                      <ItemLifecycleStrip item={currentItem} readiness={currentItemReadiness} compact />
+                    )}
                     <PhotoList photos={currentItemPhotos} onPhotoClick={(photo) => setSelectedPhoto(photo)} />
                     <div style={s.queueMeta}>
                       SKU: {itemSku || 'missing'}
@@ -1960,14 +2362,11 @@ function QueueCard({
             {item.listingStatus || 'new'}
           </span>
         </div>
+        <div style={{ marginBottom: 8 }}>
+          <ItemLifecycleStrip item={item} readiness={readiness} compact />
+        </div>
         <div style={s.queueMeta}>
-          {item.photoIds.length} photo{item.photoIds.length === 1 ? '' : 's'} • {readiness.readyForHandoff ? 'ready' : 'needs info'}
-          <br />
-          Upload: {item.uploadStatus || 'local'} • {item.remoteStatus || 'local'}
-          <br />
-          {item.listingStatus === 'listed'
-            ? `Retention: ${item.remoteExpiresAt ? new Date(item.remoteExpiresAt).toLocaleDateString() : 'pending'}`
-            : 'Retention: not listed'}
+          {item.photoIds.length} photo{item.photoIds.length === 1 ? '' : 's'} in order
           <br />
           {readiness.photoCount} in order • {readiness.missingPhotoCount} missing
           <br />
@@ -2015,19 +2414,19 @@ function DesktopItemDetail({
   const mainPhoto = photos[0] || null
 
   return (
-    <div style={{ ...s.queueItem, flexDirection: 'column', alignItems: 'stretch' }}>
-      <div style={s.queueTitle}>
-        <div>
-          <div style={s.queueNumber}>Item {item.itemNumber}</div>
-          <div style={s.queueMeta}>
-            {availability}
-            <br />
-            {readiness?.readyForHandoff ? 'Ready for handoff' : 'Needs info before listing'}
+      <div style={{ ...s.queueItem, flexDirection: 'column', alignItems: 'stretch' }}>
+        <div style={s.queueTitle}>
+          <div>
+            <div style={s.queueNumber}>Item {item.itemNumber}</div>
+            <div style={s.queueMeta}>
+              {availability}
+              <br />
+              {readiness?.readyForHandoff ? 'Ready for handoff' : 'Needs info before listing'}
+            </div>
           </div>
-        </div>
-        <span
-          style={{
-            ...s.queueBadge,
+          <span
+            style={{
+              ...s.queueBadge,
             ...(item.listingStatus === 'listed'
               ? s.badgeListed
               : item.listingStatus === 'hold'
@@ -2041,9 +2440,15 @@ function DesktopItemDetail({
         </span>
       </div>
 
-      {mainPhoto && (
+        {mainPhoto && (
+          <div style={{ marginBottom: 8 }}>
+            <QueueThumb photo={mainPhoto} onClick={onPhotoClick} />
+          </div>
+        )}
+
+      {readiness && (
         <div style={{ marginBottom: 8 }}>
-          <QueueThumb photo={mainPhoto} onClick={onPhotoClick} />
+          <ItemLifecycleStrip item={item} readiness={readiness} compact />
         </div>
       )}
 
@@ -2055,15 +2460,15 @@ function DesktopItemDetail({
           <br />
           Weight: {item.weight || 'missing'}
           <br />
-          Upload: {item.uploadStatus || 'local'} • Remote: {item.remoteStatus || 'local'}
-          <br />
-          {item.listingStatus === 'listed'
-            ? `Remote cleanup: ${item.remoteExpiresAt ? new Date(item.remoteExpiresAt).toLocaleString() : 'manual'}`
-            : 'Remote cleanup: not listed'}
-          <br />
           {item.listingStatus === 'listed'
             ? `Listed: ${item.listedAt ? new Date(item.listedAt).toLocaleString() : 'pending'}`
             : 'Listed: not marked'}
+          <br />
+          {item.remoteExpiresAt
+            ? `Remote cleanup: ${new Date(item.remoteExpiresAt).toLocaleString()}`
+            : item.listingStatus === 'listed'
+              ? 'Remote cleanup: pending retention window'
+              : 'Remote cleanup: not listed'}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onCopyText(item.sku || '', 'SKU')} disabled={!item.sku}>
