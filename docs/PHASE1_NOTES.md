@@ -1,7 +1,7 @@
 # Capture and Management Notes
 
 This app moves from camera spike into the first real handoff workflow.
-The current implementation is split into a mobile capture screen that opens the camera on demand and a desktop management shell that opens on Queue with fixed Queue, Tools, and optional Capture panels.
+The current implementation is split into a mobile capture screen that opens the camera on demand and a desktop management shell that opens on Queue and can scroll naturally where needed.
 Once the user accepts camera access, the app remembers it in the browser and can resume the camera without forcing another prompt.
 The app also remembers the last desktop tab and the selected store and batch.
 
