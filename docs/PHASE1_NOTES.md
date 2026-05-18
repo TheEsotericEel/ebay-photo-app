@@ -1,9 +1,9 @@
-# Workspace Notes
+# Capture and Management Notes
 
-This workspace moves the app from camera spike into the first real handoff workflow.
-The current implementation is split into a mobile home screen that opens the camera on demand and a desktop tabbed shell with fixed Capture, Queue, and Tools panels.
-Once the user accepts camera access, the workspace remembers it in the browser and can resume the camera without forcing another prompt.
-The workspace also remembers the last desktop tab and the selected store and batch.
+This app moves from camera spike into the first real handoff workflow.
+The current implementation is split into a mobile capture screen that opens the camera on demand and a desktop management shell with fixed Capture, Queue, and Tools panels.
+Once the user accepts camera access, the app remembers it in the browser and can resume the camera without forcing another prompt.
+The app also remembers the last desktop tab and the selected store and batch.
 
 ## Added in this repo
 

@@ -1869,9 +1869,9 @@ export function WorkspaceScreen() {
         <div style={s.mobileHome}>
           <div style={s.mobileHero}>
             <div>
-              <div style={s.mobileHeroTitle}>Photo Workspace</div>
+              <div style={s.mobileHeroTitle}>Capture</div>
               <div style={s.mobileHeroCopy}>
-                Tap once to open the camera. The rest of the workflow stays out of the way until you need it.
+                Tap once to open the camera. Quick status stays visible, everything else stays out of the way.
               </div>
             </div>
           </div>
@@ -1924,9 +1924,9 @@ export function WorkspaceScreen() {
       <div style={s.desktopFrame}>
         <div style={s.desktopTopBar}>
           <div style={s.desktopTitleBlock}>
-            <div style={s.desktopTitle}>Photo Workspace</div>
+            <div style={s.desktopTitle}>Management</div>
             <div style={s.desktopSubtitle}>
-              {APP_NAME} connected to Supabase bucket `{SUPABASE_STORAGE_BUCKET}` with capture, queue, and cleanup workflows.
+              {APP_NAME} management for review, listing status, retention, and cleanup.
             </div>
           </div>
           <div style={s.desktopTabs}>
