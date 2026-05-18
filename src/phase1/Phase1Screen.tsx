@@ -17,6 +17,7 @@ import { CameraCapabilities, CaptureDiagnostics } from '../adapters/camera'
 import { supabase, supabaseConfig } from '../lib/supabase'
 import { APP_NAME, SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
 import { useSupabaseSession } from '../lib/useSupabaseSession'
+import { useIsMobile } from '../lib/useViewportMode'
 
 const imageProcessor = new CanvasImageProcessingAdapter()
 const photoStore = new IndexedDbPhotoStore()
@@ -293,10 +294,93 @@ const s: Record<string, React.CSSProperties> = {
     gap: 16,
     alignItems: 'start',
   },
+  mobileScreen: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    minHeight: '100%',
+    padding: '10px 10px 24px',
+    maxWidth: 560,
+    margin: '0 auto',
+  },
+  mobileCard: {
+    background: '#121212',
+    border: '1px solid #242424',
+    borderRadius: 18,
+    padding: 14,
+    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.22)',
+  },
+  mobileHero: {
+    display: 'grid',
+    gap: 10,
+  },
+  mobileHeroTitle: {
+    fontSize: 22,
+    fontWeight: 800,
+    color: '#f2f2f2',
+    letterSpacing: -0.2,
+  },
+  mobileHeroCopy: {
+    fontSize: 13,
+    color: '#9ca3af',
+    lineHeight: 1.5,
+  },
+  mobileBar: {
+    display: 'grid',
+    gap: 10,
+  },
+  mobileActionRow: {
+    display: 'flex',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  mobileCameraCard: {
+    background: '#111111',
+    border: '1px solid #262626',
+    borderRadius: 18,
+    overflow: 'hidden',
+    boxShadow: '0 16px 32px rgba(0, 0, 0, 0.28)',
+  },
+  mobileCameraBody: {
+    padding: 14,
+    display: 'grid',
+    gap: 10,
+  },
+  mobileStatusLine: {
+    fontSize: 12,
+    color: '#9ca3af',
+    lineHeight: 1.5,
+  },
+  mobileRatioRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+    gap: 6,
+  },
+  mobileSmallButton: {
+    padding: '10px 10px',
+    borderRadius: 10,
+    fontSize: 12,
+  },
+  mobilePrimaryButton: {
+    padding: '16px 12px',
+    fontSize: 17,
+  },
+  mobileSectionTitle: {
+    fontSize: 12,
+    color: '#a8a8a8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  mobileStack: {
+    display: 'grid',
+    gap: 10,
+  },
 }
 
 export function Phase1Screen() {
   const cameraRef = useRef<CameraPreviewHandle>(null)
+  const isMobile = useIsMobile()
   const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
@@ -855,6 +939,345 @@ export function Phase1Screen() {
     return allPhotos.filter((photo) => currentItem.photoIds.includes(photo.id))
   }, [allPhotos, currentItem])
 
+  function MobileWorkspace() {
+    return (
+      <div style={s.mobileScreen}>
+        <div style={s.mobileHero}>
+          <div>
+            <div style={s.mobileHeroTitle}>Phase 1 capture</div>
+            <div style={s.mobileHeroCopy}>
+              Camera-first mobile capture with upload and cleanup running in the background. Queue review stays off this screen.
+            </div>
+          </div>
+
+          <div style={s.mobileActionRow}>
+            <button style={{ ...s.button, ...s.buttonPrimary, ...s.mobileSmallButton }} onClick={handleCreateStore}>
+              New Store
+            </button>
+            <button
+              style={{ ...s.button, ...s.buttonSmall, ...s.mobileSmallButton }}
+              onClick={handleCreateBatch}
+              disabled={!selectedStoreId}
+            >
+              New Batch
+            </button>
+            <button
+              style={{ ...s.button, ...s.buttonPrimary, ...s.mobileSmallButton }}
+              onClick={handleSyncBatch}
+              disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
+            >
+              {uploading ? 'Syncing…' : 'Sync Batch'}
+            </button>
+          </div>
+        </div>
+
+        <div style={s.mobileCard}>
+          <div style={s.mobileSectionTitle}>Capture context</div>
+          <div style={s.mobileStack}>
+            <div>
+              <div style={s.label}>Store</div>
+              <select style={s.select} value={selectedStoreId} onChange={(e) => handleStoreChange(e.target.value)}>
+                {stores.map((store) => (
+                  <option key={store.id} value={store.id}>{store.name} ({store.shortCode})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div style={s.label}>Batch</div>
+              <select style={s.select} value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)}>
+                {selectedStoreBatches.map((batch) => (
+                  <option key={batch.id} value={batch.id}>{batch.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={s.statGrid}>
+              <div style={s.stat}><div style={s.statValue}>{queueStats.itemCount}</div><div style={s.statLabel}>Items in batch</div></div>
+              <div style={s.stat}><div style={s.statValue}>{queueStats.photoCount}</div><div style={s.statLabel}>Photos in batch</div></div>
+              <div style={s.stat}><div style={s.statValue}>{queueStats.readyCount}</div><div style={s.statLabel}>Ready for handoff</div></div>
+              <div style={s.stat}><div style={s.statValue}>{queueStats.listed}</div><div style={s.statLabel}>Listed</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div style={s.mobileCameraCard}>
+          <CameraPreview
+            ref={cameraRef}
+            onError={(msg) => {
+              setCameraState('error')
+              setCaptureErrors((prev) => [...prev, msg])
+            }}
+            onStarted={() => {
+              setCameraState('active')
+              const caps = cameraRef.current?.getCapabilities() ?? null
+              const dims = cameraRef.current?.getVideoDimensions() ?? null
+              if (caps && dims) {
+                setCapabilities({
+                  ...caps,
+                  trackSettings: caps.trackSettings
+                    ? {
+                        ...caps.trackSettings,
+                        width: caps.trackSettings.width ?? dims.videoWidth,
+                        height: caps.trackSettings.height ?? dims.videoHeight,
+                      }
+                    : {
+                        width: dims.videoWidth,
+                        height: dims.videoHeight,
+                        aspectRatio: undefined,
+                        facingMode: undefined,
+                        deviceId: undefined,
+                        zoom: undefined,
+                      },
+                })
+              } else {
+                setCapabilities(caps)
+              }
+              setStatusMsg('Camera active')
+            }}
+            onStopped={() => setCameraState('stopped')}
+            ratio={selectedRatio}
+          />
+
+          <div style={s.mobileCameraBody}>
+            {currentItem && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, color: '#a8a8a8' }}>
+                <span>Item {currentItem.itemNumber}</span>
+                <span>{currentItem.photoIds.length} photo{currentItem.photoIds.length === 1 ? '' : 's'}</span>
+              </div>
+            )}
+
+            <div style={s.mobileStatusLine}>{statusMsg}</div>
+
+            <div style={s.mobileRatioRow}>
+              {(['full', '1:1', '4:3', '16:9'] as OutputRatio[]).map((ratio) => (
+                <button
+                  key={ratio}
+                  style={{
+                    ...s.button,
+                    ...s.mobileSmallButton,
+                    ...(selectedRatio === ratio ? s.buttonPrimary : {}),
+                  }}
+                  onClick={() => handleRatioChange(ratio)}
+                >
+                  {ratio === 'full' ? 'Full' : ratio}
+                </button>
+              ))}
+            </div>
+
+            <button
+              style={{ ...s.button, ...s.buttonPrimary, ...s.mobilePrimaryButton }}
+              disabled={capturing || cameraState !== 'active' || !selectedStoreId || !selectedBatchId}
+              onClick={handleCapture}
+            >
+              {capturing ? 'Capturing…' : '⊙ Capture'}
+            </button>
+
+            <button
+              style={s.button}
+              disabled={!currentItem || currentItem.photoIds.length === 0}
+              onClick={handleDoneNext}
+            >
+              Done / Next Item
+            </button>
+
+            <div style={s.mobileStack}>
+              <input
+                style={s.select}
+                placeholder="SKU (optional)"
+                value={itemSku}
+                onChange={(e) => setItemSku(e.target.value)}
+              />
+              <input
+                style={s.select}
+                placeholder="Note (optional)"
+                value={itemNote}
+                onChange={(e) => setItemNote(e.target.value)}
+              />
+              <input
+                style={s.select}
+                placeholder="Weight (optional)"
+                value={itemWeight}
+                onChange={(e) => setItemWeight(e.target.value)}
+              />
+            </div>
+
+            <PhotoList photos={currentItemPhotos} onPhotoClick={(photo) => setSelectedPhoto(photo)} />
+          </div>
+        </div>
+
+        <div style={s.mobileCard}>
+          <div style={s.mobileSectionTitle}>Upload / cleanup</div>
+          <div style={s.authLine}>
+            <span>Supabase auth</span>
+            <span>
+              {authLoading
+                ? 'loading session'
+                : session
+                  ? `signed in as ${session.user.email || session.user.id}`
+                  : 'signed out'}
+            </span>
+          </div>
+          {authError && <div style={{ fontSize: 12, color: '#f87171' }}>{authError}</div>}
+          {authMessage && <div style={{ fontSize: 12, color: '#93c5fd' }}>{authMessage}</div>}
+          {!supabaseReady ? (
+            <div style={{ fontSize: 12, color: '#f59e0b', lineHeight: 1.5 }}>
+              Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to enable auth and upload.
+            </div>
+          ) : session ? (
+            <div style={s.mobileStack}>
+              <div style={{ fontSize: 12, color: '#a8a8a8', lineHeight: 1.5 }}>
+                Ready to sync as {session.user.email || session.user.id}
+              </div>
+              <div style={s.mobileActionRow}>
+                <button
+                  style={{ ...s.button, ...s.buttonSmall, ...s.mobileSmallButton }}
+                  onClick={handleSyncBatch}
+                  disabled={uploading}
+                >
+                  {uploading ? 'Syncing…' : 'Upload Batch'}
+                </button>
+                <button style={{ ...s.button, ...s.buttonSmall, ...s.mobileSmallButton }} onClick={handleSignOut}>
+                  Sign out
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={s.mobileStack}>
+              <input
+                style={s.select}
+                placeholder="Email for magic link"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                type="email"
+              />
+              <div style={s.mobileActionRow}>
+                <button
+                  style={{ ...s.button, ...s.buttonPrimary, ...s.mobileSmallButton }}
+                  onClick={handleSendMagicLink}
+                  disabled={!authEmail.trim()}
+                >
+                  Send link
+                </button>
+                <button
+                  style={{ ...s.button, ...s.buttonSmall, ...s.mobileSmallButton }}
+                  onClick={handleSyncBatch}
+                  disabled
+                  title="Sign in to enable upload"
+                >
+                  Upload Batch
+                </button>
+              </div>
+            </div>
+          )}
+
+          {uploadProgress && (
+            <div style={{ ...s.progressBox, marginTop: 10 }}>
+              <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                Sync status
+              </div>
+              <div>{uploadProgress.message}</div>
+              {(uploadProgress.itemCount !== undefined || uploadProgress.photoCount !== undefined) && (
+                <div style={{ marginTop: 4, color: '#94a3b8' }}>
+                  {uploadProgress.itemIndex !== undefined && uploadProgress.itemCount !== undefined && (
+                    <div>Item {uploadProgress.itemIndex} / {uploadProgress.itemCount}</div>
+                  )}
+                  {uploadProgress.photoIndex !== undefined && uploadProgress.photoCount !== undefined && (
+                    <div>Photo {uploadProgress.photoIndex} / {uploadProgress.photoCount}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {remoteCleanupProgress && (
+            <div style={{ ...s.progressBox, marginTop: 10 }}>
+              <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                Remote cleanup
+              </div>
+              <div>{remoteCleanupProgress.message}</div>
+              {remoteCleanupProgress.photoCount !== undefined && remoteCleanupProgress.photoIndex !== undefined && (
+                <div style={{ marginTop: 4, color: '#94a3b8' }}>
+                  Photo {remoteCleanupProgress.photoIndex} / {remoteCleanupProgress.photoCount}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ ...s.progressBox, marginTop: 10 }}>
+            <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+              Upload / cleanup
+            </div>
+            <div>Total photos: {batchUploadSummary.totalPhotos}</div>
+            <div>Verified: {batchUploadSummary.verifiedPhotos}</div>
+            <div>Pending: {batchUploadSummary.pendingPhotos}</div>
+            <div>Failed: {batchUploadSummary.failedPhotos}</div>
+            <div>Safe to clear: {cleanupReport.safeToClear ? 'yes' : 'no'}</div>
+            <div>Remote cleanup eligible: {remoteCleanupReport?.eligiblePhotos || 0}</div>
+            <div>Remote cleanup blocked: {remoteCleanupReport?.blockedPhotos || 0}</div>
+            <div>Retention: {getRetentionModeLabel(selectedBatch?.remoteRetentionMode || 'delete_7d_after_listed')}</div>
+            {remoteCleanupReport?.nextEligibleAt && (
+              <div>Next eligible: {new Date(remoteCleanupReport.nextEligibleAt).toLocaleString()}</div>
+            )}
+            {cleanupReport.issues.length > 0 && (
+              <div style={{ marginTop: 4, color: '#fca5a5' }}>
+                {cleanupReport.issues.map((issue) => (
+                  <div key={issue.reason}>
+                    {issue.count} {issue.reason}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={s.mobileActionRow}>
+              <button
+                style={{ ...s.button, ...s.buttonSmall, ...s.mobileSmallButton }}
+                onClick={handleSyncBatch}
+                disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
+              >
+                Retry upload
+              </button>
+              <button
+                style={{ ...s.button, ...s.buttonSmall, ...s.mobileSmallButton }}
+                onClick={handleRemoteCleanup}
+                disabled={!supabase || !session || remoteCleaning || !selectedBatch || (remoteCleanupReport?.eligiblePhotos || 0) === 0}
+                title={remoteCleanupReport?.eligiblePhotos ? 'Delete remote assets for listed items whose retention window has expired' : 'No remote photos are eligible yet'}
+              >
+                {remoteCleaning ? 'Cleaning…' : 'Delete remote assets'}
+              </button>
+              <button
+                style={{ ...s.button, ...s.buttonSmall, ...s.mobileSmallButton }}
+                onClick={handleClearVerifiedLocalCopies}
+                disabled={!cleanupReport.safeToClear}
+                title={cleanupReport.safeToClear ? 'Remove verified local copies' : 'Uploads must be verified first'}
+              >
+                Clear local copies
+              </button>
+            </div>
+            {cleanupMessage && <div style={{ marginTop: 6, color: '#cbd5e1' }}>{cleanupMessage}</div>}
+          </div>
+        </div>
+
+        <details style={s.mobileCard}>
+          <summary style={{ cursor: 'pointer', color: '#e5e7eb', fontSize: 13, fontWeight: 700 }}>
+            Developer diagnostics
+          </summary>
+          <div style={{ marginTop: 12 }}>
+            <DiagnosticsPanel
+              cameraState={cameraState}
+              capabilities={capabilities}
+              captureErrors={captureErrors}
+              storageErrors={storageErrors}
+              secureContext={secureContextInfo}
+              lastCaptureDiagnostics={lastCaptureDiagnostics}
+            />
+          </div>
+        </details>
+      </div>
+    )
+  }
+
+  if (isMobile) {
+    return <MobileWorkspace />
+  }
+
   return (
     <div style={s.screen}>
       <div style={{ ...s.panel, margin: '0 12px' }}>
@@ -892,7 +1315,7 @@ export function Phase1Screen() {
             <div>
               <div style={s.label}>Batch</div>
               <select style={s.select} value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)}>
-                {batches.map((batch) => (
+                {selectedStoreBatches.map((batch) => (
                   <option key={batch.id} value={batch.id}>{batch.name}</option>
                 ))}
               </select>
@@ -1160,14 +1583,21 @@ export function Phase1Screen() {
             <PhotoList photos={currentItemPhotos} onPhotoClick={(photo) => setSelectedPhoto(photo)} />
           </div>
 
-          <DiagnosticsPanel
-            cameraState={cameraState}
-            capabilities={capabilities}
-            captureErrors={captureErrors}
-            storageErrors={storageErrors}
-            secureContext={secureContextInfo}
-            lastCaptureDiagnostics={lastCaptureDiagnostics}
-          />
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ cursor: 'pointer', color: '#a8a8a8', fontSize: 13, fontWeight: 700 }}>
+              Developer diagnostics
+            </summary>
+            <div style={{ marginTop: 12 }}>
+              <DiagnosticsPanel
+                cameraState={cameraState}
+                capabilities={capabilities}
+                captureErrors={captureErrors}
+                storageErrors={storageErrors}
+                secureContext={secureContextInfo}
+                lastCaptureDiagnostics={lastCaptureDiagnostics}
+              />
+            </div>
+          </details>
         </div>
 
         <div style={s.panel}>

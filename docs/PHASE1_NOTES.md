@@ -1,14 +1,15 @@
 # Phase 1 Notes
 
 Phase 1 moves the app from camera spike into the first real handoff workflow.
+The current implementation is split into a mobile capture surface and a desktop queue surface.
 
 ## Added in this repo
 
 - store and batch records in IndexedDB
-- queue-oriented Phase 1 screen
+- mobile capture surface with upload/cleanup status
+- desktop queue surface with batch drilldown and item detail
 - Supabase Auth magic-link bootstrap
 - batch sync into Supabase tables and private storage
-- desktop store queue with batch drilldown and item detail
 - single shared account across capture and lister devices
 - retention dates and remote cleanup for listed items
 - item listing status controls
