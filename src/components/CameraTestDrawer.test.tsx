@@ -16,14 +16,13 @@ function baseProps(overrides: Partial<React.ComponentProps<typeof CameraTestDraw
     capabilities: null,
     devices: [],
     previewRatio: 'full' as const,
-    fullQualityPreviewEnabled: false,
     logText: '',
     onClose: vi.fn(),
     onChangePreviewRatio: vi.fn(),
-    onToggleFullQualityPreview: vi.fn(),
     onSelectDevice: vi.fn(),
     onApplyConstraint: vi.fn(asyncNoop),
     onCopyLog: vi.fn(),
+    onClearLog: vi.fn(),
     onRunProbe: vi.fn(asyncNoop),
     statusMessage: '',
     errorMessage: '',
@@ -131,11 +130,18 @@ describe('CameraTestDrawer', () => {
     expect(screen.queryByText('No camera test actions yet.')).not.toBeInTheDocument()
   })
 
-  it('calls onCopyLog when Copy log button is clicked', () => {
+  it('calls onCopyLog when Copy camera logs button is clicked', () => {
     const onCopyLog = vi.fn()
     render(<CameraTestDrawer {...baseProps({ onCopyLog })} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Copy log' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy camera logs' }))
     expect(onCopyLog).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onClearLog when Clear camera logs button is clicked', () => {
+    const onClearLog = vi.fn()
+    render(<CameraTestDrawer {...baseProps({ onClearLog })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear camera logs' }))
+    expect(onClearLog).toHaveBeenCalledTimes(1)
   })
 
   it('shows the Run capability probe button when drawer is open', () => {

@@ -243,13 +243,14 @@ describe('BrowserCameraAdapter', () => {
 
     const adapter = new BrowserCameraAdapter()
     await adapter.start(videoEl)
-    await adapter.applyTestConstraints({ zoom: 2, focusMode: 'manual' } as CameraTestConstraintSet)
+    await adapter.applyTestConstraints({ width: 640, height: 480, zoom: 2 } as CameraTestConstraintSet)
 
     expect(getUserMedia).toHaveBeenCalledTimes(1)
     expect(track.applyConstraints).toHaveBeenCalledTimes(1)
     expect(adapter.getCapabilities()?.trackSettings).toMatchObject({
+      width: 1280,
+      height: 960,
       zoom: 2,
-      focusMode: 'manual',
     })
   })
 

@@ -14,6 +14,8 @@ export interface ConstraintProbeResult {
   settingsBefore: Record<string, unknown>
   settingsAfter: Record<string, unknown>
   settingChanged: boolean
+  skippedReason: string | null
+  note: string | null
 }
 
 export interface ImageCaptureProbeResult {
@@ -153,13 +155,16 @@ export function formatProbeReport(result: CameraProbeResult): string {
     lines.push('(no probes run — capabilities not exposed)')
   }
   for (const p of result.constraintProbes) {
-    const changed = p.settingChanged ? 'CHANGED' : 'no change'
-    const status = !p.attempted
-      ? 'SKIPPED'
-      : p.success
-      ? `OK (${changed})`
-      : `FAILED: ${p.errorName ?? ''} ${p.errorMessage ?? ''}`
-    lines.push(`  ${p.constraint}: ${status}`)
+    let status: string
+    if (!p.attempted) {
+      status = `SKIPPED${p.skippedReason ? ` — ${p.skippedReason}` : ''}`
+    } else if (p.success) {
+      status = p.settingChanged ? 'OK (reflected in settings)' : 'OK (accepted; not reflected in getSettings)'
+    } else {
+      status = `FAILED: ${p.errorName ?? ''} ${p.errorMessage ?? ''}`
+    }
+    const noteLine = p.note ? ` [${p.note}]` : ''
+    lines.push(`  ${p.constraint}: ${status}${noteLine}`)
   }
   lines.push('')
 
@@ -179,7 +184,11 @@ export function summarizeProbeForLog(result: CameraProbeResult): string {
   const caps = result.trackCapabilities
   const capKeys = caps ? Object.keys(caps) : []
   const probeResults = result.constraintProbes
-    .map((p) => `${p.constraint}:${!p.attempted ? 'skip' : p.success ? (p.settingChanged ? 'ok/changed' : 'ok/same') : 'fail'}`)
+    .map((p) => {
+      if (!p.attempted) return `${p.constraint}:skip`
+      if (!p.success) return `${p.constraint}:fail`
+      return `${p.constraint}:${p.settingChanged ? 'ok/changed' : 'ok/not-reflected'}`
+    })
     .join(' ')
 
   return [
@@ -213,10 +222,26 @@ function safeGetSettings(track: MediaStreamTrack): [Record<string, unknown> | nu
   }
 }
 
+export function skippedProbeEntry(label: string, reason: string, note?: string): ConstraintProbeResult {
+  return {
+    constraint: label,
+    attempted: false,
+    success: false,
+    errorName: null,
+    errorMessage: null,
+    settingsBefore: {},
+    settingsAfter: {},
+    settingChanged: false,
+    skippedReason: reason,
+    note: note ?? null,
+  }
+}
+
 async function probeConstraint(
   track: MediaStreamTrack,
   constraint: MediaTrackConstraintSet,
   label: string,
+  note?: string,
 ): Promise<ConstraintProbeResult> {
   const [before] = safeGetSettings(track)
   const settingsBefore = before ?? {}
@@ -238,6 +263,8 @@ async function probeConstraint(
       settingsBefore,
       settingsAfter,
       settingChanged,
+      skippedReason: null,
+      note: note ?? null,
     }
   } catch (e) {
     return {
@@ -249,6 +276,8 @@ async function probeConstraint(
       settingsBefore,
       settingsAfter: settingsBefore,
       settingChanged: false,
+      skippedReason: null,
+      note: note ?? null,
     }
   }
 }
@@ -283,18 +312,26 @@ async function buildConstraintProbes(
 ): Promise<ConstraintProbeResult[]> {
   const probes: ConstraintProbeResult[] = []
 
+  // Snapshot settings before all mutating probes so we can restore afterwards.
+  const [preProbeSettings] = safeGetSettings(track)
+  const originalZoom = typeof preProbeSettings?.zoom === 'number' ? preProbeSettings.zoom : null
+  const originalFrameRate = typeof preProbeSettings?.frameRate === 'number' ? preProbeSettings.frameRate : null
+  const originalWhiteBalance = typeof preProbeSettings?.whiteBalanceMode === 'string' ? preProbeSettings.whiteBalanceMode : null
+
   if (caps.zoom) {
     const { min, max } = caps.zoom
     const mid = min + (max - min) / 2
     probes.push(await probeConstraint(track, { zoom: min } as ExtendedConstraints, `zoom=${min}`))
     probes.push(await probeConstraint(track, { zoom: mid } as ExtendedConstraints, `zoom=${mid.toFixed(2)}`))
     probes.push(await probeConstraint(track, { zoom: max } as ExtendedConstraints, `zoom=${max}`))
-    probes.push(await probeConstraint(track, { zoom: min } as ExtendedConstraints, `zoom=${min}(restore)`))
+    // Restore zoom to original value
+    const restoreZoom = originalZoom !== null ? originalZoom : min
+    probes.push(await probeConstraint(track, { zoom: restoreZoom } as ExtendedConstraints, `zoom=${restoreZoom}(restore)`))
   }
 
   if (caps.torch) {
     probes.push(await probeConstraint(track, { torch: true } as ExtendedConstraints, 'torch=true'))
-    probes.push(await probeConstraint(track, { torch: false } as ExtendedConstraints, 'torch=false'))
+    probes.push(await probeConstraint(track, { torch: false } as ExtendedConstraints, 'torch=false(restore)'))
   }
 
   if (caps.focusMode && caps.focusMode.length > 0) {
@@ -305,9 +342,29 @@ async function buildConstraintProbes(
 
   if (caps.focusDistance) {
     const { min, max } = caps.focusDistance
-    const mid = min + (max - min) / 2
-    probes.push(await probeConstraint(track, { focusDistance: mid } as ExtendedConstraints, `focusDistance=${mid.toFixed(3)}`))
-    probes.push(await probeConstraint(track, { focusDistance: min } as ExtendedConstraints, `focusDistance=${min}(restore)`))
+    if (isFinite(min) && isFinite(max) && max > min) {
+      const mid = min + (max - min) / 2
+      probes.push(await probeConstraint(
+        track,
+        { focusDistance: mid } as ExtendedConstraints,
+        `focusDistance=${mid.toFixed(3)}`,
+        'accepted previously but not reflected in getSettings; not proven effective',
+      ))
+      probes.push(await probeConstraint(
+        track,
+        { focusDistance: min } as ExtendedConstraints,
+        `focusDistance=${min}(restore)`,
+      ))
+    } else {
+      const reason = !isFinite(max)
+        ? 'focusDistance exposed but not probeable: missing or non-finite max'
+        : 'focusDistance exposed but not probeable: max <= min'
+      probes.push(skippedProbeEntry(
+        `focusDistance(min=${isFinite(min) ? min : '?'})`,
+        reason,
+        'accepted previously but not reflected in getSettings; not proven effective',
+      ))
+    }
   }
 
   if (caps.exposureMode && caps.exposureMode.length > 0) {
@@ -327,17 +384,42 @@ async function buildConstraintProbes(
     for (const mode of caps.whiteBalanceMode) {
       probes.push(await probeConstraint(track, { whiteBalanceMode: mode } as ExtendedConstraints, `whiteBalanceMode=${mode}`))
     }
+    // Restore original whiteBalanceMode if we changed it
+    if (originalWhiteBalance !== null && caps.whiteBalanceMode.includes(originalWhiteBalance)) {
+      probes.push(await probeConstraint(
+        track,
+        { whiteBalanceMode: originalWhiteBalance } as ExtendedConstraints,
+        `whiteBalanceMode=${originalWhiteBalance}(restore)`,
+      ))
+    }
   }
 
+  // Size probe is skipped by default — applying lower resolution can degrade the active
+  // capture stream and is not reliably restorable via applyConstraints alone.
   if (caps.width && caps.height) {
-    const safeWidth = Math.min(caps.width.max, 1280)
-    const safeHeight = Math.min(caps.height.max, 960)
-    probes.push(await probeConstraint(track, { width: safeWidth, height: safeHeight } as ExtendedConstraints, `size=${safeWidth}x${safeHeight}`))
+    probes.push(skippedProbeEntry(
+      `size(max=${caps.width.max}x${caps.height.max})`,
+      'skipped for safety — applying a lower resolution can reduce capture quality and may not restore reliably',
+      'supported but can reduce capture settings; run manually if needed',
+    ))
   }
 
   if (caps.frameRate) {
-    const safeRate = Math.min(caps.frameRate.max, 30)
-    probes.push(await probeConstraint(track, { frameRate: safeRate } as ExtendedConstraints, `frameRate=${safeRate}`))
+    // Probe 60fps only if the device declares it supported
+    if (caps.frameRate.max >= 60) {
+      probes.push(await probeConstraint(track, { frameRate: 60 } as ExtendedConstraints, 'frameRate=60'))
+    } else {
+      const safeRate = Math.min(caps.frameRate.max, 30)
+      probes.push(await probeConstraint(track, { frameRate: safeRate } as ExtendedConstraints, `frameRate=${safeRate}`))
+    }
+    // Restore original frameRate
+    if (originalFrameRate !== null) {
+      probes.push(await probeConstraint(
+        track,
+        { frameRate: originalFrameRate } as ExtendedConstraints,
+        `frameRate=${originalFrameRate}(restore)`,
+      ))
+    }
   }
 
   return probes

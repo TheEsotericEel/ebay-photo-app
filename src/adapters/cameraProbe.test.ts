@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatProbeReport,
   summarizeProbeForLog,
+  skippedProbeEntry,
   type CameraProbeResult,
   type ConstraintProbeResult,
 } from './cameraProbe'
@@ -52,7 +53,7 @@ function minimalProbeResult(overrides: Partial<CameraProbeResult> = {}): CameraP
   }
 }
 
-function successProbe(constraint: string): ConstraintProbeResult {
+function successProbe(constraint: string, settingChanged = true): ConstraintProbeResult {
   return {
     constraint,
     attempted: true,
@@ -60,8 +61,10 @@ function successProbe(constraint: string): ConstraintProbeResult {
     errorName: null,
     errorMessage: null,
     settingsBefore: { zoom: 1 },
-    settingsAfter: { zoom: 2 },
-    settingChanged: true,
+    settingsAfter: settingChanged ? { zoom: 2 } : { zoom: 1 },
+    settingChanged,
+    skippedReason: null,
+    note: null,
   }
 }
 
@@ -75,10 +78,12 @@ function failedProbe(constraint: string): ConstraintProbeResult {
     settingsBefore: { zoom: 1 },
     settingsAfter: { zoom: 1 },
     settingChanged: false,
+    skippedReason: null,
+    note: null,
   }
 }
 
-function skippedProbe(constraint: string): ConstraintProbeResult {
+function skippedProbe(constraint: string, reason = 'test reason', note?: string): ConstraintProbeResult {
   return {
     constraint,
     attempted: false,
@@ -88,6 +93,8 @@ function skippedProbe(constraint: string): ConstraintProbeResult {
     settingsBefore: {},
     settingsAfter: {},
     settingChanged: false,
+    skippedReason: reason,
+    note: note ?? null,
   }
 }
 
@@ -278,9 +285,14 @@ describe('formatProbeReport', () => {
     expect(formatProbeReport(result)).toContain('(no probes run')
   })
 
-  it('shows OK for a successful probe where setting changed', () => {
-    const result = minimalProbeResult({ constraintProbes: [successProbe('zoom=2')] })
-    expect(formatProbeReport(result)).toContain('zoom=2: OK (CHANGED)')
+  it('shows OK (reflected in settings) for a successful probe where setting changed', () => {
+    const result = minimalProbeResult({ constraintProbes: [successProbe('zoom=2', true)] })
+    expect(formatProbeReport(result)).toContain('zoom=2: OK (reflected in settings)')
+  })
+
+  it('shows OK (accepted; not reflected) for a successful probe where setting did not change', () => {
+    const result = minimalProbeResult({ constraintProbes: [successProbe('zoom=1', false)] })
+    expect(formatProbeReport(result)).toContain('zoom=1: OK (accepted; not reflected in getSettings)')
   })
 
   it('shows FAILED for a failed probe with error details', () => {
@@ -289,9 +301,42 @@ describe('formatProbeReport', () => {
     expect(report).toContain('torch=true: FAILED: NotSupportedError constraint not supported')
   })
 
-  it('shows SKIPPED for an unattempted probe', () => {
-    const result = minimalProbeResult({ constraintProbes: [skippedProbe('focusMode=manual')] })
-    expect(formatProbeReport(result)).toContain('focusMode=manual: SKIPPED')
+  it('shows SKIPPED with reason for an unattempted probe', () => {
+    const result = minimalProbeResult({
+      constraintProbes: [skippedProbe('focusMode=manual', 'missing max')],
+    })
+    const report = formatProbeReport(result)
+    expect(report).toContain('focusMode=manual: SKIPPED — missing max')
+  })
+
+  it('shows note in brackets when note is present', () => {
+    const probe: ConstraintProbeResult = {
+      ...successProbe('focusDistance=0.5'),
+      note: 'accepted previously but not reflected in getSettings; not proven effective',
+    }
+    const result = minimalProbeResult({ constraintProbes: [probe] })
+    expect(formatProbeReport(result)).toContain('[accepted previously but not reflected')
+  })
+
+  it('does not show a note bracket on the probe line when note is null', () => {
+    const result = minimalProbeResult({ constraintProbes: [successProbe('zoom=2')] })
+    const report = formatProbeReport(result)
+    const probeLine = report.split('\n').find((l) => l.includes('zoom=2:'))
+    expect(probeLine).toBeDefined()
+    expect(probeLine).not.toContain('[')
+  })
+
+  it('shows SKIPPED with safety note for size probe', () => {
+    const probe = skippedProbe(
+      'size(max=3024x4032)',
+      'skipped for safety — applying a lower resolution can reduce capture quality and may not restore reliably',
+      'supported but can reduce capture settings; run manually if needed',
+    )
+    const result = minimalProbeResult({ constraintProbes: [probe] })
+    const report = formatProbeReport(result)
+    expect(report).toContain('size(max=3024x4032): SKIPPED')
+    expect(report).toContain('skipped for safety')
+    expect(report).toContain('supported but can reduce capture settings')
   })
 
   it('includes all five manual observation fields', () => {
@@ -374,18 +419,46 @@ describe('summarizeProbeForLog', () => {
     expect(summarizeProbeForLog(result)).toContain('probes=[none]')
   })
 
-  it('reports ok/same when probe succeeded but setting did not change', () => {
-    const probe: ConstraintProbeResult = {
-      constraint: 'zoom=1',
-      attempted: true,
-      success: true,
-      errorName: null,
-      errorMessage: null,
-      settingsBefore: { zoom: 1 },
-      settingsAfter: { zoom: 1 },
-      settingChanged: false,
-    }
-    const result = minimalProbeResult({ constraintProbes: [probe] })
-    expect(summarizeProbeForLog(result)).toContain('zoom=1:ok/same')
+  it('reports ok/not-reflected when probe succeeded but setting did not change', () => {
+    const result = minimalProbeResult({ constraintProbes: [successProbe('zoom=1', false)] })
+    expect(summarizeProbeForLog(result)).toContain('zoom=1:ok/not-reflected')
+  })
+
+  it('reports skip for unattempted probes in summary', () => {
+    const result = minimalProbeResult({
+      constraintProbes: [skippedProbe('size(max=3024x4032)', 'skipped for safety')],
+    })
+    expect(summarizeProbeForLog(result)).toContain('size(max=3024x4032):skip')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// focusDistance NaN prevention (pure logic tests)
+// ---------------------------------------------------------------------------
+
+describe('focusDistance NaN guard (skippedProbeEntry helper)', () => {
+  it('produces a skipped entry with the given reason and no NaN', () => {
+    const entry = skippedProbeEntry('focusDistance(min=0)', 'missing or non-finite max')
+    expect(entry.attempted).toBe(false)
+    expect(entry.constraint).toBe('focusDistance(min=0)')
+    expect(entry.skippedReason).toBe('missing or non-finite max')
+    expect(entry.constraint).not.toContain('NaN')
+    expect(entry.skippedReason).not.toContain('NaN')
+  })
+
+  it('skipped entry has no error fields set', () => {
+    const entry = skippedProbeEntry('focusDistance(min=0)', 'missing max')
+    expect(entry.errorName).toBeNull()
+    expect(entry.errorMessage).toBeNull()
+    expect(entry.settingChanged).toBe(false)
+  })
+
+  it('carries note field when provided', () => {
+    const entry = skippedProbeEntry(
+      'focusDistance(min=0)',
+      'missing or non-finite max',
+      'accepted previously but not reflected in getSettings; not proven effective',
+    )
+    expect(entry.note).toContain('not proven effective')
   })
 })

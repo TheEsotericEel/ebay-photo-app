@@ -8,6 +8,7 @@ export interface CameraPreviewHandle {
   captureFrame: () => ReturnType<BrowserCameraAdapter['captureFrame']>
   getCapabilities: () => CameraCapabilities | null
   getVideoDimensions: () => { videoWidth: number; videoHeight: number } | null
+  getVideoState: () => { readyState: number; paused: boolean; width: number; height: number; hasSrcObject: boolean } | null
   listVideoInputDevices: () => Promise<CameraDeviceInfo[]>
   applyTestConstraints: (constraints: CameraTestConstraintSet) => Promise<CameraCapabilities | null>
   switchCameraDevice: (deviceId: string) => Promise<CameraCapabilities | null>
@@ -39,6 +40,17 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, Props>(function Cam
       const v = videoRef.current
       if (!v) return null
       return { videoWidth: v.videoWidth, videoHeight: v.videoHeight }
+    },
+    getVideoState: () => {
+      const v = videoRef.current
+      if (!v) return null
+      return {
+        readyState: v.readyState,
+        paused: v.paused,
+        width: v.videoWidth,
+        height: v.videoHeight,
+        hasSrcObject: Boolean(v.srcObject),
+      }
     },
     listVideoInputDevices: () => adapterRef.current.listVideoInputDevices(),
     applyTestConstraints: (constraints: CameraTestConstraintSet) => adapterRef.current.applyTestConstraints(constraints),
@@ -119,7 +131,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, Props>(function Cam
   const frameStyle: React.CSSProperties = isSquareFullFrame
     ? {
         position: 'relative',
-        width: 'min(calc(100vw - 24px), calc(100dvh - 220px))',
+        width: 'min(calc(100vw - 24px), calc(100dvh - 312px))',
         maxWidth: '100%',
         aspectRatio: '1 / 1',
         overflow: 'hidden',

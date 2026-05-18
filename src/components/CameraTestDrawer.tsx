@@ -41,14 +41,13 @@ interface Props {
   capabilities: CameraCapabilities | null
   devices: CameraDeviceInfo[]
   previewRatio: OutputRatio
-  fullQualityPreviewEnabled: boolean
   logText: string
   onClose: () => void
   onChangePreviewRatio: (ratio: OutputRatio) => void
-  onToggleFullQualityPreview: () => void
   onSelectDevice: (deviceId: string) => void
   onApplyConstraint: (constraint: CameraTestConstraintSet) => Promise<void>
   onCopyLog: () => void
+  onClearLog: () => void
   onRunProbe: () => Promise<void>
   statusMessage: string
   errorMessage: string
@@ -307,14 +306,13 @@ export function CameraTestDrawer({
   capabilities,
   devices,
   previewRatio,
-  fullQualityPreviewEnabled,
   logText,
   onClose,
   onChangePreviewRatio,
-  onToggleFullQualityPreview,
   onSelectDevice,
   onApplyConstraint,
   onCopyLog,
+  onClearLog,
   onRunProbe,
   statusMessage,
   errorMessage,
@@ -326,22 +324,24 @@ export function CameraTestDrawer({
   const capabilityList: string[] = []
   if (capabilities?.zoom) capabilityList.push('zoom')
   if (capabilities?.torch) capabilityList.push('torch')
-  if ((raw?.focusMode || []).length > 0) capabilityList.push('focusMode')
-  if (raw?.focusDistance) capabilityList.push('focusDistance')
-  if (raw?.pointsOfInterest) capabilityList.push('pointsOfInterest')
-  if (raw?.exposureMode) capabilityList.push('exposureMode')
-  if (raw?.exposureCompensation) capabilityList.push('exposureCompensation')
-  if (raw?.exposureTime) capabilityList.push('exposureTime')
   if (raw?.whiteBalanceMode) capabilityList.push('whiteBalanceMode')
-  if (raw?.brightness) capabilityList.push('brightness')
-  if (raw?.contrast) capabilityList.push('contrast')
-  if (raw?.saturation) capabilityList.push('saturation')
-  if (raw?.sharpness) capabilityList.push('sharpness')
-  if (raw?.iso) capabilityList.push('iso')
+  if (devices.length > 1) capabilityList.push('device/lens')
+  if (raw?.focusDistance && Number.isFinite(raw.focusDistance.min) && Number.isFinite(raw.focusDistance.max) && raw.focusDistance.max > raw.focusDistance.min) {
+    capabilityList.push('focusDistance (exp)')
+  }
 
   const currentDeviceId = settings?.deviceId || capabilities?.trackSettings?.deviceId || ''
   const currentDevice = devices.find((device) => device.deviceId === currentDeviceId) || null
-  const previewQualitySupported = Boolean(raw?.width && raw?.height)
+  const unsupportedControls = ['exposure', 'ISO', 'brightness', 'contrast', 'saturation', 'sharpness', 'colorTemperature']
+  const focusDistanceSupported =
+    Boolean(
+      raw?.focusDistance &&
+      Number.isFinite(raw.focusDistance.min) &&
+      Number.isFinite(raw.focusDistance.max) &&
+      raw.focusDistance.max > raw.focusDistance.min &&
+      typeof settings?.focusDistance === 'number',
+    )
+  const focusDistanceRange = raw?.focusDistance && Number.isFinite(raw.focusDistance.min) && Number.isFinite(raw.focusDistance.max) && raw.focusDistance.max > raw.focusDistance.min
 
   return (
     <div style={s.sheet} role="dialog" aria-modal="true" aria-label="Camera test controls">
@@ -366,6 +366,10 @@ export function CameraTestDrawer({
             {settings?.width ?? '?'}x{settings?.height ?? '?'} • {settings?.facingMode || '?'} • {settings?.zoom !== undefined ? `zoom ${formatValue(settings.zoom)}` : 'zoom ?'}
           </span>
         </div>
+        <div style={s.summaryRow}>
+          <span>ImageCapture</span>
+          <span>takePhoto info lives in the log</span>
+        </div>
         <div style={s.chipRow}>
           {capabilityList.length === 0 ? (
             <span style={s.note}>No extra track capabilities exposed by this browser.</span>
@@ -386,23 +390,8 @@ export function CameraTestDrawer({
           options={['full', '1:1', '4:3', '16:9']}
           onChange={(value) => onChangePreviewRatio(value as OutputRatio)}
         />
-        <div style={s.buttonRow}>
-          <button
-            style={{
-              ...s.toggleButton,
-              ...(fullQualityPreviewEnabled ? s.toggleButtonActive : {}),
-              ...(previewQualitySupported ? {} : { opacity: 0.55, cursor: 'not-allowed' }),
-            }}
-            onClick={previewQualitySupported ? onToggleFullQualityPreview : undefined}
-            disabled={!previewQualitySupported}
-          >
-            {fullQualityPreviewEnabled ? 'Full-quality preview on' : 'Full-quality preview off'}
-          </button>
-        </div>
         <div style={s.note}>
-          {previewQualitySupported
-            ? 'Temporary test mode only. It requests the best preview stream the browser will allow.'
-            : 'Full-quality preview is unavailable on this browser.'}
+          Temporary test mode stays preview-only. Width/height stream constraints are intentionally disabled.
         </div>
       </div>
 
@@ -450,111 +439,42 @@ export function CameraTestDrawer({
         </div>
       )}
 
-      {((raw?.focusMode && raw.focusMode.length > 0) || raw?.focusDistance || raw?.pointsOfInterest) && (
+      {raw?.whiteBalanceMode && raw.whiteBalanceMode.length > 0 && (
         <div style={s.section}>
-          <div style={s.sectionTitle}>Focus</div>
-          {raw?.pointsOfInterest && (
-            <div style={s.note}>Tap the visible preview area to send a center focus-point test.</div>
-          )}
-          {raw?.focusMode && raw.focusMode.length > 0 && (
-            <CapabilitySelect
-              label="Focus mode"
-              value={settings?.focusMode}
-              options={raw.focusMode}
-              onChange={(value) => { void onApplyConstraint({ focusMode: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.focusDistance && (
+          <div style={s.sectionTitle}>White balance</div>
+          <div style={s.note}>This is a confirmed browser-supported test control on Safari PWA probe results.</div>
+          <CapabilitySelect
+            label="White balance mode"
+            value={settings?.whiteBalanceMode}
+            options={raw.whiteBalanceMode}
+            onChange={(value) => { void onApplyConstraint({ whiteBalanceMode: value }).catch(() => undefined) }}
+          />
+        </div>
+      )}
+
+      {focusDistanceRange && (
+        <div style={s.section}>
+          <div style={s.sectionTitle}>Focus distance</div>
+          <div style={s.note}>Experimental and disabled unless the browser reflects the setting in getSettings().</div>
+          {focusDistanceSupported ? (
             <CapabilityRange
               label="Focus distance"
               value={settings?.focusDistance}
               capability={raw.focusDistance}
               onChange={(value) => { void onApplyConstraint({ focusDistance: value }).catch(() => undefined) }}
             />
-          )}
-          {raw?.pointsOfInterest && (
-            <div style={s.note}>Tap-to-focus is browser-specific. If it fails, the preview should stay live.</div>
+          ) : (
+            <div style={s.note}>focusDistance is exposed but not currently confirmed enough to test.</div>
           )}
         </div>
       )}
 
-      {(raw?.exposureMode || raw?.exposureCompensation || raw?.exposureTime || raw?.whiteBalanceMode || raw?.brightness || raw?.contrast || raw?.saturation || raw?.sharpness || raw?.iso) && (
-        <div style={s.section}>
-          <div style={s.sectionTitle}>Exposure / color</div>
-          {raw?.exposureMode && raw.exposureMode.length > 0 && (
-            <CapabilitySelect
-              label="Exposure mode"
-              value={settings?.exposureMode}
-              options={raw.exposureMode}
-              onChange={(value) => { void onApplyConstraint({ exposureMode: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.exposureCompensation && (
-            <CapabilityRange
-              label="Exposure compensation"
-              value={settings?.exposureCompensation}
-              capability={raw.exposureCompensation}
-              onChange={(value) => { void onApplyConstraint({ exposureCompensation: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.exposureTime && (
-            <CapabilityRange
-              label="Exposure time"
-              value={settings?.exposureTime}
-              capability={raw.exposureTime}
-              onChange={(value) => { void onApplyConstraint({ exposureTime: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.whiteBalanceMode && raw.whiteBalanceMode.length > 0 && (
-            <CapabilitySelect
-              label="White balance"
-              value={settings?.whiteBalanceMode}
-              options={raw.whiteBalanceMode}
-              onChange={(value) => { void onApplyConstraint({ whiteBalanceMode: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.brightness && (
-            <CapabilityRange
-              label="Brightness"
-              value={settings?.brightness}
-              capability={raw.brightness}
-              onChange={(value) => { void onApplyConstraint({ brightness: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.contrast && (
-            <CapabilityRange
-              label="Contrast"
-              value={settings?.contrast}
-              capability={raw.contrast}
-              onChange={(value) => { void onApplyConstraint({ contrast: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.saturation && (
-            <CapabilityRange
-              label="Saturation"
-              value={settings?.saturation}
-              capability={raw.saturation}
-              onChange={(value) => { void onApplyConstraint({ saturation: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.sharpness && (
-            <CapabilityRange
-              label="Sharpness"
-              value={settings?.sharpness}
-              capability={raw.sharpness}
-              onChange={(value) => { void onApplyConstraint({ sharpness: value }).catch(() => undefined) }}
-            />
-          )}
-          {raw?.iso && (
-            <CapabilityRange
-              label="ISO"
-              value={settings?.iso}
-              capability={raw.iso}
-              onChange={(value) => { void onApplyConstraint({ iso: value }).catch(() => undefined) }}
-            />
-          )}
+      <div style={s.section}>
+        <div style={s.sectionTitle}>Unsupported / unconfirmed</div>
+        <div style={s.note}>
+          {unsupportedControls.join(', ')} are hidden for now because they were not confirmed stable in Safari PWA probe results.
         </div>
-      )}
+      </div>
 
       <div style={s.section}>
         <div style={s.sectionTitle}>Camera log</div>
@@ -563,7 +483,10 @@ export function CameraTestDrawer({
             Run capability probe
           </button>
           <button style={s.toggleButton} onClick={onCopyLog}>
-            Copy log
+            Copy camera logs
+          </button>
+          <button style={s.toggleButton} onClick={onClearLog}>
+            Clear camera logs
           </button>
         </div>
         <pre style={{ margin: 0, maxHeight: 170, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#cbd5e1', fontSize: 11, lineHeight: 1.5 }}>

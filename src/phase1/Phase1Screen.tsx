@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CameraPreview, CameraPreviewHandle } from '../components/CameraPreview'
+import { CameraSettingsDrawer } from '../components/CameraSettingsDrawer'
 import { CameraTestDrawer } from '../components/CameraTestDrawer'
 import { CaptureMetadataOverlay } from '../components/CaptureMetadataOverlay'
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
@@ -16,7 +17,8 @@ import { deleteEligibleRemotePhotos, getRemoteCleanupReport, RemoteCleanupProgre
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
 import { CameraCapabilities, CameraDeviceInfo, CameraTestConstraintSet, CaptureDiagnostics } from '../adapters/camera'
-import { runCameraProbe, formatProbeReport, summarizeProbeForLog } from '../adapters/cameraProbe'
+import { runCameraProbe, summarizeProbeForLog } from '../adapters/cameraProbe'
+import { buildCameraTestLogText, formatCameraTestLogEntry } from '../adapters/cameraTestLog'
 import { supabase } from '../lib/supabase'
 import { APP_NAME, SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
 import { loadCameraPermissionGranted, saveCameraPermissionGranted } from '../lib/cameraPermission'
@@ -51,51 +53,56 @@ interface ExtendedMediaTrackCapabilities extends MediaTrackCapabilities {
   iso?: { min: number; max: number; step: number }
 }
 
-function formatCameraTestValue(value: number | string | boolean | undefined | null): string {
-  if (value === undefined || value === null) return '?'
-  if (typeof value === 'number') {
-    if (Number.isNaN(value)) return '?'
-    if (Math.abs(value) >= 10) return value.toFixed(0)
-    if (Math.abs(value) >= 1) return value.toFixed(2)
-    return value.toFixed(3)
+const QUICK_ZOOM_PRESETS = [0.5, 1, 2, 3, 5]
+
+function getQuickZoomPresets(capabilities: CameraCapabilities | null): number[] {
+  const raw = capabilities?.raw as ExtendedMediaTrackCapabilities | null
+  const zoom = raw?.zoom
+  if (!zoom) {
+    return []
   }
-  return String(value)
+
+  const min = zoom.min ?? 0
+  const max = zoom.max ?? 0
+  const presets = QUICK_ZOOM_PRESETS.filter((preset) => preset >= min - 0.01 && preset <= max + 0.01)
+
+  if (presets.length === 0) {
+    return [min, max].filter((value, index, array) => Number.isFinite(value) && array.indexOf(value) === index)
+  }
+
+  return presets
 }
 
-function describeCameraTestSettings(settings: CameraCapabilities['trackSettings'] | null | undefined): string {
-  if (!settings) return 'settings unavailable'
-  const parts = [
-    `${settings.width ?? '?'}x${settings.height ?? '?'}`,
-    `ratio=${formatCameraTestValue(settings.aspectRatio)}`,
-    `device=${settings.deviceId || '?'}`,
-    `facing=${settings.facingMode || '?'}`,
-    `zoom=${formatCameraTestValue(settings.zoom)}`,
-    `torch=${formatCameraTestValue(settings.torch)}`,
-    settings.focusMode ? `focus=${settings.focusMode}` : null,
-    `focusDistance=${formatCameraTestValue(settings.focusDistance)}`,
-    settings.exposureMode ? `exposure=${settings.exposureMode}` : null,
-    `exposureTime=${formatCameraTestValue(settings.exposureTime)}`,
-    `exposureCompensation=${formatCameraTestValue(settings.exposureCompensation)}`,
-    settings.whiteBalanceMode ? `wb=${settings.whiteBalanceMode}` : null,
-    `brightness=${formatCameraTestValue(settings.brightness)}`,
-    `contrast=${formatCameraTestValue(settings.contrast)}`,
-    `saturation=${formatCameraTestValue(settings.saturation)}`,
-    `sharpness=${formatCameraTestValue(settings.sharpness)}`,
-    `iso=${formatCameraTestValue(settings.iso)}`,
-  ].filter(Boolean)
-
-  return parts.join(' • ')
+function formatZoomPreset(value: number): string {
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}x`
 }
 
-function summarizeCameraTestConstraint(constraint: CameraTestConstraintSet): string {
-  const entries = Object.entries(constraint).map(([key, value]) => {
-    if (typeof value === 'object' && value !== null) {
-      return `${key}=${JSON.stringify(value)}`
-    }
-    return `${key}=${String(value)}`
-  })
+function isPresetActive(current: number | undefined, preset: number): boolean {
+  if (current === undefined || Number.isNaN(current)) return false
+  const tolerance = Math.max(0.03, preset * 0.08)
+  return Math.abs(current - preset) <= tolerance
+}
 
-  return entries.length > 0 ? entries.join(', ') : 'no constraints'
+function formatCameraDeviceLabel(label: string): string {
+  const normalized = label.trim()
+  const lower = normalized.toLowerCase()
+
+  if (lower.includes('back triple')) return 'Rear Triple'
+  if (lower.includes('back dual')) return 'Rear Dual'
+  if (lower.includes('back wide')) return 'Rear Wide'
+  if (lower.includes('back')) return 'Rear'
+  if (lower.includes('front')) return 'Front'
+
+  return normalized
+    .replace(/camera/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function formatWhiteBalanceLabel(mode: string): string {
+  if (mode === 'continuous') return 'WB Auto'
+  if (mode === 'manual') return 'WB Manual'
+  return `WB ${mode}`
 }
 
 const s: Record<string, React.CSSProperties> = {
@@ -467,7 +474,8 @@ const s: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
   },
   mobileCameraSession: {
-    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
     width: '100%',
     height: '100%',
     minHeight: '100dvh',
@@ -475,8 +483,9 @@ const s: Record<string, React.CSSProperties> = {
     background: '#000',
   },
   mobileCameraViewport: {
-    position: 'absolute',
-    inset: 0,
+    position: 'relative',
+    flex: '1 1 auto',
+    minHeight: 0,
     background: '#000',
     touchAction: 'none',
   },
@@ -554,19 +563,118 @@ const s: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
   },
   mobileCameraBottomBar: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 12,
+    position: 'relative',
     zIndex: 3,
     display: 'grid',
-    gap: 10,
+    gap: 8,
+    padding: '0 12px 10px',
   },
   mobileCaptureStatus: {
-    fontSize: 12,
+    fontSize: 11,
+    color: '#cbd5e1',
+    lineHeight: 1.35,
+  },
+  mobileQuickControls: {
+    display: 'grid',
+    gap: 8,
+    padding: 0,
+    background: 'transparent',
+  },
+  mobileQuickControlsTitle: {
+    fontSize: 10,
+    color: '#7f8ea3',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontWeight: 800,
+  },
+  mobileQuickSection: {
+    display: 'grid',
+    gap: 5,
+  },
+  mobileQuickSectionLabel: {
+    fontSize: 9,
+    color: '#7f8ea3',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    fontWeight: 800,
+  },
+  mobileQuickPillRow: {
+    display: 'flex',
+    gap: 5,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  mobileQuickPill: {
+    padding: '7px 10px',
+    borderRadius: 999,
+    border: '1px solid #262626',
+    background: '#141414',
     color: '#e5e7eb',
-    lineHeight: 1.45,
-    textShadow: '0 1px 2px rgba(0, 0, 0, 0.65)',
+    fontSize: 11,
+    fontWeight: 700,
+  },
+  mobileQuickPillActive: {
+    background: '#f2f2f2',
+    color: '#111',
+    borderColor: '#f2f2f2',
+  },
+  mobileQuickPillMuted: {
+    color: '#cbd5e1',
+  },
+  mobileQuickSelectorRow: {
+    display: 'grid',
+    gap: 4,
+  },
+  mobileQuickSelectorLabel: {
+    fontSize: 9,
+    color: '#7f8ea3',
+    textTransform: 'uppercase',
+    letterSpacing: 0.9,
+    fontWeight: 800,
+  },
+  mobileQuickSelectorGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+    gap: 8,
+  },
+  mobileQuickSelect: {
+    width: '100%',
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: '1px solid #262626',
+    background: '#141414',
+    color: '#eee',
+    fontSize: 12,
+  },
+  mobileQuickSubtleRow: {
+    display: 'grid',
+    gap: 6,
+  },
+  mobileQuickSplitRow: {
+    display: 'flex',
+    gap: 6,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  mobileQuickControlRow: {
+    display: 'grid',
+    gap: 8,
+  },
+  mobileQuickControlLabel: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    fontWeight: 700,
+  },
+  mobileQuickControlValueRow: {
+    display: 'flex',
+    gap: 8,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  mobileQuickRange: {
+    width: '100%',
   },
   mobileRatioRow: {
     display: 'grid',
@@ -584,8 +692,8 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 12,
   },
   mobilePrimaryButton: {
-    padding: '16px 12px',
-    fontSize: 17,
+    padding: '14px 12px',
+    fontSize: 16,
   },
   mobileFooter: {
     display: 'grid',
@@ -1284,6 +1392,10 @@ function MobileWorkspace({
   cameraPermissionRemembered,
   cameraState,
   capabilities,
+  cameraSettingsPreviewQuality,
+  cameraSettingsOpen,
+  cameraSettingsMessage,
+  cameraSettingsError,
   cameraTestOpen,
   cameraDevices,
   cameraTestMessage,
@@ -1304,16 +1416,20 @@ function MobileWorkspace({
   handlePreviewTouchStart,
   handlePreviewTouchMove,
   handlePreviewTouchEnd,
+  handleOpenCameraSettings,
+  handleCloseCameraSettings,
+  handleToggleCameraSettingsPreviewQuality,
+  handleSelectCameraSettingDevice,
+  handleApplyCameraSettingConstraint,
   handleOpenCameraTest,
   handleCloseCameraTest,
   handleSelectCameraDevice,
   handleApplyCameraTestConstraint,
   handleChangeCameraTestPreviewRatio,
-  handleToggleFullQualityPreview,
   cameraTestLogText,
   handleCopyCameraTestLog,
+  handleClearCameraTestLog,
   handleRunCameraProbe,
-  cameraTestFullQualityPreview,
   capturing,
   selectedStoreId,
   selectedBatchId,
@@ -1340,6 +1456,10 @@ function MobileWorkspace({
   cameraPermissionRemembered: boolean
   cameraState: CameraState
   capabilities: CameraCapabilities | null
+  cameraSettingsPreviewQuality: boolean
+  cameraSettingsOpen: boolean
+  cameraSettingsMessage: string
+  cameraSettingsError: string
   cameraTestOpen: boolean
   cameraDevices: CameraDeviceInfo[]
   cameraTestMessage: string
@@ -1360,16 +1480,20 @@ function MobileWorkspace({
   handlePreviewTouchStart: (event: React.TouchEvent<HTMLDivElement>) => void
   handlePreviewTouchMove: (event: React.TouchEvent<HTMLDivElement>) => void
   handlePreviewTouchEnd: () => void
+  handleOpenCameraSettings: () => void
+  handleCloseCameraSettings: () => void
+  handleToggleCameraSettingsPreviewQuality: () => void
+  handleSelectCameraSettingDevice: (deviceId: string) => Promise<void>
+  handleApplyCameraSettingConstraint: (constraint: CameraTestConstraintSet) => Promise<void>
   handleOpenCameraTest: () => void
   handleCloseCameraTest: () => void
   handleSelectCameraDevice: (deviceId: string) => void
   handleApplyCameraTestConstraint: (constraint: CameraTestConstraintSet) => Promise<void>
   handleChangeCameraTestPreviewRatio: (ratio: OutputRatio) => void
-  handleToggleFullQualityPreview: () => void
   cameraTestLogText: string
   handleCopyCameraTestLog: () => void
+  handleClearCameraTestLog: () => void
   handleRunCameraProbe: () => Promise<void>
-  cameraTestFullQualityPreview: boolean
   capturing: boolean
   selectedStoreId: string
   selectedBatchId: string
@@ -1389,6 +1513,16 @@ function MobileWorkspace({
   handleSyncBatch: () => Promise<void>
   setMobileMode: React.Dispatch<React.SetStateAction<'home' | 'camera'>>
 }) {
+  const rawCapabilities = capabilities?.raw as ExtendedMediaTrackCapabilities | null
+  const quickZoomPresets = useMemo(() => getQuickZoomPresets(capabilities), [capabilities])
+  const currentZoom = capabilities?.trackSettings?.zoom
+  const currentWhiteBalanceMode =
+    capabilities?.trackSettings?.whiteBalanceMode || rawCapabilities?.whiteBalanceMode?.[0] || ''
+  const availableWhiteBalanceModes = rawCapabilities?.whiteBalanceMode || []
+  const compactDeviceButtons = cameraDevices.length > 1 && cameraDevices.length <= 4 ? cameraDevices : []
+  const showDeviceSelector = cameraDevices.length > 1 && compactDeviceButtons.length === 0
+  const showWhiteBalanceSelector = availableWhiteBalanceModes.length > 0
+
   if (mobileMode === 'camera') {
     return (
       <div style={{ ...s.mobileScreen, padding: 0, maxWidth: 'none' }}>
@@ -1419,6 +1553,14 @@ function MobileWorkspace({
                   setMetadataOverlayOpen(false)
                   return
                 }
+                if (cameraSettingsOpen) {
+                  handleCloseCameraSettings()
+                  return
+                }
+                if (cameraTestOpen) {
+                  handleCloseCameraTest()
+                  return
+                }
                 setMobileMode('home')
               }}
             >
@@ -1436,7 +1578,15 @@ function MobileWorkspace({
             <div style={s.mobileTopActions}>
               <button
                 style={{ ...s.button, ...s.buttonSmall, ...s.mobileTopButton }}
-                onClick={() => setMetadataOverlayOpen((open) => !open)}
+                onClick={() => {
+                  if (cameraSettingsOpen) {
+                    handleCloseCameraSettings()
+                  }
+                  if (cameraTestOpen) {
+                    handleCloseCameraTest()
+                  }
+                  setMetadataOverlayOpen((open) => !open)
+                }}
               >
                 Details
               </button>
@@ -1462,22 +1612,141 @@ function MobileWorkspace({
 
           <div style={s.mobileCameraBottomBar}>
             <div style={s.mobileCaptureStatus}>{statusMsg}</div>
-            <div style={s.mobileRatioRow}>
-              {(['full', '1:1', '4:3', '16:9'] as OutputRatio[]).map((ratio) => (
-                <button
-                  key={ratio}
-                  style={{
-                    ...s.button,
-                    ...s.mobileSmallButton,
-                    ...(selectedRatio === ratio ? s.buttonPrimary : {}),
-                  }}
-                  onClick={() => handleRatioChange(ratio)}
-                >
-                  {ratio === 'full' ? 'Full' : ratio}
-                </button>
-              ))}
-            </div>
+            <div style={s.mobileQuickControls}>
+              <div style={s.mobileQuickControlsTitle}>Live controls</div>
 
+              <div style={s.mobileQuickSection}>
+                <div style={s.mobileQuickSectionLabel}>Aspect ratio</div>
+                <div style={s.mobileQuickPillRow}>
+                  {(['full', '1:1', '4:3', '16:9'] as OutputRatio[]).map((ratio) => (
+                    <button
+                      key={ratio}
+                      style={{
+                        ...s.mobileQuickPill,
+                        ...(selectedRatio === ratio ? s.mobileQuickPillActive : {}),
+                      }}
+                      onClick={() => handleRatioChange(ratio)}
+                    >
+                      {ratio === 'full' ? 'Full' : ratio}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {quickZoomPresets.length > 0 && (
+                <div style={s.mobileQuickSection}>
+                  <div style={s.mobileQuickSectionLabel}>Zoom</div>
+                  <div style={s.mobileQuickPillRow}>
+                    {quickZoomPresets.map((preset) => (
+                      <button
+                        key={preset}
+                        style={{
+                          ...s.mobileQuickPill,
+                          ...(isPresetActive(currentZoom, preset) ? s.mobileQuickPillActive : {}),
+                        }}
+                        onClick={() => {
+                          void handleApplyCameraSettingConstraint({ zoom: preset })
+                        }}
+                      >
+                        {formatZoomPreset(preset)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={s.mobileQuickSubtleRow}>
+                <div style={s.mobileQuickSplitRow}>
+                  {rawCapabilities?.torch && (
+                    <button
+                      style={{
+                        ...s.mobileQuickPill,
+                        ...(capabilities?.trackSettings?.torch ? s.mobileQuickPillActive : {}),
+                      }}
+                      onClick={() => {
+                        void handleApplyCameraSettingConstraint({ torch: !capabilities?.trackSettings?.torch })
+                      }}
+                    >
+                      {capabilities?.trackSettings?.torch ? 'Torch on' : 'Torch off'}
+                    </button>
+                  )}
+
+                  {compactDeviceButtons.length > 0 ? (
+                    compactDeviceButtons.map((device) => {
+                      const active = capabilities?.trackSettings?.deviceId === device.deviceId
+                      const label = formatCameraDeviceLabel(device.label || device.deviceId)
+                      return (
+                        <button
+                          key={device.deviceId}
+                          style={{
+                            ...s.mobileQuickPill,
+                            ...(active ? s.mobileQuickPillActive : {}),
+                          }}
+                          onClick={() => {
+                            void handleSelectCameraSettingDevice(device.deviceId)
+                          }}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })
+                  ) : null}
+                  <button style={s.mobileQuickPill} onClick={handleOpenCameraSettings}>
+                    More
+                  </button>
+                </div>
+
+                {(showDeviceSelector || showWhiteBalanceSelector) && (
+                  <div
+                    style={{
+                      ...s.mobileQuickSelectorGrid,
+                      gridTemplateColumns:
+                        showDeviceSelector && showWhiteBalanceSelector
+                          ? 'minmax(0, 1fr) minmax(0, 1fr)'
+                          : 'minmax(0, 1fr)',
+                    }}
+                  >
+                    {showDeviceSelector && (
+                      <div style={s.mobileQuickSelectorRow}>
+                        <div style={s.mobileQuickSelectorLabel}>Camera</div>
+                        <select
+                          style={s.mobileQuickSelect}
+                          value={capabilities?.trackSettings?.deviceId || ''}
+                          onChange={(event) => {
+                            void handleSelectCameraSettingDevice(event.target.value)
+                          }}
+                        >
+                          {cameraDevices.map((device) => (
+                            <option key={device.deviceId} value={device.deviceId}>
+                              {formatCameraDeviceLabel(device.label || device.deviceId)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {showWhiteBalanceSelector && (
+                      <div style={s.mobileQuickSelectorRow}>
+                        <div style={s.mobileQuickSelectorLabel}>White balance</div>
+                        <select
+                          style={s.mobileQuickSelect}
+                          value={currentWhiteBalanceMode}
+                          onChange={(event) => {
+                            void handleApplyCameraSettingConstraint({ whiteBalanceMode: event.target.value })
+                          }}
+                        >
+                          {availableWhiteBalanceModes.map((mode) => (
+                            <option key={mode} value={mode}>
+                              {formatWhiteBalanceLabel(mode)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
             <div style={s.mobileCaptureActions}>
               <button
                 style={{ ...s.button, ...s.buttonPrimary, ...s.mobilePrimaryButton }}
@@ -1514,19 +1783,29 @@ function MobileWorkspace({
             onClose={() => setMetadataOverlayOpen(false)}
           />
 
+          <CameraSettingsDrawer
+            open={cameraSettingsOpen}
+            capabilities={capabilities}
+            previewQualityEnabled={cameraSettingsPreviewQuality}
+            onClose={handleCloseCameraSettings}
+            onTogglePreviewQuality={handleToggleCameraSettingsPreviewQuality}
+            onApplyConstraint={handleApplyCameraSettingConstraint}
+            statusMessage={cameraSettingsMessage}
+            errorMessage={cameraSettingsError}
+          />
+
           <CameraTestDrawer
             open={cameraTestOpen}
             capabilities={capabilities}
             devices={cameraDevices}
             previewRatio={cameraPreviewRatio}
-            fullQualityPreviewEnabled={cameraTestFullQualityPreview}
             logText={cameraTestLogText}
             onClose={handleCloseCameraTest}
             onChangePreviewRatio={handleChangeCameraTestPreviewRatio}
-            onToggleFullQualityPreview={handleToggleFullQualityPreview}
             onSelectDevice={(deviceId) => { void handleSelectCameraDevice(deviceId) }}
             onApplyConstraint={(constraint) => handleApplyCameraTestConstraint(constraint)}
             onCopyLog={handleCopyCameraTestLog}
+            onClearLog={handleClearCameraTestLog}
             onRunProbe={handleRunCameraProbe}
             statusMessage={cameraTestMessage}
             errorMessage={cameraTestError}
@@ -1614,12 +1893,15 @@ export function WorkspaceScreen() {
   const [itemWeight, setItemWeight] = useState('')
   const [itemDimensions, setItemDimensions] = useState('')
   const [metadataOverlayOpen, setMetadataOverlayOpen] = useState(false)
+  const [cameraSettingsOpen, setCameraSettingsOpen] = useState(false)
+  const [cameraSettingsMessage, setCameraSettingsMessage] = useState('Open Camera Settings to adjust live controls.')
+  const [cameraSettingsError, setCameraSettingsError] = useState('')
+  const [cameraSettingsPreviewQuality, setCameraSettingsPreviewQuality] = useState(false)
   const [cameraTestOpen, setCameraTestOpen] = useState(false)
   const [cameraDevices, setCameraDevices] = useState<CameraDeviceInfo[]>([])
   const [cameraTestMessage, setCameraTestMessage] = useState('Open Camera Test to inspect controls.')
   const [cameraTestError, setCameraTestError] = useState('')
   const [cameraTestPreviewRatio, setCameraTestPreviewRatio] = useState<OutputRatio>('full')
-  const [cameraTestFullQualityPreview, setCameraTestFullQualityPreview] = useState(false)
   const [cameraTestLogEntries, setCameraTestLogEntries] = useState<string[]>([])
   const [capturing, setCapturing] = useState(false)
   const [statusMsg, setStatusMsg] = useState('Workspace ready')
@@ -1635,7 +1917,6 @@ export function WorkspaceScreen() {
   const [uploading, setUploading] = useState(false)
   const [remoteCleaning, setRemoteCleaning] = useState(false)
   const [cleanupMessage, setCleanupMessage] = useState('')
-  const cameraTestPreviewBaselineRef = useRef<CameraCapabilities['trackSettings'] | null>(null)
 
   useEffect(() => {
     if (!isMobile) {
@@ -1831,6 +2112,7 @@ export function WorkspaceScreen() {
     try {
       await ensureCurrentItem()
       setMetadataOverlayOpen(false)
+      setCameraSettingsOpen(false)
       setCameraTestOpen(false)
       setMobileMode('camera')
     } catch (err) {
@@ -2001,6 +2283,8 @@ export function WorkspaceScreen() {
       setStatusMsg('Capture session saved locally')
       setMobileMode('home')
       setMetadataOverlayOpen(false)
+      setCameraSettingsOpen(false)
+      setCameraSettingsPreviewQuality(false)
       setCameraTestOpen(false)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -2023,6 +2307,8 @@ export function WorkspaceScreen() {
       setItemWeight('')
       setItemDimensions('')
       setMetadataOverlayOpen(false)
+      setCameraSettingsOpen(false)
+      setCameraSettingsPreviewQuality(false)
       setCameraTestOpen(false)
       setStatusMsg('Workspace data reset')
     } catch (err) {
@@ -2210,47 +2496,86 @@ export function WorkspaceScreen() {
     }
   }, [])
 
+  const getCameraTestLogContext = useCallback(() => {
+    const videoState = cameraRef.current?.getVideoState() ?? null
+    const activeTrack = cameraRef.current?.getActiveTrack() ?? null
+
+    return {
+      videoState,
+      trackState: activeTrack
+        ? {
+            readyState: activeTrack.readyState,
+            muted: activeTrack.muted,
+            enabled: activeTrack.enabled,
+            label: activeTrack.label,
+          }
+        : null,
+      settings: capabilities?.trackSettings ?? null,
+      ratio: cameraTestOpen ? cameraTestPreviewRatio : selectedRatio,
+    }
+  }, [cameraRef, cameraTestOpen, cameraTestPreviewRatio, capabilities?.trackSettings, selectedRatio])
+
   const appendCameraTestLog = useCallback((entry: string) => {
-    const line = `[${new Date().toISOString()}] ${entry}`
-    setCameraTestLogEntries((prev) => [...prev.slice(-59), line])
+    setCameraTestLogEntries((prev) => [...prev.slice(-59), entry])
   }, [])
 
   const handleCopyCameraTestLog = useCallback(() => {
-    void handleCopyText(cameraTestLogEntries.join('\n\n'), 'Camera test log')
+    void handleCopyText(buildCameraTestLogText(cameraTestLogEntries), 'Camera logs')
   }, [cameraTestLogEntries, handleCopyText])
+
+  const handleClearCameraTestLog = useCallback(() => {
+    setCameraTestLogEntries([])
+    setCameraTestMessage('Camera logs cleared.')
+    setCameraTestError('')
+  }, [])
 
   const handleRunCameraProbe = useCallback(async () => {
     const track = cameraRef.current?.getActiveTrack() ?? null
     setCameraTestMessage('Running capability probe…')
     setCameraTestError('')
-    appendCameraTestLog('Capability probe started')
+    const beforeContext = getCameraTestLogContext()
+    appendCameraTestLog(formatCameraTestLogEntry({
+      action: 'probe',
+      outcome: 'ok',
+      ratio: beforeContext.ratio,
+      videoState: beforeContext.videoState,
+      trackState: beforeContext.trackState,
+      beforeSettings: beforeContext.settings,
+      afterSettings: beforeContext.settings,
+      note: 'probe started',
+    }))
     try {
       const result = await runCameraProbe(track)
       const summary = summarizeProbeForLog(result)
-      const report = formatProbeReport(result)
-      appendCameraTestLog(`Capability probe complete | ${summary}`)
-      appendCameraTestLog(report)
-
-      let clipboardOk = false
-      try {
-        await navigator.clipboard.writeText(report)
-        clipboardOk = true
-      } catch {
-        // clipboard silently unavailable (e.g. iOS without user-gesture context)
-      }
-
-      setCameraTestMessage(
-        clipboardOk
-          ? 'Probe complete — report in log and copied to clipboard.'
-          : 'Probe complete — report in log. Tap Copy log to copy.',
-      )
+      const afterContext = getCameraTestLogContext()
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action: 'probe',
+        outcome: 'ok',
+        ratio: afterContext.ratio,
+        videoState: afterContext.videoState,
+        trackState: afterContext.trackState,
+        beforeSettings: beforeContext.settings,
+        afterSettings: afterContext.settings,
+        note: summary,
+      }))
+      setCameraTestMessage('Probe complete — summary added to camera logs.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setCameraTestError(msg)
       setCameraTestMessage('Probe failed.')
-      appendCameraTestLog(`Capability probe failed | error=${msg}`)
+      const context = getCameraTestLogContext()
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action: 'probe',
+        outcome: 'failed',
+        ratio: context.ratio,
+        videoState: context.videoState,
+        trackState: context.trackState,
+        beforeSettings: context.settings,
+        afterSettings: context.settings,
+        error: msg,
+      }))
     }
-  }, [appendCameraTestLog, cameraRef])
+  }, [appendCameraTestLog, cameraRef, getCameraTestLogContext])
 
   const handleCameraStarted = useCallback(() => {
     setCameraState('active')
@@ -2272,162 +2597,403 @@ export function WorkspaceScreen() {
     }
   }, [])
 
+  const applyCameraConstraint = useCallback(async (constraint: CameraTestConstraintSet) => {
+    if (!cameraRef.current) {
+      throw new Error('Camera not started')
+    }
+
+    await cameraRef.current.applyTestConstraints(constraint)
+    return refreshCameraTestState()
+  }, [refreshCameraTestState])
+
+  const switchCameraDevice = useCallback(async (deviceId: string) => {
+    if (!cameraRef.current) {
+      throw new Error('Camera not started')
+    }
+
+    await cameraRef.current.switchCameraDevice(deviceId)
+    return refreshCameraTestState()
+  }, [refreshCameraTestState])
+
   const handleOpenCameraTest = useCallback(() => {
     setCameraTestError('')
     setCameraTestMessage('Temporary controls are open.')
     setMetadataOverlayOpen(false)
+    setCameraSettingsOpen(false)
     setCameraTestPreviewRatio(selectedRatio)
     setCameraTestOpen(true)
-    appendCameraTestLog(`Camera Test opened | snapshot=${describeCameraTestSettings(capabilities?.trackSettings)}`)
+    const context = getCameraTestLogContext()
+    appendCameraTestLog(formatCameraTestLogEntry({
+      action: 'open-test',
+      outcome: 'ok',
+      ratio: context.ratio,
+      videoState: context.videoState,
+      trackState: context.trackState,
+      beforeSettings: context.settings,
+      afterSettings: context.settings,
+      note: 'test controls opened',
+    }))
     void refreshCameraTestState()
-  }, [appendCameraTestLog, capabilities?.trackSettings, refreshCameraTestState, selectedRatio])
+  }, [appendCameraTestLog, getCameraTestLogContext, refreshCameraTestState, selectedRatio])
 
   const handleCloseCameraTest = useCallback(() => {
     setCameraTestOpen(false)
     setCameraTestError('')
     setCameraTestMessage('Camera Test closed.')
-    appendCameraTestLog('Camera Test closed')
-  }, [appendCameraTestLog])
+    const context = getCameraTestLogContext()
+    appendCameraTestLog(formatCameraTestLogEntry({
+      action: 'close-test',
+      outcome: 'ok',
+      ratio: context.ratio,
+      videoState: context.videoState,
+      trackState: context.trackState,
+      beforeSettings: context.settings,
+      afterSettings: context.settings,
+    }))
+  }, [appendCameraTestLog, getCameraTestLogContext])
+
+  const handleOpenCameraSettings = useCallback(() => {
+    setCameraSettingsError('')
+    setCameraSettingsMessage('Camera settings open.')
+    setMetadataOverlayOpen(false)
+    setCameraTestOpen(false)
+    setCameraSettingsOpen(true)
+  }, [])
+
+  const handleCloseCameraSettings = useCallback(() => {
+    setCameraSettingsOpen(false)
+    setCameraSettingsError('')
+    setCameraSettingsMessage('Camera settings closed.')
+  }, [])
+
+  const handleToggleCameraSettingsPreviewQuality = useCallback(() => {
+    setCameraSettingsPreviewQuality((enabled) => {
+      const next = !enabled
+      setCameraSettingsMessage(next ? 'Full-quality preview test enabled.' : 'Standard preview restored.')
+      return next
+    })
+    setCameraSettingsError('')
+  }, [])
 
   const handleApplyCameraTestConstraint = useCallback(async (constraint: CameraTestConstraintSet) => {
     if (!cameraRef.current) {
       setCameraTestError('Camera not started')
       setCameraTestMessage('Camera setting failed.')
-      appendCameraTestLog(`Apply failed | requested=${summarizeCameraTestConstraint(constraint)} | error=Camera not started`)
+      const context = getCameraTestLogContext()
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action: 'apply-constraint',
+        outcome: 'failed',
+        ratio: context.ratio,
+        requested: JSON.stringify(constraint),
+        videoState: context.videoState,
+        trackState: context.trackState,
+        beforeSettings: context.settings,
+        afterSettings: context.settings,
+        error: 'Camera not started',
+      }))
       return
     }
 
     try {
       setCameraTestError('')
+      const supportedKeys = new Set(['zoom', 'torch', 'whiteBalanceMode', 'focusDistance', 'pointsOfInterest', 'focusMode'])
+      const constraintKeys = Object.keys(constraint).filter((key) => constraint[key as keyof CameraTestConstraintSet] !== undefined)
+      const unsupportedKeys = constraintKeys.filter((key) => !supportedKeys.has(key) && key !== 'aspectRatio')
+
+      if (unsupportedKeys.length > 0) {
+        const context = getCameraTestLogContext()
+        const msg = `Unsupported test control(s): ${unsupportedKeys.join(', ')}`
+        setCameraTestError(msg)
+        setCameraTestMessage('Camera setting failed.')
+        appendCameraTestLog(formatCameraTestLogEntry({
+          action: 'apply-constraint',
+          outcome: 'skipped',
+          ratio: context.ratio,
+          requested: JSON.stringify(constraint),
+          videoState: context.videoState,
+          trackState: context.trackState,
+          beforeSettings: context.settings,
+          afterSettings: context.settings,
+          note: msg,
+        }))
+        return
+      }
+
       if ('aspectRatio' in constraint && constraint.aspectRatio !== undefined) {
-        appendCameraTestLog(
-          `Aspect ratio preview only | requested=${summarizeCameraTestConstraint(constraint)} | before=${describeCameraTestSettings(capabilities?.trackSettings)}`,
-        )
+        const beforeContext = getCameraTestLogContext()
+        appendCameraTestLog(formatCameraTestLogEntry({
+          action: 'ratio-preview',
+          outcome: 'ok',
+          ratio: constraint.aspectRatio === 1 ? '1:1' : 'full',
+          requested: JSON.stringify(constraint),
+          videoState: beforeContext.videoState,
+          trackState: beforeContext.trackState,
+          beforeSettings: beforeContext.settings,
+          afterSettings: beforeContext.settings,
+          note: 'preview-only; no stream constraint applied',
+        }))
         setCameraTestMessage('Aspect ratio preview only.')
         return
       }
 
-      const before = describeCameraTestSettings(capabilities?.trackSettings)
-      appendCameraTestLog(`Apply requested | requested=${summarizeCameraTestConstraint(constraint)} | before=${before}`)
-      await cameraRef.current.applyTestConstraints(constraint)
-      const refreshed = await refreshCameraTestState()
-      const after = describeCameraTestSettings(refreshed?.trackSettings ?? cameraRef.current.getCapabilities()?.trackSettings)
+      const beforeContext = getCameraTestLogContext()
+      const refreshed = await applyCameraConstraint(constraint)
+      const afterContext = {
+        ...getCameraTestLogContext(),
+        settings: refreshed?.trackSettings ?? cameraRef.current.getCapabilities()?.trackSettings ?? null,
+      }
+      const action = typeof constraint.zoom === 'number'
+        ? 'zoom'
+        : typeof constraint.torch === 'boolean'
+          ? 'torch'
+          : typeof constraint.whiteBalanceMode === 'string'
+            ? 'whiteBalance'
+          : typeof constraint.focusDistance === 'number'
+              ? 'focusDistance'
+              : constraint.pointsOfInterest
+                ? 'focusTap'
+                : typeof constraint.focusMode === 'string'
+                  ? 'focusMode'
+              : 'apply-constraint'
 
       if (typeof constraint.torch === 'boolean') {
         const verified = refreshed?.trackSettings?.torch === constraint.torch
         if (!verified) {
-          const msg = `Torch request ignored by browser (requested ${constraint.torch ? 'on' : 'off'}, got ${formatCameraTestValue(refreshed?.trackSettings?.torch)})`
+          const msg = `Torch request ignored by browser (requested ${constraint.torch ? 'on' : 'off'}, got ${String(refreshed?.trackSettings?.torch ?? '?')})`
           setCameraTestError(msg)
           setCameraTestMessage('Camera setting failed.')
-          appendCameraTestLog(`Apply failed | requested=${summarizeCameraTestConstraint(constraint)} | after=${after} | error=${msg}`)
+          appendCameraTestLog(formatCameraTestLogEntry({
+            action,
+            outcome: 'failed',
+            ratio: afterContext.ratio,
+            requested: JSON.stringify(constraint),
+            videoState: afterContext.videoState,
+            trackState: afterContext.trackState,
+            beforeSettings: beforeContext.settings,
+            afterSettings: afterContext.settings,
+            error: msg,
+          }))
           return
         }
       }
 
+      if (typeof constraint.zoom === 'number' && refreshed?.trackSettings?.zoom !== constraint.zoom) {
+        const msg = `Zoom request not reflected in getSettings (requested ${constraint.zoom}, got ${refreshed?.trackSettings?.zoom ?? '?'})`
+        setCameraTestError(msg)
+        setCameraTestMessage('Camera setting failed.')
+        appendCameraTestLog(formatCameraTestLogEntry({
+          action,
+          outcome: 'failed',
+          ratio: afterContext.ratio,
+          requested: JSON.stringify(constraint),
+          videoState: afterContext.videoState,
+          trackState: afterContext.trackState,
+          beforeSettings: beforeContext.settings,
+          afterSettings: afterContext.settings,
+          error: msg,
+        }))
+        return
+      }
+
+      if (typeof constraint.whiteBalanceMode === 'string' && refreshed?.trackSettings?.whiteBalanceMode !== constraint.whiteBalanceMode) {
+        const msg = `White balance request not reflected in getSettings (requested ${constraint.whiteBalanceMode}, got ${refreshed?.trackSettings?.whiteBalanceMode ?? '?'})`
+        setCameraTestError(msg)
+        setCameraTestMessage('Camera setting failed.')
+        appendCameraTestLog(formatCameraTestLogEntry({
+          action,
+          outcome: 'failed',
+          ratio: afterContext.ratio,
+          requested: JSON.stringify(constraint),
+          videoState: afterContext.videoState,
+          trackState: afterContext.trackState,
+          beforeSettings: beforeContext.settings,
+          afterSettings: afterContext.settings,
+          error: msg,
+        }))
+        return
+      }
+
       setCameraTestMessage('Applied camera test setting.')
-      appendCameraTestLog(`Apply success | requested=${summarizeCameraTestConstraint(constraint)} | after=${after}`)
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action,
+        outcome: 'ok',
+        ratio: afterContext.ratio,
+        requested: JSON.stringify(constraint),
+        videoState: afterContext.videoState,
+        trackState: afterContext.trackState,
+        beforeSettings: beforeContext.settings,
+        afterSettings: afterContext.settings,
+      }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setCameraTestError(msg)
       setCameraTestMessage('Camera setting failed.')
-      appendCameraTestLog(`Apply failed | requested=${summarizeCameraTestConstraint(constraint)} | error=${msg}`)
+      const context = getCameraTestLogContext()
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action: 'apply-constraint',
+        outcome: 'failed',
+        ratio: context.ratio,
+        requested: JSON.stringify(constraint),
+        videoState: context.videoState,
+        trackState: context.trackState,
+        beforeSettings: context.settings,
+        afterSettings: context.settings,
+        error: msg,
+      }))
     }
-  }, [appendCameraTestLog, capabilities?.trackSettings, refreshCameraTestState])
+  }, [appendCameraTestLog, applyCameraConstraint, getCameraTestLogContext])
+
+  const handleApplyCameraSettingConstraint = useCallback(async (constraint: CameraTestConstraintSet) => {
+    if (!cameraRef.current) {
+      setCameraSettingsError('Camera not started')
+      setCameraSettingsMessage('Camera setting failed.')
+      return
+    }
+
+    try {
+      setCameraSettingsError('')
+      const refreshed = await applyCameraConstraint(constraint)
+      const afterSettings = refreshed?.trackSettings ?? cameraRef.current.getCapabilities()?.trackSettings ?? null
+
+      if (typeof constraint.torch === 'boolean' && afterSettings?.torch !== constraint.torch) {
+        const msg = `Torch request ignored by browser (requested ${constraint.torch ? 'on' : 'off'}, got ${String(afterSettings?.torch ?? '?')})`
+        setCameraSettingsError(msg)
+        setCameraSettingsMessage('Camera setting failed.')
+        return
+      }
+
+      if (typeof constraint.zoom === 'number' && afterSettings?.zoom !== constraint.zoom) {
+        const msg = `Zoom request not reflected in getSettings (requested ${constraint.zoom}, got ${afterSettings?.zoom ?? '?'})`
+        setCameraSettingsError(msg)
+        setCameraSettingsMessage('Camera setting failed.')
+        return
+      }
+
+      if (typeof constraint.whiteBalanceMode === 'string' && afterSettings?.whiteBalanceMode !== constraint.whiteBalanceMode) {
+        const msg = `White balance request not reflected in getSettings (requested ${constraint.whiteBalanceMode}, got ${afterSettings?.whiteBalanceMode ?? '?'})`
+        setCameraSettingsError(msg)
+        setCameraSettingsMessage('Camera setting failed.')
+        return
+      }
+
+      if (typeof constraint.focusDistance === 'number' && afterSettings?.focusDistance !== constraint.focusDistance) {
+        const msg = `Focus distance request not reflected in getSettings (requested ${constraint.focusDistance}, got ${afterSettings?.focusDistance ?? '?'})`
+        setCameraSettingsError(msg)
+        setCameraSettingsMessage('Camera setting failed.')
+        return
+      }
+
+      setCameraSettingsMessage('Applied camera setting.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCameraSettingsError(msg)
+      setCameraSettingsMessage('Camera setting failed.')
+    }
+  }, [applyCameraConstraint, cameraRef])
 
   const handleSelectCameraDevice = useCallback(async (deviceId: string) => {
     if (!cameraRef.current) {
       setCameraTestError('Camera not started')
       setCameraTestMessage('Device switch failed.')
-      appendCameraTestLog(`Device switch failed | requested=${deviceId} | error=Camera not started`)
+      const context = getCameraTestLogContext()
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action: 'device-switch',
+        outcome: 'failed',
+        ratio: context.ratio,
+        requested: deviceId,
+        videoState: context.videoState,
+        trackState: context.trackState,
+        beforeSettings: context.settings,
+        afterSettings: context.settings,
+        error: 'Camera not started',
+      }))
       return
     }
 
     try {
       setCameraTestError('')
       setCameraTestMessage('Switching camera device…')
-      appendCameraTestLog(`Device switch requested | requested=${deviceId} | before=${describeCameraTestSettings(capabilities?.trackSettings)}`)
-      await cameraRef.current.switchCameraDevice(deviceId)
-      const refreshed = await refreshCameraTestState()
+      const beforeContext = getCameraTestLogContext()
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action: 'device-switch',
+        outcome: 'ok',
+        ratio: beforeContext.ratio,
+        requested: deviceId,
+        videoState: beforeContext.videoState,
+        trackState: beforeContext.trackState,
+        beforeSettings: beforeContext.settings,
+        afterSettings: beforeContext.settings,
+        note: 'switch requested',
+      }))
+      const refreshed = await switchCameraDevice(deviceId)
       setCameraTestMessage('Camera device switched.')
-      appendCameraTestLog(`Device switch success | requested=${deviceId} | after=${describeCameraTestSettings(refreshed?.trackSettings ?? cameraRef.current.getCapabilities()?.trackSettings)}`)
+      const afterContext = {
+        ...getCameraTestLogContext(),
+        settings: refreshed?.trackSettings ?? cameraRef.current.getCapabilities()?.trackSettings ?? null,
+      }
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action: 'device-switch',
+        outcome: 'ok',
+        ratio: afterContext.ratio,
+        requested: deviceId,
+        videoState: afterContext.videoState,
+        trackState: afterContext.trackState,
+        beforeSettings: beforeContext.settings,
+        afterSettings: afterContext.settings,
+        note: 'switch complete',
+      }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setCameraTestError(msg)
       setCameraTestMessage('Device switch failed.')
-      appendCameraTestLog(`Device switch failed | requested=${deviceId} | error=${msg}`)
+      const context = getCameraTestLogContext()
+      appendCameraTestLog(formatCameraTestLogEntry({
+        action: 'device-switch',
+        outcome: 'failed',
+        ratio: context.ratio,
+        requested: deviceId,
+        videoState: context.videoState,
+        trackState: context.trackState,
+        beforeSettings: context.settings,
+        afterSettings: context.settings,
+        error: msg,
+      }))
     }
-  }, [appendCameraTestLog, capabilities?.trackSettings, refreshCameraTestState])
+  }, [appendCameraTestLog, getCameraTestLogContext, refreshCameraTestState, switchCameraDevice])
+
+  const handleSelectCameraSettingDevice = useCallback(async (deviceId: string) => {
+    if (!cameraRef.current) {
+      setCameraSettingsError('Camera not started')
+      setCameraSettingsMessage('Device switch failed.')
+      return
+    }
+
+    try {
+      setCameraSettingsError('')
+      setCameraSettingsMessage('Switching camera device…')
+      await switchCameraDevice(deviceId)
+      setCameraSettingsMessage('Camera device switched.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCameraSettingsError(msg)
+      setCameraSettingsMessage('Device switch failed.')
+    }
+  }, [switchCameraDevice])
 
   const handleChangeCameraTestPreviewRatio = useCallback((ratio: OutputRatio) => {
     setCameraTestPreviewRatio(ratio)
-    appendCameraTestLog(`Preview ratio changed | requested=${ratio} | preview only | current=${describeCameraTestSettings(capabilities?.trackSettings)}`)
-  }, [appendCameraTestLog, capabilities?.trackSettings])
-
-  const handleToggleFullQualityPreview = useCallback(async () => {
-    if (!cameraRef.current) {
-      setCameraTestError('Camera not started')
-      setCameraTestMessage('Full-quality preview failed.')
-      appendCameraTestLog('Full-quality preview toggle failed | error=Camera not started')
-      return
-    }
-
-    const nextEnabled = !cameraTestFullQualityPreview
-    const currentCaps = cameraRef.current.getCapabilities() ?? capabilities
-    const currentSettings = currentCaps?.trackSettings ?? null
-
-    if (nextEnabled) {
-      const raw = currentCaps?.raw as ExtendedMediaTrackCapabilities | null
-      const maxWidth = raw?.width?.max ?? currentSettings?.width
-      const maxHeight = raw?.height?.max ?? currentSettings?.height
-      if (!maxWidth || !maxHeight) {
-        const msg = 'Full-quality preview not supported by this browser.'
-        setCameraTestError(msg)
-        setCameraTestMessage('Full-quality preview unavailable.')
-        appendCameraTestLog(`Full-quality preview unavailable | current=${describeCameraTestSettings(currentSettings)}`)
-        return
-      }
-
-      cameraTestPreviewBaselineRef.current = currentSettings ? { ...currentSettings } : null
-      appendCameraTestLog(`Full-quality preview requested ON | before=${describeCameraTestSettings(currentSettings)} | target=${maxWidth}x${maxHeight}`)
-      try {
-        await handleApplyCameraTestConstraint({
-          width: { ideal: maxWidth },
-          height: { ideal: maxHeight },
-        })
-        setCameraTestFullQualityPreview(true)
-        appendCameraTestLog(`Full-quality preview enabled | after=${describeCameraTestSettings(cameraRef.current.getCapabilities()?.trackSettings)}`)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        setCameraTestError(msg)
-        setCameraTestMessage('Full-quality preview failed.')
-        appendCameraTestLog(`Full-quality preview enable failed | error=${msg}`)
-      }
-      return
-    }
-
-    const baseline = cameraTestPreviewBaselineRef.current
-    if (!baseline?.width || !baseline?.height) {
-      setCameraTestFullQualityPreview(false)
-      setCameraTestMessage('Full-quality preview off.')
-      appendCameraTestLog(`Full-quality preview requested OFF | before=${describeCameraTestSettings(currentSettings)} | note=no baseline available`)
-      return
-    }
-
-    appendCameraTestLog(`Full-quality preview requested OFF | before=${describeCameraTestSettings(currentSettings)} | target=${baseline.width}x${baseline.height}`)
-    try {
-      await handleApplyCameraTestConstraint({
-        width: { ideal: baseline.width },
-        height: { ideal: baseline.height },
-      })
-      setCameraTestFullQualityPreview(false)
-      appendCameraTestLog(`Full-quality preview disabled | after=${describeCameraTestSettings(cameraRef.current.getCapabilities()?.trackSettings)}`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setCameraTestError(msg)
-      setCameraTestMessage('Full-quality preview failed.')
-      appendCameraTestLog(`Full-quality preview disable failed | error=${msg}`)
-    }
-  }, [appendCameraTestLog, capabilities, cameraRef, cameraTestFullQualityPreview, handleApplyCameraTestConstraint])
+    const context = getCameraTestLogContext()
+    appendCameraTestLog(formatCameraTestLogEntry({
+      action: 'ratio-preview',
+      outcome: 'ok',
+      ratio,
+      videoState: context.videoState,
+      trackState: context.trackState,
+      beforeSettings: context.settings,
+      afterSettings: context.settings,
+      note: 'preview-only; no stream restart',
+    }))
+  }, [appendCameraTestLog, getCameraTestLogContext])
 
   const canTapToFocus = useMemo(() => {
     const raw = capabilities?.raw as ExtendedMediaTrackCapabilities | null
@@ -2446,8 +3012,23 @@ export function WorkspaceScreen() {
     return { x, y }
   }, [])
 
+  const applyTapFocusPoint = useCallback((x: number, y: number) => {
+    const focusMode = (capabilities?.raw as ExtendedMediaTrackCapabilities | null)?.focusMode?.[0] || 'single-shot'
+    void handleApplyCameraTestConstraint({
+      pointsOfInterest: { x, y },
+      focusMode,
+    }).catch(() => undefined)
+
+    const focusMessage = `Tap focus at ${Math.round(x * 100)}%, ${Math.round(y * 100)}%.`
+    if (cameraTestOpen) {
+      setCameraTestMessage(focusMessage)
+    } else {
+      setStatusMsg(focusMessage)
+    }
+  }, [cameraTestOpen, capabilities?.raw, handleApplyCameraTestConstraint])
+
   const handlePreviewClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (!cameraTestOpen || !canTapToFocus) {
+    if (!canTapToFocus) {
       return
     }
     if (event.button !== 0) {
@@ -2455,12 +3036,8 @@ export function WorkspaceScreen() {
     }
 
     const { x, y } = getPreviewPoint(event)
-    void handleApplyCameraTestConstraint({
-      pointsOfInterest: { x, y },
-      focusMode: (capabilities?.raw as ExtendedMediaTrackCapabilities | null)?.focusMode?.[0] || 'single-shot',
-    }).catch(() => undefined)
-    setCameraTestMessage(`Tap-to-focus test at ${Math.round(x * 100)}%, ${Math.round(y * 100)}%.`)
-  }, [cameraTestOpen, canTapToFocus, capabilities, getPreviewPoint, handleApplyCameraTestConstraint])
+    applyTapFocusPoint(x, y)
+  }, [applyTapFocusPoint, canTapToFocus, getPreviewPoint])
 
   const handlePreviewTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
     if (!cameraTestOpen || !canPinchToZoom) {
@@ -2651,6 +3228,10 @@ export function WorkspaceScreen() {
         cameraPermissionRemembered={cameraPermissionRemembered}
         cameraState={cameraState}
         capabilities={capabilities}
+        cameraSettingsPreviewQuality={cameraSettingsPreviewQuality}
+        cameraSettingsOpen={cameraSettingsOpen}
+        cameraSettingsMessage={cameraSettingsMessage}
+        cameraSettingsError={cameraSettingsError}
         cameraTestOpen={cameraTestOpen}
         cameraDevices={cameraDevices}
         cameraTestMessage={cameraTestMessage}
@@ -2660,7 +3241,7 @@ export function WorkspaceScreen() {
         supabaseReady={supabaseReady}
         session={session}
         authLoading={authLoading}
-        cameraPreviewRatio={cameraTestOpen ? cameraTestPreviewRatio : selectedRatio}
+        cameraPreviewRatio={cameraTestOpen ? cameraTestPreviewRatio : cameraSettingsPreviewQuality ? 'full' : selectedRatio}
         selectedRatio={selectedRatio}
         cameraRef={cameraRef}
         handleCameraError={handleCameraError}
@@ -2671,16 +3252,20 @@ export function WorkspaceScreen() {
         handlePreviewTouchStart={handlePreviewTouchStart}
         handlePreviewTouchMove={handlePreviewTouchMove}
         handlePreviewTouchEnd={handlePreviewTouchEnd}
+        handleOpenCameraSettings={handleOpenCameraSettings}
+        handleCloseCameraSettings={handleCloseCameraSettings}
+        handleToggleCameraSettingsPreviewQuality={handleToggleCameraSettingsPreviewQuality}
+        handleSelectCameraSettingDevice={handleSelectCameraSettingDevice}
+        handleApplyCameraSettingConstraint={handleApplyCameraSettingConstraint}
         handleOpenCameraTest={handleOpenCameraTest}
         handleCloseCameraTest={handleCloseCameraTest}
         handleSelectCameraDevice={handleSelectCameraDevice}
         handleApplyCameraTestConstraint={handleApplyCameraTestConstraint}
         handleChangeCameraTestPreviewRatio={handleChangeCameraTestPreviewRatio}
-        handleToggleFullQualityPreview={handleToggleFullQualityPreview}
-        cameraTestLogText={cameraTestLogEntries.join('\n\n')}
+        cameraTestLogText={buildCameraTestLogText(cameraTestLogEntries)}
         handleCopyCameraTestLog={handleCopyCameraTestLog}
+        handleClearCameraTestLog={handleClearCameraTestLog}
         handleRunCameraProbe={handleRunCameraProbe}
-        cameraTestFullQualityPreview={cameraTestFullQualityPreview}
         capturing={capturing}
         selectedStoreId={selectedStoreId}
         selectedBatchId={selectedBatchId}

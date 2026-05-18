@@ -465,8 +465,13 @@ export class BrowserCameraAdapter implements CameraAdapter {
       throw new Error('Camera not started')
     }
 
+    const { width: _width, height: _height, ...safeConstraints } = constraints as CameraTestConstraintSet & {
+      width?: unknown
+      height?: unknown
+    }
+
     await track.applyConstraints({
-      advanced: [constraints] as MediaTrackConstraintSet[],
+      advanced: [safeConstraints] as MediaTrackConstraintSet[],
     })
 
     this.capabilities = probeCapabilities(track, this.videoEl ?? undefined)
