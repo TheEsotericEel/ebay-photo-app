@@ -9,6 +9,7 @@ PWA-first eBay photo handoff app for camera capture, item packets, and a lister 
 - Supabase project is linked and seeded
 - Phase 1 now includes Supabase session bootstrap and a batch upload path for one shared account
 - Phase 1 now includes a desktop store/batch/item queue with item detail and manual checkoff for the same shared account
+- Phase 1 now shows photo retention dates and supports remote cleanup for listed items
 
 ## Local development
 

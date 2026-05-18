@@ -41,9 +41,11 @@ export function getBatchUploadStateSummary(
   const relevantItems = items.filter((item) => item.storeId === storeId && item.batchId === batchId)
   const relevantPhotoIds = new Set(relevantItems.flatMap((item) => item.photoIds))
   const relevantPhotos = photos.filter((photo) => relevantPhotoIds.has(photo.id))
-  const verifiedPhotos = relevantPhotos.filter((photo) => photo.uploadStatus === 'verified' && photo.remoteStatus === 'verified').length
+  const verifiedPhotos = relevantPhotos.filter((photo) => {
+    return photo.uploadStatus === 'verified' && ['verified', 'deleted'].includes(photo.remoteStatus || 'local')
+  }).length
   const failedPhotos = relevantPhotos.filter((photo) => photo.uploadStatus === 'failed' || photo.remoteStatus === 'failed').length
-  const pendingPhotos = relevantPhotos.filter((photo) => !['verified', 'failed'].includes(photo.uploadStatus || 'local')).length
+  const pendingPhotos = relevantPhotos.filter((photo) => !['verified', 'deleted', 'failed'].includes(photo.remoteStatus || photo.uploadStatus || 'local')).length
 
   return {
     totalItems: relevantItems.length,
@@ -65,16 +67,20 @@ export function getCleanupReport(
   const relevantPhotoIds = new Set(relevantItems.flatMap((item) => item.photoIds))
   const relevantPhotos = photos.filter((photo) => relevantPhotoIds.has(photo.id))
 
-  const eligiblePhotos = relevantPhotos.filter((photo) => photo.uploadStatus === 'verified' && photo.remoteStatus === 'verified')
+  const eligiblePhotos = relevantPhotos.filter((photo) => photo.uploadStatus === 'verified' && ['verified', 'deleted'].includes(photo.remoteStatus || 'local'))
   const blockedReasons: string[] = []
 
   for (const photo of relevantPhotos) {
-    if (photo.uploadStatus === 'verified' && photo.remoteStatus === 'verified') {
+    if (photo.uploadStatus === 'verified' && ['verified', 'deleted'].includes(photo.remoteStatus || 'local')) {
       continue
     }
 
     if (photo.uploadStatus === 'failed' || photo.remoteStatus === 'failed') {
       blockedReasons.push('failed upload')
+      continue
+    }
+
+    if (photo.remoteStatus === 'deleted') {
       continue
     }
 

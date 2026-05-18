@@ -9,6 +9,8 @@ import { IndexedDbItemPacketStore, ItemPacket, ListingStatus } from '../adapters
 import { syncBatchToSupabase, BatchUploadProgress } from '../adapters/supabaseUpload'
 import { attachOrderedPhotosToItem, getItemReadiness, sortItems } from '../adapters/itemHelpers'
 import { getBatchUploadStateSummary, getCleanupReport } from '../adapters/uploadState'
+import { calculateRetentionWindow, getRetentionModeLabel, RemoteRetentionMode } from '../adapters/retention'
+import { deleteEligibleRemotePhotos, getRemoteCleanupReport, RemoteCleanupProgress } from '../adapters/remoteCleanup'
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
 import { CameraCapabilities, CaptureDiagnostics } from '../adapters/camera'
@@ -320,7 +322,9 @@ export function Phase1Screen() {
   const [authEmail, setAuthEmail] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [uploadProgress, setUploadProgress] = useState<BatchUploadProgress | null>(null)
+  const [remoteCleanupProgress, setRemoteCleanupProgress] = useState<RemoteCleanupProgress | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [remoteCleaning, setRemoteCleaning] = useState(false)
   const [cleanupMessage, setCleanupMessage] = useState('')
 
   const loadData = useCallback(async () => {
@@ -651,6 +655,83 @@ export function Phase1Screen() {
     }
   }, [allItems, allPhotos, loadData, photoStore, selectedBatchId, selectedStoreId])
 
+  const handleUpdateListingStatus = useCallback(async (item: ItemPacket, status: ListingStatus) => {
+    const now = new Date().toISOString()
+    const isListed = status === 'listed'
+    const batch = batches.find((entry) => entry.id === selectedBatchId) || null
+    const retentionMode = (batch?.remoteRetentionMode || 'delete_7d_after_listed') as RemoteRetentionMode
+    const retentionWindow = isListed ? calculateRetentionWindow(now, retentionMode) : { eligibleAt: null, expiresAt: null }
+
+    await itemPacketStore.updateItem(item.id, {
+      listingStatus: status,
+      listedAt: isListed ? now : undefined,
+      remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
+      remoteExpiresAt: retentionWindow.expiresAt || undefined,
+      remoteDeletedAt: isListed ? undefined : item.remoteDeletedAt,
+    })
+
+    for (const photoId of item.photoIds) {
+      await photoStore.updatePhoto(photoId, {
+        remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
+        remoteExpiresAt: retentionWindow.expiresAt || undefined,
+      }).catch(() => undefined)
+    }
+
+    if (session && supabase && item.remoteId) {
+      const { error } = await supabase
+        .from('items')
+        .update({
+          status,
+          listed_at: isListed ? now : null,
+          photo_retention_until: retentionWindow.expiresAt || null,
+        })
+        .eq('id', item.remoteId)
+
+      if (error) {
+        setStorageErrors((prev) => [...prev, `Remote item update failed: ${error.message}`])
+      }
+    }
+
+    await loadData()
+  }, [batches, loadData, photoStore, selectedBatchId, session, supabase])
+
+  const handleRemoteCleanup = useCallback(async () => {
+    const batch = batches.find((entry) => entry.id === selectedBatchId) || null
+    if (!batch || !supabase || remoteCleaning) {
+      return
+    }
+
+    setRemoteCleaning(true)
+    setRemoteCleanupProgress({
+      stage: 'collecting',
+      message: 'Checking remote cleanup eligibility',
+    })
+
+    try {
+      const result = await deleteEligibleRemotePhotos({
+        client: supabase,
+        batch,
+        items: allItems,
+        photos: allPhotos,
+        itemStore: itemPacketStore,
+        photoStore,
+        onProgress: setRemoteCleanupProgress,
+      })
+
+      await loadData()
+      setCleanupMessage(`Deleted ${result.deletedPhotos} remote photo${result.deletedPhotos === 1 ? '' : 's'}.`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCleanupMessage(`Remote cleanup failed: ${msg}`)
+      setRemoteCleanupProgress({
+        stage: 'error',
+        message: `Remote cleanup failed: ${msg}`,
+      })
+    } finally {
+      setRemoteCleaning(false)
+    }
+  }, [allItems, allPhotos, batches, loadData, photoStore, remoteCleaning, selectedBatchId, supabase])
+
   const handleCopyText = useCallback(async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -690,6 +771,18 @@ export function Phase1Screen() {
   const cleanupReport = useMemo(() => {
     return getCleanupReport(allItems, allPhotos, selectedStoreId, selectedBatchId)
   }, [allItems, allPhotos, selectedBatchId, selectedStoreId])
+
+  const selectedBatch = useMemo(
+    () => batches.find((batch) => batch.id === selectedBatchId) || null,
+    [batches, selectedBatchId],
+  )
+
+  const remoteCleanupReport = useMemo(() => {
+    if (!selectedBatch) {
+      return null
+    }
+    return getRemoteCleanupReport(allItems, allPhotos, selectedBatch, selectedStoreId, selectedBatchId)
+  }, [allItems, allPhotos, selectedBatch, selectedBatchId, selectedStoreId])
 
   const selectedStoreBatches = useMemo(
     () => batches.filter((batch) => batch.storeId === selectedStoreId),
@@ -911,6 +1004,19 @@ export function Phase1Screen() {
               )}
             </div>
           )}
+          {remoteCleanupProgress && (
+            <div style={s.progressBox}>
+              <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                Remote cleanup
+              </div>
+              <div>{remoteCleanupProgress.message}</div>
+              {remoteCleanupProgress.photoCount !== undefined && remoteCleanupProgress.photoIndex !== undefined && (
+                <div style={{ marginTop: 4, color: '#94a3b8' }}>
+                  Photo {remoteCleanupProgress.photoIndex} / {remoteCleanupProgress.photoCount}
+                </div>
+              )}
+            </div>
+          )}
           <div style={s.progressBox}>
             <div style={{ textTransform: 'uppercase', letterSpacing: 0.7, fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
               Upload / cleanup
@@ -920,6 +1026,12 @@ export function Phase1Screen() {
             <div>Pending: {batchUploadSummary.pendingPhotos}</div>
             <div>Failed: {batchUploadSummary.failedPhotos}</div>
             <div>Safe to clear: {cleanupReport.safeToClear ? 'yes' : 'no'}</div>
+            <div>Remote cleanup eligible: {remoteCleanupReport?.eligiblePhotos || 0}</div>
+            <div>Remote cleanup blocked: {remoteCleanupReport?.blockedPhotos || 0}</div>
+            <div>Retention: {getRetentionModeLabel(selectedBatch?.remoteRetentionMode || 'delete_7d_after_listed')}</div>
+            {remoteCleanupReport?.nextEligibleAt && (
+              <div>Next eligible: {new Date(remoteCleanupReport.nextEligibleAt).toLocaleString()}</div>
+            )}
             {cleanupReport.issues.length > 0 && (
               <div style={{ marginTop: 4, color: '#fca5a5' }}>
                 {cleanupReport.issues.map((issue) => (
@@ -936,6 +1048,14 @@ export function Phase1Screen() {
                 disabled={!supabaseReady || !session || uploading || !selectedStoreId || !selectedBatchId}
               >
                 Retry upload
+              </button>
+              <button
+                style={{ ...s.button, ...s.buttonSmall }}
+                onClick={handleRemoteCleanup}
+                disabled={!supabase || !session || remoteCleaning || !selectedBatch || (remoteCleanupReport?.eligiblePhotos || 0) === 0}
+                title={remoteCleanupReport?.eligiblePhotos ? 'Delete remote assets for listed items whose retention window has expired' : 'No remote photos are eligible yet'}
+              >
+                {remoteCleaning ? 'Cleaning…' : 'Delete remote assets'}
               </button>
               <button
                 style={{ ...s.button, ...s.buttonSmall }}
@@ -1166,8 +1286,7 @@ export function Phase1Screen() {
                       onSelect={() => setSelectedQueueItemId(item.id)}
                       onPhotoClick={(photo) => setSelectedPhoto(photo)}
                       onUpdateStatus={async (status) => {
-                        await itemPacketStore.setListingStatus(item.id, status)
-                        await loadData()
+                        await handleUpdateListingStatus(item, status)
                       }}
                     />
                   )
@@ -1186,8 +1305,7 @@ export function Phase1Screen() {
                   readiness={selectedDesktopItemReadiness}
                   onPhotoClick={(photo) => setSelectedPhoto(photo)}
                   onUpdateStatus={async (status) => {
-                    await itemPacketStore.setListingStatus(selectedDesktopItem.id, status)
-                    await loadData()
+                    await handleUpdateListingStatus(selectedDesktopItem, status)
                   }}
                   onCopyText={handleCopyText}
                 />
@@ -1250,6 +1368,10 @@ function QueueCard({
           <br />
           Upload: {item.uploadStatus || 'local'} • {item.remoteStatus || 'local'}
           <br />
+          {item.listingStatus === 'listed'
+            ? `Retention: ${item.remoteExpiresAt ? new Date(item.remoteExpiresAt).toLocaleDateString() : 'pending'}`
+            : 'Retention: not listed'}
+          <br />
           {readiness.photoCount} in order • {readiness.missingPhotoCount} missing
           <br />
           {item.note ? `Note: ${item.note}` : 'Note missing'}
@@ -1287,7 +1409,7 @@ function DesktopItemDetail({
   const availability =
     photos.length === 0
       ? 'No photos attached'
-      : photos.every((photo) => photo.uploadStatus === 'verified' && photo.remoteStatus === 'verified')
+      : photos.every((photo) => photo.uploadStatus === 'verified' && ['verified', 'deleted'].includes(photo.remoteStatus || 'local'))
         ? 'Photos verified and safe to clear'
         : photos.some((photo) => photo.uploadStatus === 'failed' || photo.remoteStatus === 'failed')
           ? 'Upload incomplete or failed'
@@ -1337,6 +1459,14 @@ function DesktopItemDetail({
           Weight: {item.weight || 'missing'}
           <br />
           Upload: {item.uploadStatus || 'local'} • Remote: {item.remoteStatus || 'local'}
+          <br />
+          {item.listingStatus === 'listed'
+            ? `Remote cleanup: ${item.remoteExpiresAt ? new Date(item.remoteExpiresAt).toLocaleString() : 'manual'}`
+            : 'Remote cleanup: not listed'}
+          <br />
+          {item.listingStatus === 'listed'
+            ? `Listed: ${item.listedAt ? new Date(item.listedAt).toLocaleString() : 'pending'}`
+            : 'Listed: not marked'}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onCopyText(item.sku || '', 'SKU')} disabled={!item.sku}>

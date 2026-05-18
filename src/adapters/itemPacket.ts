@@ -23,8 +23,12 @@ export interface ItemPacket {
   photoIds: string[]
   listingStatus?: ListingStatus
   uploadStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'failed'
-  remoteStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'failed'
+  remoteStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'deleted' | 'failed'
   remoteUpdatedAt?: string
+  listedAt?: string
+  remoteDeleteEligibleAt?: string
+  remoteExpiresAt?: string
+  remoteDeletedAt?: string
   // Optional metadata
   sku?: string
   note?: string
@@ -156,7 +160,11 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
   }
 
   async setListingStatus(itemId: string, listingStatus: ListingStatus): Promise<void> {
-    await this.updateItem(itemId, { listingStatus })
+    const listedAt = listingStatus === 'listed' ? new Date().toISOString() : undefined
+    await this.updateItem(itemId, {
+      listingStatus,
+      listedAt,
+    })
   }
 
   async updateItem(itemId: string, patch: Partial<ItemPacket>): Promise<void> {

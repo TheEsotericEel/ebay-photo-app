@@ -3,6 +3,7 @@ import { SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
 import { IndexedDbItemPacketStore, ItemPacket } from './itemPacket'
 import { IndexedDbPhotoStore, StoredPhoto } from './localPhotoStore'
 import { BatchRecord, StoreRecord } from './workflowStore'
+import { calculateRetentionWindow } from './retention'
 
 export type BatchUploadStage =
   | 'idle'
@@ -335,6 +336,7 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
       const remoteItem = await resolveRemoteItem(client, remoteStore.id, remoteBatch.id, item)
       const remotePhotoIdByLocalId = new Map<string, string>()
       const pendingPhotos = itemPhotos.filter((photo) => photo.uploadStatus !== 'verified' || photo.remoteStatus !== 'verified')
+      const retentionWindow = calculateRetentionWindow(item.listedAt, batch.remoteRetentionMode)
 
       await itemStore.updateItem(item.id, {
         remoteId: remoteItem.id,
@@ -353,6 +355,8 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
             sku: item.sku || null,
             notes: item.note || null,
             weight: item.weight || null,
+            listed_at: item.listingStatus === 'listed' ? (item.listedAt || itemFinalizedAt) : null,
+            photo_retention_until: item.listingStatus === 'listed' ? retentionWindow.expiresAt : null,
           })
           .eq('id', remoteItem.id)
 
@@ -365,6 +369,8 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
           uploadStatus: 'verified',
           remoteStatus: 'verified',
           remoteUpdatedAt: itemFinalizedAt,
+          remoteDeleteEligibleAt: item.listingStatus === 'listed' ? retentionWindow.eligibleAt || undefined : undefined,
+          remoteExpiresAt: item.listingStatus === 'listed' ? retentionWindow.expiresAt || undefined : undefined,
         })
 
         uploadedItems += 1
@@ -423,6 +429,8 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
               remote_status: 'not_uploaded',
               captured_at: localPhoto.capturedAt,
               upload_attempt_count: nextAttemptCount,
+              remote_delete_eligible_at: item.listingStatus === 'listed' ? retentionWindow.eligibleAt : null,
+              remote_expires_at: item.listingStatus === 'listed' ? retentionWindow.expiresAt : null,
             },
             { onConflict: 'id' },
           )
@@ -441,6 +449,8 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
             remote_status: 'verified',
             remote_verified_at: finalizedAt,
             local_status: 'safe_to_clear',
+            remote_delete_eligible_at: item.listingStatus === 'listed' ? retentionWindow.eligibleAt : null,
+            remote_expires_at: item.listingStatus === 'listed' ? retentionWindow.expiresAt : null,
           })
           .eq('id', remotePhotoId)
 
@@ -451,6 +461,8 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
         await photoStore.updatePhoto(localPhoto.id, {
           uploadStatus: 'verified',
           remoteStatus: 'verified',
+          remoteDeleteEligibleAt: item.listingStatus === 'listed' ? retentionWindow.eligibleAt || undefined : undefined,
+          remoteExpiresAt: item.listingStatus === 'listed' ? retentionWindow.expiresAt || undefined : undefined,
         })
       }
 
@@ -464,6 +476,8 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
           sku: item.sku || null,
           notes: item.note || null,
           weight: item.weight || null,
+          listed_at: item.listingStatus === 'listed' ? (item.listedAt || itemFinalizedAt) : null,
+          photo_retention_until: item.listingStatus === 'listed' ? retentionWindow.expiresAt : null,
         })
         .eq('id', remoteItem.id)
 
@@ -476,6 +490,8 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
         uploadStatus: 'uploaded',
         remoteStatus: 'verified',
         remoteUpdatedAt: itemFinalizedAt,
+        remoteDeleteEligibleAt: item.listingStatus === 'listed' ? retentionWindow.eligibleAt || undefined : undefined,
+        remoteExpiresAt: item.listingStatus === 'listed' ? retentionWindow.expiresAt || undefined : undefined,
       })
 
       uploadedItems += 1
@@ -516,6 +532,10 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
       photo_count: photos.filter((photo) => items.some((item) => item.photoIds.includes(photo.id) && item.storeId === store.id && item.batchId === batch.id)).length,
       upload_status: finalStatus,
       upload_completed_at: failedItems > 0 ? null : finalTimestamp,
+      remote_expires_at: items
+        .filter((item) => item.storeId === store.id && item.batchId === batch.id && item.listingStatus === 'listed' && item.remoteExpiresAt)
+        .map((item) => item.remoteExpiresAt as string)
+        .sort()[0] || null,
     })
     .eq('id', remoteBatch.id)
 

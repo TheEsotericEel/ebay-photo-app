@@ -15,6 +15,14 @@ export interface BatchRecord {
   storeId: string
   name: string
   status: BatchStatus
+  remoteRetentionMode?: 'manual' | 'delete_24h_after_listed' | 'delete_3d_after_listed' | 'delete_7d_after_listed' | 'delete_7d_after_upload' | 'delete_7d_after_batch_complete'
+  uploadStatus?: 'local' | 'partial' | 'uploaded' | 'failed'
+  itemCount?: number
+  photoCount?: number
+  uploadCompletedAt?: string | null
+  localCleanupCompletedAt?: string | null
+  remoteExpiresAt?: string | null
+  remoteDeletedAt?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -146,6 +154,14 @@ export class IndexedDbWorkflowStore {
       storeId,
       name: 'Current Batch',
       status: 'active',
+      remoteRetentionMode: 'delete_7d_after_listed',
+      uploadStatus: 'local',
+      itemCount: 0,
+      photoCount: 0,
+      uploadCompletedAt: null,
+      localCleanupCompletedAt: null,
+      remoteExpiresAt: null,
+      remoteDeletedAt: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -159,6 +175,14 @@ export class IndexedDbWorkflowStore {
       storeId,
       name,
       status: 'active',
+      remoteRetentionMode: 'delete_7d_after_listed',
+      uploadStatus: 'local',
+      itemCount: 0,
+      photoCount: 0,
+      uploadCompletedAt: null,
+      localCleanupCompletedAt: null,
+      remoteExpiresAt: null,
+      remoteDeletedAt: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }

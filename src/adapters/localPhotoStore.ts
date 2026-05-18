@@ -13,6 +13,10 @@ export interface StoredPhoto {
   savedAt: string
   uploadStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'failed'
   remoteStatus?: 'not_uploaded' | 'uploaded' | 'verified' | 'delete_eligible' | 'deleting' | 'deleted' | 'failed'
+  localStatus?: 'present' | 'safe_to_clear' | 'cleared' | 'missing'
+  remoteDeleteEligibleAt?: string
+  remoteExpiresAt?: string
+  remoteDeletedAt?: string
   // Optional metadata for diagnostics - backward compatible
   sourceWidth?: number
   sourceHeight?: number
@@ -113,6 +117,7 @@ export class IndexedDbPhotoStore implements LocalPhotoStore {
       ...photo,
       uploadStatus: photo.uploadStatus || 'local',
       remoteStatus: photo.remoteStatus || 'not_uploaded',
+      localStatus: photo.localStatus || 'present',
       savedAt: new Date().toISOString(),
     }
     await this.tx('readwrite', (store) => store.put(record))
