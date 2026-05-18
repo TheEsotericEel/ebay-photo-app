@@ -38,3 +38,4 @@ The same account is intended for both phone capture and desktop listing.
 On mobile, the app opens on a home screen with a single `Open Camera` action.
 The camera mounts only after the user chooses to open it, and the browser remembers an accepted camera permission so later visits can resume faster.
 On desktop, the app shows a tabbed layout with fixed panels for Capture, Queue, and Tools instead of a long scrolling page.
+The workspace also remembers the last desktop tab and the selected store/batch in the browser.

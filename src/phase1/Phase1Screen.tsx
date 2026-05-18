@@ -17,6 +17,7 @@ import { CameraCapabilities, CaptureDiagnostics } from '../adapters/camera'
 import { supabase } from '../lib/supabase'
 import { APP_NAME, SUPABASE_STORAGE_BUCKET } from '../lib/appConfig'
 import { loadCameraPermissionGranted, saveCameraPermissionGranted } from '../lib/cameraPermission'
+import { DesktopMode, loadWorkspacePreferences, saveWorkspacePreferences } from '../lib/workspacePreferences'
 import { useSupabaseSession } from '../lib/useSupabaseSession'
 import { useIsMobile } from '../lib/useViewportMode'
 
@@ -28,7 +29,7 @@ const secureContextInfo: SecureContextInfo = probeSecureContext()
 
 type CameraState = 'idle' | 'starting' | 'active' | 'stopped' | 'error'
 type QueueFilter = 'all' | ListingStatus
-
+export type { DesktopMode }
 const s: Record<string, React.CSSProperties> = {
   screen: {
     display: 'flex',
@@ -579,7 +580,7 @@ export function WorkspaceScreen() {
   const isMobile = useIsMobile()
   const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
-  const [desktopMode, setDesktopMode] = useState<'capture' | 'queue' | 'tools'>('capture')
+  const [desktopMode, setDesktopMode] = useState<DesktopMode>(() => loadWorkspacePreferences().desktopMode || 'capture')
   const [cameraPermissionRemembered, setCameraPermissionRemembered] = useState(() => loadCameraPermissionGranted())
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
@@ -613,7 +614,6 @@ export function WorkspaceScreen() {
   useEffect(() => {
     if (!isMobile) {
       setMobileMode('home')
-      setDesktopMode('capture')
     }
   }, [isMobile])
 
@@ -622,6 +622,22 @@ export function WorkspaceScreen() {
       setMobileMode('camera')
     }
   }, [cameraPermissionRemembered, isMobile])
+
+  useEffect(() => {
+    saveWorkspacePreferences({ desktopMode })
+  }, [desktopMode])
+
+  useEffect(() => {
+    if (selectedStoreId) {
+      saveWorkspacePreferences({ selectedStoreId })
+    }
+  }, [selectedStoreId])
+
+  useEffect(() => {
+    if (selectedBatchId) {
+      saveWorkspacePreferences({ selectedBatchId })
+    }
+  }, [selectedBatchId])
 
   const loadData = useCallback(async () => {
     const [storesData, photosData, itemsData] = await Promise.all([
@@ -643,20 +659,30 @@ export function WorkspaceScreen() {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const store = await workflowStore.ensureDefaultStore()
-        const batch = await workflowStore.ensureDefaultBatch(store.id)
+        const defaultStore = await workflowStore.ensureDefaultStore()
+        await workflowStore.ensureDefaultBatch(defaultStore.id)
+        const prefs = loadWorkspacePreferences()
         await loadData()
-        setSelectedStoreId(store.id)
-        setSelectedBatchId(batch.id)
-        await reloadBatches(store.id)
-        const current = await itemPacketStore.getCurrentItem(store.id, batch.id)
+        const storesData = await workflowStore.getAllStores()
+        const preferredStore = storesData.find((entry) => entry.id === prefs.selectedStoreId) || defaultStore
+        const batchesData = await workflowStore.getBatches(preferredStore.id)
+        const preferredBatch =
+          batchesData.find((entry) => entry.id === prefs.selectedBatchId && entry.storeId === preferredStore.id) ||
+          batchesData.find((entry) => entry.status === 'active') ||
+          (await workflowStore.ensureDefaultBatch(preferredStore.id))
+
+        setDesktopMode(prefs.desktopMode || 'capture')
+        setSelectedStoreId(preferredStore.id)
+        setSelectedBatchId(preferredBatch.id)
+        setBatches(batchesData.length > 0 ? batchesData : [preferredBatch])
+        const current = await itemPacketStore.getCurrentItem(preferredStore.id, preferredBatch.id)
         setCurrentItem(current)
         if (current) {
           setItemSku(current.sku || '')
           setItemNote(current.note || '')
           setItemWeight(current.weight || '')
         }
-        setStatusMsg(`Ready on ${store.name} / ${batch.name}`)
+        setStatusMsg(`Ready on ${preferredStore.name} / ${preferredBatch.name}`)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         setStorageErrors((prev) => [...prev, `Bootstrap failed: ${msg}`])
