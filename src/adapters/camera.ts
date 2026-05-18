@@ -73,17 +73,22 @@ export interface CameraAdapter {
   stop(): void
   captureFrame(): Promise<CapturedFrame>
   getCapabilities(): CameraCapabilities | null
+  applyTestConstraints(constraints: MediaTrackConstraintSet): Promise<CameraCapabilities | null>
+  switchDevice(deviceId: string): Promise<CameraCapabilities | null>
+  getActiveTrack(): MediaStreamTrack | null
 }
 
 export class BrowserCameraAdapter implements CameraAdapter {
   private stream: MediaStream | null = null
   private capabilities: CameraCapabilities | null = null
   private diagnostics: CaptureDiagnostics = {}
+  private videoEl: HTMLVideoElement | null = null
 
   async start(videoEl: HTMLVideoElement): Promise<void> {
     if (this.stream) {
       this.stop()
     }
+    this.videoEl = videoEl
 
     if (!window.isSecureContext) {
       throw new Error(
@@ -147,6 +152,7 @@ export class BrowserCameraAdapter implements CameraAdapter {
       this.stream = null
     }
     this.capabilities = null
+    this.videoEl = null
   }
 
   // Temporarily disabled - keep preview lightweight
@@ -394,6 +400,42 @@ export class BrowserCameraAdapter implements CameraAdapter {
   }
 
   getCapabilities(): CameraCapabilities | null {
+    return this.capabilities
+  }
+
+  getActiveTrack(): MediaStreamTrack | null {
+    return this.stream?.getVideoTracks()[0] ?? null
+  }
+
+  async applyTestConstraints(constraints: MediaTrackConstraintSet): Promise<CameraCapabilities | null> {
+    const track = this.getActiveTrack()
+    if (!track) {
+      throw new Error('Camera not started')
+    }
+
+    await track.applyConstraints({ advanced: [constraints] })
+    this.capabilities = probeCapabilities(track, this.videoEl ?? undefined)
+    return this.capabilities
+  }
+
+  async switchDevice(deviceId: string): Promise<CameraCapabilities | null> {
+    if (!this.videoEl) {
+      throw new Error('Camera preview not ready')
+    }
+
+    const previousStream = this.stream
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: deviceId } },
+      audio: false,
+    })
+
+    this.stream = stream
+    this.videoEl.srcObject = stream
+    await this.videoEl.play()
+    const track = stream.getVideoTracks()[0]
+    this.capabilities = track ? probeCapabilities(track, this.videoEl) : null
+
+    previousStream?.getTracks().forEach((t) => t.stop())
     return this.capabilities
   }
 }

@@ -4,6 +4,7 @@ import { DiagnosticsPanel } from '../components/DiagnosticsPanel'
 import { PhotoList } from '../components/PhotoList'
 import { PhotoDetailModal } from '../components/PhotoDetailModal'
 import { CanvasImageProcessingAdapter, OutputRatio, loadDefaultRatioFromStorage, saveDefaultRatioToStorage } from '../adapters/imageProcessing'
+import { loadCameraPreferences, saveCameraPreferences } from '../adapters/cameraPreferences'
 import { IndexedDbPhotoStore, StoredPhoto } from '../adapters/localPhotoStore'
 import { IndexedDbItemPacketStore, ItemPacket } from '../adapters/itemPacket'
 import { CameraCapabilities } from '../adapters/camera'
@@ -16,6 +17,25 @@ const itemPacketStore = new IndexedDbItemPacketStore()
 const secureContextInfo: SecureContextInfo = probeSecureContext()
 
 type CameraState = 'idle' | 'starting' | 'active' | 'stopped' | 'error'
+type FocusMarkerState = { x: number; y: number; kind: 'success' | 'failure'; fading: boolean } | null
+
+type ZoomRange = { min: number; max: number; step: number }
+
+function formatZoomLabel(value: number): string {
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}x`
+}
+
+function buildZoomPresets(range: ZoomRange | undefined): number[] {
+  const common = [0.5, 1, 2, 3, 5]
+  if (!range) return common
+  const withBounds = [...common, range.min, range.max]
+  return Array.from(new Set(withBounds.filter((value) => value >= range.min - 0.0001 && value <= range.max + 0.0001))).sort((a, b) => a - b)
+}
+
+function clampZoom(value: number, range: ZoomRange | undefined): number {
+  if (!range) return value
+  return Math.min(range.max, Math.max(range.min, value))
+}
 
 const s: Record<string, React.CSSProperties> = {
   screen: {
@@ -81,6 +101,11 @@ export function Phase0Screen() {
     return loadDefaultRatioFromStorage()
   })
   const [showDiagnostics, setShowDiagnostics] = useState(false)
+  const [focusMarker, setFocusMarker] = useState<FocusMarkerState>(null)
+  const focusMarkerTimeoutRef = useRef<number | null>(null)
+  const focusMarkerFadeTimeoutRef = useRef<number | null>(null)
+  const cameraPrefsAppliedRef = useRef(false)
+  const [selectedZoom, setSelectedZoom] = useState<number>(() => loadCameraPreferences().preferredZoom ?? 1)
 
   // Item packet state
   const [currentItem, setCurrentItem] = useState<ItemPacket | null>(null)
@@ -149,6 +174,7 @@ export function Phase0Screen() {
     } else {
       setCapabilities(caps)
     }
+    cameraPrefsAppliedRef.current = false
   }, [])
 
   const handleCameraStopped = useCallback(() => {
@@ -159,6 +185,69 @@ export function Phase0Screen() {
     setCameraState('error')
     setCaptureErrors((prev) => [...prev, msg])
   }, [])
+
+  const clearFocusMarker = useCallback(() => {
+    if (focusMarkerTimeoutRef.current !== null) {
+      window.clearTimeout(focusMarkerTimeoutRef.current)
+      focusMarkerTimeoutRef.current = null
+    }
+    if (focusMarkerFadeTimeoutRef.current !== null) {
+      window.clearTimeout(focusMarkerFadeTimeoutRef.current)
+      focusMarkerFadeTimeoutRef.current = null
+    }
+    setFocusMarker(null)
+  }, [])
+
+  const showFocusMarker = useCallback((x: number, y: number, kind: 'success' | 'failure') => {
+    clearFocusMarker()
+    setFocusMarker({ x, y, kind, fading: false })
+    focusMarkerFadeTimeoutRef.current = window.setTimeout(() => {
+      setFocusMarker((prev) => (prev ? { ...prev, fading: true } : prev))
+      focusMarkerFadeTimeoutRef.current = null
+    }, 420)
+    focusMarkerTimeoutRef.current = window.setTimeout(() => {
+      setFocusMarker(null)
+      focusMarkerTimeoutRef.current = null
+      focusMarkerFadeTimeoutRef.current = null
+    }, 700)
+  }, [clearFocusMarker])
+
+  useEffect(() => {
+    return () => {
+      clearFocusMarker()
+    }
+  }, [clearFocusMarker])
+
+  useEffect(() => {
+    const liveCapabilities = cameraRef.current?.getCapabilities() ?? capabilities
+    const liveZoomCap = liveCapabilities?.raw && 'zoom' in liveCapabilities.raw
+      ? (liveCapabilities.raw as MediaTrackCapabilities & { zoom?: ZoomRange }).zoom
+      : undefined
+
+    if (cameraState !== 'active' || cameraPrefsAppliedRef.current || !cameraRef.current || !liveCapabilities?.trackSettings) {
+      return
+    }
+
+    const prefs = loadCameraPreferences()
+    const targetZoom = clampZoom(prefs.preferredZoom ?? 1, liveZoomCap)
+    const currentZoom = liveCapabilities.trackSettings.zoom
+
+    cameraPrefsAppliedRef.current = true
+    setSelectedZoom(targetZoom)
+
+    if (currentZoom === undefined || Math.abs(currentZoom - targetZoom) > 0.03) {
+      void cameraRef.current.applyTestConstraints({ zoom: targetZoom }).then((updated) => {
+        const updatedZoom = updated?.trackSettings?.zoom
+        setSelectedZoom(updatedZoom ?? targetZoom)
+        saveCameraPreferences({ preferredZoom: updatedZoom ?? targetZoom })
+      }).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        setStatusMsg(`Zoom restore failed: ${msg}`)
+      })
+    } else {
+      saveCameraPreferences({ preferredZoom: targetZoom })
+    }
+  }, [cameraRef, cameraState, capabilities])
 
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current || capturing) return
@@ -281,6 +370,69 @@ export function Phase0Screen() {
     saveDefaultRatioToStorage(ratio)
   }, [])
 
+  const handleZoomChange = useCallback((zoom: number) => {
+    if (!cameraRef.current) return
+    const liveCapabilities = cameraRef.current.getCapabilities() ?? capabilities
+    const zoomRange = liveCapabilities?.raw && 'zoom' in liveCapabilities.raw
+      ? (liveCapabilities.raw as MediaTrackCapabilities & { zoom?: ZoomRange }).zoom
+      : undefined
+    const nextZoom = clampZoom(zoom, zoomRange)
+
+    setSelectedZoom(nextZoom)
+    setStatusMsg(`Zoom ${formatZoomLabel(nextZoom)}`)
+
+    void cameraRef.current.applyTestConstraints({ zoom: nextZoom })
+      .then((updated) => {
+        const updatedZoom = updated?.trackSettings?.zoom ?? nextZoom
+        setSelectedZoom(updatedZoom)
+        saveCameraPreferences({ preferredZoom: updatedZoom })
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        setStatusMsg(`Zoom failed: ${msg}`)
+      })
+  }, [cameraRef, capabilities])
+
+  const zoomRange = (capabilities?.raw && 'zoom' in capabilities.raw
+    ? (capabilities.raw as MediaTrackCapabilities & { zoom?: ZoomRange }).zoom
+    : undefined)
+  const zoomPresets = zoomRange ? buildZoomPresets(zoomRange) : []
+
+  const canTapToFocus = Boolean(capabilities?.raw && 'pointsOfInterest' in capabilities.raw && Array.isArray((capabilities.raw as MediaTrackCapabilities & { pointsOfInterest?: { x: number; y: number }[] }).pointsOfInterest) && (capabilities.raw as MediaTrackCapabilities & { pointsOfInterest?: { x: number; y: number }[] }).pointsOfInterest?.length)
+
+  const handlePreviewTap = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
+
+    if (!cameraRef.current || !canTapToFocus) {
+      showFocusMarker(x, y, 'failure')
+      setStatusMsg('Tap-to-focus not supported on this camera')
+      return
+    }
+
+    const raw = capabilities?.raw as MediaTrackCapabilities & {
+      focusMode?: string[]
+      pointsOfInterest?: { x: number; y: number }[]
+    }
+
+    void cameraRef.current.applyTestConstraints({
+      pointsOfInterest: { x, y },
+      focusMode: raw.focusMode?.[0] || 'single-shot',
+    })
+      .then(() => {
+        showFocusMarker(x, y, 'success')
+        setStatusMsg(`Tap focus at ${Math.round(x * 100)}%, ${Math.round(y * 100)}%`)
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        showFocusMarker(x, y, 'failure')
+        setStatusMsg(`Tap-to-focus failed: ${msg}`)
+      })
+  }, [cameraRef, canTapToFocus, capabilities?.raw, showFocusMarker])
+
   const handleMetadataSave = useCallback(async () => {
     if (!currentItem) return
     try {
@@ -334,13 +486,43 @@ export function Phase0Screen() {
   return (
     <div style={s.screen}>
       {/* Full-width camera preview - no padding constraints */}
-      <CameraPreview
-        ref={cameraRef}
-        onError={handleCameraError}
-        onStarted={handleCameraStarted}
-        onStopped={handleCameraStopped}
-        ratio={selectedRatio}
-      />
+      <div style={{ position: 'relative' }} onClick={handlePreviewTap}>
+        <CameraPreview
+          ref={cameraRef}
+          onError={handleCameraError}
+          onStarted={handleCameraStarted}
+          onStopped={handleCameraStopped}
+          ratio={selectedRatio}
+        />
+        {focusMarker && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${focusMarker.x * 100}%`,
+              top: `${focusMarker.y * 100}%`,
+              transform: 'translate(-50%, -50%)',
+              width: focusMarker.kind === 'success' ? 28 : 20,
+              height: focusMarker.kind === 'success' ? 28 : 20,
+              borderRadius: focusMarker.kind === 'success' ? 999 : 4,
+              border: `2px solid ${focusMarker.kind === 'success' ? '#fff' : '#ef4444'}`,
+              background: focusMarker.kind === 'success' ? 'rgba(255,255,255,0.14)' : 'transparent',
+              color: focusMarker.kind === 'success' ? '#fff' : '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 12,
+              fontWeight: 800,
+              pointerEvents: 'none',
+              opacity: focusMarker.fading ? 0 : 1,
+              transform: `translate(-50%, -50%) scale(${focusMarker.fading ? 0.88 : 1})`,
+              transition: 'opacity 260ms ease, transform 260ms ease',
+              zIndex: 4,
+            }}
+          >
+            {focusMarker.kind === 'success' ? '' : '×'}
+          </div>
+        )}
+      </div>
 
       {/* Controls section with padding */}
       <div style={s.controls}>
@@ -379,6 +561,34 @@ export function Phase0Screen() {
             </button>
           ))}
         </div>
+
+        {zoomPresets.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, letterSpacing: 1.2, color: '#666', marginBottom: 6 }}>ZOOM</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {zoomPresets.map((zoom) => (
+                <button
+                  key={zoom}
+                  onClick={() => handleZoomChange(zoom)}
+                  style={{
+                    flex: '0 0 auto',
+                    minWidth: 56,
+                    padding: '8px 10px',
+                    borderRadius: 999,
+                    border: Math.abs(selectedZoom - zoom) < 0.03 ? '1px solid #aaa' : '1px solid #333',
+                    background: Math.abs(selectedZoom - zoom) < 0.03 ? '#2a2a2a' : 'transparent',
+                    color: Math.abs(selectedZoom - zoom) < 0.03 ? '#eee' : '#666',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    fontWeight: Math.abs(selectedZoom - zoom) < 0.03 ? 600 : 400,
+                  }}
+                >
+                  {formatZoomLabel(zoom)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={s.statusMsg}>{statusMsg}</div>
 

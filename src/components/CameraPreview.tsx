@@ -8,6 +8,9 @@ export interface CameraPreviewHandle {
   captureFrame: () => ReturnType<BrowserCameraAdapter['captureFrame']>
   getCapabilities: () => CameraCapabilities | null
   getVideoDimensions: () => { videoWidth: number; videoHeight: number } | null
+  applyTestConstraints: (constraints: Parameters<BrowserCameraAdapter['applyTestConstraints']>[0]) => Promise<CameraCapabilities | null>
+  switchCameraDevice: (deviceId: string) => Promise<CameraCapabilities | null>
+  getActiveTrack: () => MediaStreamTrack | null
 }
 
 interface Props {
@@ -34,6 +37,9 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, Props>(function Cam
       if (!v) return null
       return { videoWidth: v.videoWidth, videoHeight: v.videoHeight }
     },
+    applyTestConstraints: (constraints) => adapterRef.current.applyTestConstraints(constraints),
+    switchCameraDevice: (deviceId) => adapterRef.current.switchDevice(deviceId),
+    getActiveTrack: () => adapterRef.current.getActiveTrack(),
   }))
 
   useEffect(() => {
