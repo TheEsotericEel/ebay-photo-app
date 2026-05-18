@@ -315,7 +315,8 @@ export function Phase1Screen() {
   const [selectedPhoto, setSelectedPhoto] = useState<StoredPhoto | null>(null)
   const [selectedRatio, setSelectedRatio] = useState<OutputRatio>(() => loadDefaultRatioFromStorage())
   const [lastCaptureDiagnostics, setLastCaptureDiagnostics] = useState<CaptureDiagnostics | null>(null)
-  const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>('new')
+  const [selectedQueueItemId, setSelectedQueueItemId] = useState<string>('')
   const [authEmail, setAuthEmail] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [uploadProgress, setUploadProgress] = useState<BatchUploadProgress | null>(null)
@@ -388,6 +389,19 @@ export function Phase1Screen() {
       setItemWeight(item.weight || '')
     })
   }, [selectedBatchId, selectedStoreId])
+
+  useEffect(() => {
+    if (!selectedStoreId || !selectedBatchId) {
+      setSelectedQueueItemId('')
+      return
+    }
+
+    const batchItems = allItems
+      .filter((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId)
+      .filter((item) => queueFilter === 'all' ? true : (item.listingStatus || 'new') === queueFilter)
+    const nextSelected = batchItems.find((item) => item.id === selectedQueueItemId) || batchItems[0] || null
+    setSelectedQueueItemId(nextSelected?.id || '')
+  }, [allItems, queueFilter, selectedBatchId, selectedQueueItemId, selectedStoreId])
 
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current || capturing || !selectedStoreId || !selectedBatchId) return
@@ -637,6 +651,16 @@ export function Phase1Screen() {
     }
   }, [allItems, allPhotos, loadData, photoStore, selectedBatchId, selectedStoreId])
 
+  const handleCopyText = useCallback(async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setStatusMsg(`${label} copied`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setStatusMsg(`Copy failed: ${msg}`)
+    }
+  }, [])
+
   const queueItems = useMemo(() => {
     const items = allItems.filter((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId)
     const filtered = queueFilter === 'all' ? items : items.filter((item) => (item.listingStatus || 'new') === queueFilter)
@@ -666,6 +690,72 @@ export function Phase1Screen() {
   const cleanupReport = useMemo(() => {
     return getCleanupReport(allItems, allPhotos, selectedStoreId, selectedBatchId)
   }, [allItems, allPhotos, selectedBatchId, selectedStoreId])
+
+  const selectedStoreBatches = useMemo(
+    () => batches.filter((batch) => batch.storeId === selectedStoreId),
+    [batches, selectedStoreId],
+  )
+
+  const desktopStoreCards = useMemo(() => {
+    return stores.map((store) => {
+      const storeBatches = batches.filter((batch) => batch.storeId === store.id)
+      const storeItems = allItems.filter((item) => item.storeId === store.id)
+      const storePhotos = allPhotos.filter((photo) => storeItems.some((item) => item.photoIds.includes(photo.id)))
+      const activeBatchCount = storeBatches.filter((batch) => batch.status === 'active').length
+      const unlistedCount = storeItems.filter((item) => (item.listingStatus || 'new') === 'new').length
+      const needsRetakeCount = storeItems.filter((item) => item.listingStatus === 'needs_retake').length
+      const incompleteUploadCount = storeItems.filter((item) => {
+        const itemPhotos = item.photoIds.map((photoId) => allPhotos.find((photo) => photo.id === photoId)).filter((photo): photo is StoredPhoto => Boolean(photo))
+        return itemPhotos.length > 0 && itemPhotos.some((photo) => photo.uploadStatus !== 'verified' || photo.remoteStatus !== 'verified')
+      }).length
+
+      return {
+        store,
+        activeBatchCount,
+        batchCount: storeBatches.length,
+        itemCount: storeItems.length,
+        photoCount: storePhotos.length,
+        unlistedCount,
+        needsRetakeCount,
+        incompleteUploadCount,
+      }
+    })
+  }, [allItems, allPhotos, batches, stores])
+
+  const desktopBatchCards = useMemo(() => {
+    return selectedStoreBatches.map((batch) => {
+      const batchItems = allItems.filter((item) => item.storeId === selectedStoreId && item.batchId === batch.id)
+      const batchPhotos = allPhotos.filter((photo) => batchItems.some((item) => item.photoIds.includes(photo.id)))
+      const uploadSummary = getBatchUploadStateSummary(allItems, allPhotos, selectedStoreId, batch.id)
+      const readyCount = batchItems.filter((item) => getItemReadiness(item, allPhotos).readyForHandoff).length
+      return {
+        batch,
+        itemCount: batchItems.length,
+        photoCount: batchPhotos.length,
+        readyCount,
+        uploadSummary,
+      }
+    })
+  }, [allItems, allPhotos, selectedBatchId, selectedStoreBatches, selectedStoreId])
+
+  const selectedDesktopItem = useMemo(() => {
+    if (!selectedQueueItemId) {
+      return queueItems[0] || null
+    }
+    return queueItems.find((item) => item.id === selectedQueueItemId) || queueItems[0] || null
+  }, [queueItems, selectedQueueItemId])
+
+  const selectedDesktopItemPhotos = useMemo(() => {
+    if (!selectedDesktopItem) return []
+    return selectedDesktopItem.photoIds
+      .map((photoId) => allPhotos.find((photo) => photo.id === photoId))
+      .filter((photo): photo is StoredPhoto => Boolean(photo))
+  }, [allPhotos, selectedDesktopItem])
+
+  const selectedDesktopItemReadiness = useMemo(() => {
+    if (!selectedDesktopItem) return null
+    return getItemReadiness(selectedDesktopItem, allPhotos)
+  }, [allPhotos, selectedDesktopItem])
 
   const currentItemPhotos = useMemo(() => {
     if (!currentItem) return []
@@ -961,46 +1051,149 @@ export function Phase1Screen() {
         </div>
 
         <div style={s.panel}>
-          <div style={s.sectionTitle}>Batch queue</div>
-          <div style={s.filterRow}>
-            {(['all', 'new', 'listed', 'hold', 'needs_retake'] as QueueFilter[]).map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setQueueFilter(filter)}
-                style={{
-                  ...s.filterButton,
-                  ...(queueFilter === filter ? s.filterButtonActive : {}),
-                }}
-              >
-                {filter === 'needs_retake' ? 'Needs retake' : filter.charAt(0).toUpperCase() + filter.slice(1)}
-              </button>
-            ))}
-          </div>
+          <div style={s.sectionTitle}>Desktop queue</div>
 
-          {queueItems.length === 0 ? (
-            <div style={s.empty}>
-              No items in this batch yet. Capture an item to start the queue.
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div>
+              <div style={s.label}>Stores</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {desktopStoreCards.length === 0 ? (
+                  <div style={s.empty}>No stores yet.</div>
+                ) : (
+                  desktopStoreCards.map(({ store, activeBatchCount, batchCount, itemCount, photoCount, unlistedCount, needsRetakeCount, incompleteUploadCount }) => (
+                    <button
+                      key={store.id}
+                      onClick={() => void handleStoreChange(store.id)}
+                      style={{
+                        ...s.queueItem,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        borderColor: selectedStoreId === store.id ? '#60a5fa' : '#242424',
+                        outline: 'none',
+                      }}
+                    >
+                      <div style={{ ...s.queueContent, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ ...s.queueTitle, marginBottom: 0 }}>
+                          <div style={s.queueNumber}>{store.name} ({store.shortCode})</div>
+                          <span style={{ ...s.queueBadge, ...s.badgeUnknown }}>{activeBatchCount} active</span>
+                        </div>
+                        <div style={s.queueMeta}>
+                          {batchCount} batch{batchCount === 1 ? '' : 'es'} • {itemCount} item{itemCount === 1 ? '' : 's'} • {photoCount} photo{photoCount === 1 ? '' : 's'}
+                          <br />
+                          Unlisted: {unlistedCount} • Needs retake: {needsRetakeCount} • Incomplete uploads: {incompleteUploadCount}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
-          ) : (
-            queueItems.map((item) => {
-              const fullItem = attachOrderedPhotosToItem(item, allPhotos)
-              const readiness = getItemReadiness(item, allPhotos)
-              const coverPhoto = fullItem.coverPhoto
-              return (
-                <QueueCard
-                  key={item.id}
-                  item={item}
-                  readiness={readiness}
-                  coverPhoto={coverPhoto}
+
+            <div>
+              <div style={s.label}>Batches</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {desktopBatchCards.length === 0 ? (
+                  <div style={s.empty}>No batches for this store yet.</div>
+                ) : (
+                  desktopBatchCards.map(({ batch, itemCount, photoCount, readyCount, uploadSummary }) => (
+                    <button
+                      key={batch.id}
+                      onClick={() => {
+                        setSelectedBatchId(batch.id)
+                        setSelectedQueueItemId('')
+                      }}
+                      style={{
+                        ...s.queueItem,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        borderColor: selectedBatchId === batch.id ? '#60a5fa' : '#242424',
+                        outline: 'none',
+                      }}
+                    >
+                      <div style={{ ...s.queueContent, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ ...s.queueTitle, marginBottom: 0 }}>
+                          <div style={s.queueNumber}>{batch.name}</div>
+                          <span style={{ ...s.queueBadge, ...s.badgeUnknown }}>
+                            {batch.status}
+                          </span>
+                        </div>
+                        <div style={s.queueMeta}>
+                          {itemCount} item{itemCount === 1 ? '' : 's'} • {photoCount} photo{photoCount === 1 ? '' : 's'} • {readyCount} ready
+                          <br />
+                          Upload: {uploadSummary.failedPhotos > 0 ? 'needs attention' : uploadSummary.pendingPhotos > 0 ? 'pending' : 'verified'}
+                          {' '}• Safe to clear: {uploadSummary.safeToClearPhotos > 0 ? 'yes' : 'no'}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div style={s.label}>Items</div>
+              <div style={s.filterRow}>
+                {(['all', 'new', 'listed', 'hold', 'needs_retake'] as QueueFilter[]).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setQueueFilter(filter)}
+                    style={{
+                      ...s.filterButton,
+                      ...(queueFilter === filter ? s.filterButtonActive : {}),
+                    }}
+                  >
+                    {filter === 'needs_retake' ? 'Needs retake' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {queueItems.length === 0 ? (
+                <div style={s.empty}>
+                  No items in this batch yet. Capture an item to start the queue.
+                </div>
+              ) : (
+                queueItems.map((item) => {
+                  const fullItem = attachOrderedPhotosToItem(item, allPhotos)
+                  const readiness = getItemReadiness(item, allPhotos)
+                  const coverPhoto = fullItem.coverPhoto
+                  return (
+                    <QueueCard
+                      key={item.id}
+                      item={item}
+                      readiness={readiness}
+                      coverPhoto={coverPhoto}
+                      isSelected={selectedQueueItemId === item.id}
+                      onSelect={() => setSelectedQueueItemId(item.id)}
+                      onPhotoClick={(photo) => setSelectedPhoto(photo)}
+                      onUpdateStatus={async (status) => {
+                        await itemPacketStore.setListingStatus(item.id, status)
+                        await loadData()
+                      }}
+                    />
+                  )
+                })
+              )}
+            </div>
+
+            <div>
+              <div style={s.label}>Item detail</div>
+              {!selectedDesktopItem ? (
+                <div style={s.empty}>Select an item to inspect its photos and metadata.</div>
+              ) : (
+                <DesktopItemDetail
+                  item={selectedDesktopItem}
+                  photos={selectedDesktopItemPhotos}
+                  readiness={selectedDesktopItemReadiness}
                   onPhotoClick={(photo) => setSelectedPhoto(photo)}
                   onUpdateStatus={async (status) => {
-                    await itemPacketStore.setListingStatus(item.id, status)
+                    await itemPacketStore.setListingStatus(selectedDesktopItem.id, status)
                     await loadData()
                   }}
+                  onCopyText={handleCopyText}
                 />
-              )
-            })
-          )}
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1013,12 +1206,16 @@ function QueueCard({
   item,
   readiness,
   coverPhoto,
+  isSelected,
+  onSelect,
   onPhotoClick,
   onUpdateStatus,
 }: {
   item: ItemPacket
   readiness: ReturnType<typeof getItemReadiness>
   coverPhoto: StoredPhoto | null
+  isSelected?: boolean
+  onSelect?: () => void
   onPhotoClick?: (photo: StoredPhoto) => void
   onUpdateStatus: (status: ListingStatus) => Promise<void>
 }) {
@@ -1032,7 +1229,14 @@ function QueueCard({
           : s.badgeNew
 
   return (
-    <div style={s.queueItem}>
+    <div
+      style={{
+        ...s.queueItem,
+        borderColor: isSelected ? '#60a5fa' : '#242424',
+        cursor: onSelect ? 'pointer' : 'default',
+      }}
+      onClick={onSelect}
+    >
       <QueueThumb photo={coverPhoto} onClick={onPhotoClick} />
       <div style={s.queueContent}>
         <div style={s.queueTitle}>
@@ -1044,7 +1248,9 @@ function QueueCard({
         <div style={s.queueMeta}>
           {item.photoIds.length} photo{item.photoIds.length === 1 ? '' : 's'} • {readiness.readyForHandoff ? 'ready' : 'needs info'}
           <br />
-          Upload: {item.uploadStatus || 'local'}
+          Upload: {item.uploadStatus || 'local'} • {item.remoteStatus || 'local'}
+          <br />
+          {readiness.photoCount} in order • {readiness.missingPhotoCount} missing
           <br />
           {item.note ? `Note: ${item.note}` : 'Note missing'}
           <br />
@@ -1058,6 +1264,128 @@ function QueueCard({
           <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onUpdateStatus('hold')}>Hold</button>
           <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onUpdateStatus('needs_retake')}>Needs retake</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function DesktopItemDetail({
+  item,
+  photos,
+  readiness,
+  onPhotoClick,
+  onUpdateStatus,
+  onCopyText,
+}: {
+  item: ItemPacket
+  photos: StoredPhoto[]
+  readiness: ReturnType<typeof getItemReadiness> | null
+  onPhotoClick?: (photo: StoredPhoto) => void
+  onUpdateStatus: (status: ListingStatus) => Promise<void>
+  onCopyText: (text: string, label: string) => Promise<void>
+}) {
+  const availability =
+    photos.length === 0
+      ? 'No photos attached'
+      : photos.every((photo) => photo.uploadStatus === 'verified' && photo.remoteStatus === 'verified')
+        ? 'Photos verified and safe to clear'
+        : photos.some((photo) => photo.uploadStatus === 'failed' || photo.remoteStatus === 'failed')
+          ? 'Upload incomplete or failed'
+          : 'Upload pending'
+
+  const mainPhoto = photos[0] || null
+
+  return (
+    <div style={{ ...s.queueItem, flexDirection: 'column', alignItems: 'stretch' }}>
+      <div style={s.queueTitle}>
+        <div>
+          <div style={s.queueNumber}>Item {item.itemNumber}</div>
+          <div style={s.queueMeta}>
+            {availability}
+            <br />
+            {readiness?.readyForHandoff ? 'Ready for handoff' : 'Needs info before listing'}
+          </div>
+        </div>
+        <span
+          style={{
+            ...s.queueBadge,
+            ...(item.listingStatus === 'listed'
+              ? s.badgeListed
+              : item.listingStatus === 'hold'
+                ? s.badgeHold
+                : item.listingStatus === 'needs_retake'
+                  ? s.badgeRetake
+                  : s.badgeNew),
+          }}
+        >
+          {item.listingStatus || 'new'}
+        </span>
+      </div>
+
+      {mainPhoto && (
+        <div style={{ marginBottom: 8 }}>
+          <QueueThumb photo={mainPhoto} onClick={onPhotoClick} />
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: 8, marginBottom: 8 }}>
+        <div style={s.queueMeta}>
+          SKU: {item.sku || 'missing'}
+          <br />
+          Note: {item.note || 'missing'}
+          <br />
+          Weight: {item.weight || 'missing'}
+          <br />
+          Upload: {item.uploadStatus || 'local'} • Remote: {item.remoteStatus || 'local'}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onCopyText(item.sku || '', 'SKU')} disabled={!item.sku}>
+            Copy SKU
+          </button>
+          <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onCopyText(item.note || '', 'Note')} disabled={!item.note}>
+            Copy Note
+          </button>
+          <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onCopyText(item.weight || '', 'Weight')} disabled={!item.weight}>
+            Copy Weight
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 8 }}>
+        <div style={s.label}>Ordered photos</div>
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))' }}>
+          {photos.length === 0 ? (
+            <div style={s.empty}>No photos attached.</div>
+          ) : (
+            photos.map((photo, index) => (
+              <button
+                key={photo.id}
+                onClick={() => onPhotoClick?.(photo)}
+                style={{
+                  ...s.queueItem,
+                  flexDirection: 'column',
+                  padding: 8,
+                  marginBottom: 0,
+                  textAlign: 'left',
+                }}
+              >
+                <QueueThumb photo={photo} onClick={onPhotoClick} />
+                <div style={s.queueMeta}>
+                  #{index + 1}
+                  <br />
+                  {photo.uploadStatus || 'local'} / {photo.remoteStatus || 'not_uploaded'}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+        <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onUpdateStatus('new')}>New</button>
+        <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onUpdateStatus('listed')}>Mark listed</button>
+        <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onUpdateStatus('hold')}>Hold</button>
+        <button style={{ ...s.button, ...s.buttonSmall }} onClick={() => void onUpdateStatus('needs_retake')}>Needs retake</button>
       </div>
     </div>
   )

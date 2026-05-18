@@ -8,12 +8,12 @@ Phase 1 moves the app from camera spike into the first real handoff workflow.
 - queue-oriented Phase 1 screen
 - Supabase Auth magic-link bootstrap
 - batch sync into Supabase tables and private storage
+- desktop store queue with batch drilldown and item detail
 - item listing status controls
 - default store and batch seed data
 
 ## Still to build
 
-- upload retry/resume queue
-- storage cleanup flow after verified remote upload
+- richer remote cleanup automation
 - stronger remote verification and safe-to-clear logic
-- desktop-first batch and item review behavior
+- remote photo retention dates and listing-complete cleanup policy

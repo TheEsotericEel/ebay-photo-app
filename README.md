@@ -8,6 +8,7 @@ PWA-first eBay photo handoff app for camera capture, item packets, and a lister 
 - Phase 1 store/batch queue scaffolding is implemented
 - Supabase project is linked and seeded
 - Phase 1 now includes Supabase session bootstrap and a batch upload path
+- Phase 1 now includes a desktop store/batch/item queue with item detail and manual checkoff
 
 ## Local development
 
