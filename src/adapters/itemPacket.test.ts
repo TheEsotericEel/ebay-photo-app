@@ -21,6 +21,7 @@ describe('IndexedDbItemPacketStore', () => {
     expect(item.photoIds).toEqual([])
     expect(item.storeId).toBe('default-store')
     expect(item.batchId).toBe('default-batch')
+    expect(item.listingStatus).toBe('new')
   })
 
   it('increments itemNumber for subsequent items', async () => {
@@ -106,6 +107,25 @@ describe('IndexedDbItemPacketStore', () => {
 
     expect(current?.id).toBe(item2.id)
     expect(current?.status).toBe('draft')
+  })
+
+  it('getCurrentItem can filter by store and batch', async () => {
+    const item1 = await store.createItem('store-a', 'batch-a')
+    const item2 = await store.createItem('store-b', 'batch-b')
+
+    const currentA = await store.getCurrentItem('store-a', 'batch-a')
+    const currentB = await store.getCurrentItem('store-b', 'batch-b')
+
+    expect(currentA?.id).toBe(item1.id)
+    expect(currentB?.id).toBe(item2.id)
+  })
+
+  it('updates listing status', async () => {
+    const item = await store.createItem()
+    await store.setListingStatus(item.id, 'listed')
+
+    const updated = await store.getItem(item.id)
+    expect(updated?.listingStatus).toBe('listed')
   })
 
   it('getCurrentItem returns null when no draft items exist', async () => {

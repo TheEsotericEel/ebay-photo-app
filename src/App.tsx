@@ -1,12 +1,12 @@
 import { useState } from 'react'
+import { Phase1Screen } from './phase1/Phase1Screen'
 import { Phase0Screen } from './phase0/Phase0Screen'
 import { CameraLab } from './phase0/CameraLab'
-import { ItemReview } from './phase0/ItemReview'
 
-type View = 'phase0' | 'lab' | 'review'
+type View = 'phase1' | 'phase0' | 'lab'
 
 export function App() {
-  const [view, setView] = useState<View>('phase0')
+  const [view, setView] = useState<View>('phase1')
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -20,6 +20,21 @@ export function App() {
         }}
       >
         <button
+          onClick={() => setView('phase1')}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: 6,
+            border: view === 'phase1' ? '1px solid #666' : '1px solid #333',
+            background: view === 'phase1' ? '#2a2a2a' : 'transparent',
+            color: view === 'phase1' ? '#eee' : '#888',
+            fontSize: 13,
+            cursor: 'pointer',
+          }}
+        >
+          Phase 1
+        </button>
+        <button
           onClick={() => setView('phase0')}
           style={{
             flex: 1,
@@ -32,22 +47,7 @@ export function App() {
             cursor: 'pointer',
           }}
         >
-          Phase 0 Camera
-        </button>
-        <button
-          onClick={() => setView('review')}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            borderRadius: 6,
-            border: view === 'review' ? '1px solid #666' : '1px solid #333',
-            background: view === 'review' ? '#2a2a2a' : 'transparent',
-            color: view === 'review' ? '#eee' : '#888',
-            fontSize: 13,
-            cursor: 'pointer',
-          }}
-        >
-          Item Review
+          Phase 0 Spike
         </button>
         <button
           onClick={() => setView('lab')}
@@ -65,9 +65,9 @@ export function App() {
           Raw Camera Lab
         </button>
       </div>
+      {view === 'phase1' && <Phase1Screen />}
       {view === 'phase0' && <Phase0Screen />}
       {view === 'lab' && <CameraLab />}
-      {view === 'review' && <ItemReview />}
     </div>
   )
 }

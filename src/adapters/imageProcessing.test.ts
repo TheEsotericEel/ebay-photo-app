@@ -241,7 +241,7 @@ describe('loadDefaultRatioFromStorage', () => {
     Storage.prototype.getItem = originalGetItem
   })
 
-  it('returns full when stored value is invalid', () => {
+  it('returns full when stored value is invalid (default fallback)', () => {
     const originalGetItem = Storage.prototype.getItem
     Storage.prototype.getItem = vi.fn((key: string) => {
       if (key === 'defaultRatio') return 'invalid'
@@ -251,7 +251,7 @@ describe('loadDefaultRatioFromStorage', () => {
     Storage.prototype.getItem = originalGetItem
   })
 
-  it('returns full when localStorage is empty', () => {
+  it('returns full when localStorage is empty (default fallback)', () => {
     const originalGetItem = Storage.prototype.getItem
     Storage.prototype.getItem = vi.fn((key: string) => {
       if (key === 'defaultRatio') return null

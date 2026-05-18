@@ -106,6 +106,7 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, Props>(function Cam
         autoPlay
         style={videoStyle}
       />
+      {/* Full frame border */}
       {started && ratio === 'full' && (
         <div style={{
           position: 'absolute',
@@ -113,6 +114,75 @@ export const CameraPreview = forwardRef<CameraPreviewHandle, Props>(function Cam
           pointerEvents: 'none',
           border: '1px solid rgba(255,255,255,0.2)',
         }} />
+      )}
+
+      {/* Square composition guide for 1:1 ratio */}
+      {started && ratio === '1:1' && (
+        <>
+          {/* Outer square border */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 'min(100%, 100vh)',
+            aspectRatio: '1 / 1',
+            pointerEvents: 'none',
+            border: '2px solid rgba(255, 255, 255, 0.8)',
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.4)',
+          }} />
+          {/* Corner guides */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 'min(100%, 100vh)',
+            aspectRatio: '1 / 1',
+            pointerEvents: 'none',
+          }}>
+            {/* Top-left corner */}
+            <div style={{
+              position: 'absolute',
+              top: -2,
+              left: -2,
+              width: 24,
+              height: 24,
+              borderTop: '4px solid #fff',
+              borderLeft: '4px solid #fff',
+            }} />
+            {/* Top-right corner */}
+            <div style={{
+              position: 'absolute',
+              top: -2,
+              right: -2,
+              width: 24,
+              height: 24,
+              borderTop: '4px solid #fff',
+              borderRight: '4px solid #fff',
+            }} />
+            {/* Bottom-left corner */}
+            <div style={{
+              position: 'absolute',
+              bottom: -2,
+              left: -2,
+              width: 24,
+              height: 24,
+              borderBottom: '4px solid #fff',
+              borderLeft: '4px solid #fff',
+            }} />
+            {/* Bottom-right corner */}
+            <div style={{
+              position: 'absolute',
+              bottom: -2,
+              right: -2,
+              width: 24,
+              height: 24,
+              borderBottom: '4px solid #fff',
+              borderRight: '4px solid #fff',
+            }} />
+          </div>
+        </>
       )}
     </div>
   )

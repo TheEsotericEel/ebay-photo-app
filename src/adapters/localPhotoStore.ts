@@ -1,5 +1,5 @@
 import { OutputRatio } from './imageProcessing'
-import { DB_NAME, DB_VERSION, PHOTO_STORE_NAME, ITEM_STORE_NAME } from './dbConfig'
+import { BATCH_STORE_NAME, DB_NAME, DB_VERSION, ITEM_STORE_NAME, PHOTO_STORE_NAME, STORE_STORE_NAME } from './dbConfig'
 
 const STORE_NAME = PHOTO_STORE_NAME
 
@@ -57,6 +57,14 @@ function openDb(
       // Create pending-photos store
       if (!db.objectStoreNames.contains(PHOTO_STORE_NAME)) {
         db.createObjectStore(PHOTO_STORE_NAME, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(STORE_STORE_NAME)) {
+        db.createObjectStore(STORE_STORE_NAME, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(BATCH_STORE_NAME)) {
+        const batchStore = db.createObjectStore(BATCH_STORE_NAME, { keyPath: 'id' })
+        batchStore.createIndex('storeId', 'storeId', { unique: false })
+        batchStore.createIndex('status', 'status', { unique: false })
       }
       // Create item-packets store (for compatibility when photo store opens first)
       if (!db.objectStoreNames.contains(ITEM_STORE_NAME)) {
