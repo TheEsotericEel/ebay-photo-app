@@ -81,6 +81,27 @@ function formatCameraDeviceLabel(label: string): string {
     .trim()
 }
 
+function isFrontCameraLabel(label: string): boolean {
+  const lower = formatCameraDeviceLabel(label).toLowerCase()
+  return lower.includes('front') || lower.includes('selfie')
+}
+
+function isUltraWideHint(label: string): boolean {
+  const lower = formatCameraDeviceLabel(label).toLowerCase()
+  return lower.includes('ultra') || lower.includes('0.5') || lower.includes('dual wide')
+}
+
+function isMainRearHint(label: string): boolean {
+  const lower = formatCameraDeviceLabel(label).toLowerCase()
+  return (
+    lower.includes('wide')
+    || lower.includes('main')
+    || lower.includes('triple')
+    || lower.includes('dual')
+    || lower === 'rear'
+  )
+}
+
 function scoreDeviceForZoomPreset(deviceLabel: string, zoom: number): number {
   const label = formatCameraDeviceLabel(deviceLabel).toLowerCase()
   const band = zoom <= 0.75
@@ -150,9 +171,43 @@ function pickCameraDeviceForZoomPreset(devices: CameraDeviceInfo[], zoom: number
   return best.device
 }
 
+function getRearCameraDevices(devices: CameraDeviceInfo[]): CameraDeviceInfo[] {
+  return devices.filter((device) => !isFrontCameraLabel(device.label || device.deviceId))
+}
+
+function pickMainRearDevice(devices: CameraDeviceInfo[]): CameraDeviceInfo | null {
+  const rearDevices = getRearCameraDevices(devices)
+  if (rearDevices.length === 0) return null
+
+  const preferred =
+    rearDevices.find((device) => isMainRearHint(device.label || device.deviceId) && !isUltraWideHint(device.label || device.deviceId))
+    || rearDevices.find((device) => isMainRearHint(device.label || device.deviceId))
+    || rearDevices[0]
+
+  return preferred ?? null
+}
+
+function pickUltraWideRearDevice(devices: CameraDeviceInfo[], mainDeviceId?: string): CameraDeviceInfo | null {
+  const rearDevices = getRearCameraDevices(devices)
+  if (rearDevices.length === 0) return null
+
+  const explicitUltra =
+    rearDevices.find((device) => isUltraWideHint(device.label || device.deviceId) && device.deviceId !== mainDeviceId)
+    || null
+  if (explicitUltra) return explicitUltra
+
+  const alternates = rearDevices.filter((device) => device.deviceId !== mainDeviceId)
+  if (alternates.length === 0) return null
+
+  return (
+    alternates.find((device) => !isMainRearHint(device.label || device.deviceId))
+    || alternates[0]
+  )
+}
+
 function getAvailableLensPresets(devices: CameraDeviceInfo[]): number[] {
-  const mainDevice = pickCameraDeviceForZoomPreset(devices, 1)
-  const ultraWideDevice = pickCameraDeviceForZoomPreset(devices, 0.5, mainDevice?.deviceId)
+  const mainDevice = pickMainRearDevice(devices)
+  const ultraWideDevice = pickUltraWideRearDevice(devices, mainDevice?.deviceId)
 
   const presets: number[] = []
   if (ultraWideDevice && mainDevice && ultraWideDevice.deviceId !== mainDevice.deviceId) {
@@ -3003,7 +3058,12 @@ export function WorkspaceScreen() {
     const currentDeviceId = capabilities?.trackSettings?.deviceId
     const savedDeviceId = cameraPreferences.preferredLensDeviceIds?.[String(preset)]
     const savedDevice = savedDeviceId ? cameraDevices.find((device) => device.deviceId === savedDeviceId) || null : null
-    const targetDevice = savedDevice || pickCameraDeviceForZoomPreset(cameraDevices, preset, currentDeviceId)
+    const mainDevice = pickMainRearDevice(cameraDevices)
+    const inferredDevice =
+      preset <= 0.75
+        ? pickUltraWideRearDevice(cameraDevices, mainDevice?.deviceId)
+        : mainDevice
+    const targetDevice = savedDevice || inferredDevice || pickCameraDeviceForZoomPreset(cameraDevices, preset, currentDeviceId)
     if (targetDevice && targetDevice.deviceId !== currentDeviceId) {
       await handleSelectCameraDevice(targetDevice.deviceId)
     }
