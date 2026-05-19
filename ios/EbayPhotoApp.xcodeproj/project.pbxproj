@@ -1,0 +1,344 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4A8F1D4F2C2F4D5D8B900001 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */; };
+		4A8F1D4F2C2F4D5D8B900002 /* EbayPhotoAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */; };
+		4A8F1D4F2C2F4D5D8B900003 /* CapturedPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900003 /* CapturedPhoto.swift */; };
+		4A8F1D4F2C2F4D5D8B900004 /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900004 /* CameraService.swift */; };
+		4A8F1D4F2C2F4D5D8B900005 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900005 /* SupabaseService.swift */; };
+		4A8F1D4F2C2F4D5D8B900006 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900006 /* CameraPreviewView.swift */; };
+		4A8F1D4F2C2F4D5D8B900007 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900007 /* RootView.swift */; };
+		4A8F1D4F2C2F4D5D8B900008 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900008 /* AVFoundation.framework */; };
+		4A8F1D4F2C2F4D5D8B900009 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900009 /* SwiftUI.framework */; };
+		4A8F1D4F2C2F4D5D8B90000A /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90000A /* UIKit.framework */; };
+		4A8F1D4F2C2F4D5D8B90000B /* Combine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90000B /* Combine.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbayPhotoAppApp.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900003 /* CapturedPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPhoto.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900004 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900005 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900006 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900007 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900008 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		4A8F1D4E2C2F4D5D8B900009 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		4A8F1D4E2C2F4D5D8B90000A /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		4A8F1D4E2C2F4D5D8B90000B /* Combine.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Combine.framework; path = System/Library/Frameworks/Combine.framework; sourceTree = SDKROOT; };
+		4A8F1D4E2C2F4D5D8B90000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B90000D /* EbayPhotoApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EbayPhotoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		4A8F1D4D2C2F4D5D8B900001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A8F1D4F2C2F4D5D8B900008 /* AVFoundation.framework in Frameworks */,
+				4A8F1D4F2C2F4D5D8B900009 /* SwiftUI.framework in Frameworks */,
+				4A8F1D4F2C2F4D5D8B90000A /* UIKit.framework in Frameworks */,
+				4A8F1D4F2C2F4D5D8B90000B /* Combine.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4A8F1D4B2C2F4D5D8B900001 = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4B2C2F4D5D8B900002 /* EbayPhotoApp */,
+				4A8F1D4B2C2F4D5D8B90000E /* Products */,
+				D82D3AC32FBCACEC00EFCBD9 /* Recovered References */,
+			);
+			sourceTree = "<group>";
+		};
+		4A8F1D4B2C2F4D5D8B900002 /* EbayPhotoApp */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4B2C2F4D5D8B900003 /* App */,
+				4A8F1D4B2C2F4D5D8B900004 /* Models */,
+				4A8F1D4B2C2F4D5D8B900005 /* Resources */,
+				4A8F1D4B2C2F4D5D8B900006 /* Services */,
+				4A8F1D4B2C2F4D5D8B900007 /* Views */,
+			);
+			path = EbayPhotoApp;
+			sourceTree = "<group>";
+		};
+		4A8F1D4B2C2F4D5D8B900003 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */,
+				4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		4A8F1D4B2C2F4D5D8B900004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4E2C2F4D5D8B900003 /* CapturedPhoto.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		4A8F1D4B2C2F4D5D8B900005 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4E2C2F4D5D8B90000C /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		4A8F1D4B2C2F4D5D8B900006 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4E2C2F4D5D8B900004 /* CameraService.swift */,
+				4A8F1D4E2C2F4D5D8B900005 /* SupabaseService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		4A8F1D4B2C2F4D5D8B900007 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4E2C2F4D5D8B900006 /* CameraPreviewView.swift */,
+				4A8F1D4E2C2F4D5D8B900007 /* RootView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		4A8F1D4B2C2F4D5D8B90000E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4E2C2F4D5D8B90000D /* EbayPhotoApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D82D3AC32FBCACEC00EFCBD9 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4E2C2F4D5D8B900008 /* AVFoundation.framework */,
+				4A8F1D4E2C2F4D5D8B900009 /* SwiftUI.framework */,
+				4A8F1D4E2C2F4D5D8B90000A /* UIKit.framework */,
+				4A8F1D4E2C2F4D5D8B90000B /* Combine.framework */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4A8F1D4C2C2F4D5D8B900001 /* EbayPhotoApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4A8F1D522C2F4D5D8B900001 /* Build configuration list for PBXNativeTarget "EbayPhotoApp" */;
+			buildPhases = (
+				4A8F1D4D2C2F4D5D8B900001 /* Frameworks */,
+				4A8F1D4D2C2F4D5D8B900002 /* Sources */,
+				4A8F1D4D2C2F4D5D8B900003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EbayPhotoApp;
+			productName = EbayPhotoApp;
+			productReference = 4A8F1D4E2C2F4D5D8B90000D /* EbayPhotoApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4A8F1D4A2C2F4D5D8B900001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					4A8F1D4C2C2F4D5D8B900001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = 4A8F1D512C2F4D5D8B900001 /* Build configuration list for PBXProject "EbayPhotoApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 4A8F1D4B2C2F4D5D8B900001;
+			productRefGroup = 4A8F1D4B2C2F4D5D8B90000E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4A8F1D4C2C2F4D5D8B900001 /* EbayPhotoApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4A8F1D4D2C2F4D5D8B900003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4A8F1D4D2C2F4D5D8B900002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A8F1D4F2C2F4D5D8B900001 /* AppState.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900002 /* EbayPhotoAppApp.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900003 /* CapturedPhoto.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900004 /* CameraService.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900005 /* SupabaseService.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900006 /* CameraPreviewView.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900007 /* RootView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		4A8F1D532C2F4D5D8B900001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EbayPhotoApp/Resources/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joesprojects.ebayphotoapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		4A8F1D542C2F4D5D8B900001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EbayPhotoApp/Resources/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joesprojects.ebayphotoapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		4A8F1D552C2F4D5D8B900001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2U387T5BM4;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joesprojects.ebayphotoapp;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		4A8F1D562C2F4D5D8B900001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2U387T5BM4;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.joesprojects.ebayphotoapp;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4A8F1D512C2F4D5D8B900001 /* Build configuration list for PBXProject "EbayPhotoApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A8F1D532C2F4D5D8B900001 /* Debug */,
+				4A8F1D542C2F4D5D8B900001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4A8F1D522C2F4D5D8B900001 /* Build configuration list for PBXNativeTarget "EbayPhotoApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A8F1D552C2F4D5D8B900001 /* Debug */,
+				4A8F1D562C2F4D5D8B900001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4A8F1D4A2C2F4D5D8B900001 /* Project object */;
+}
