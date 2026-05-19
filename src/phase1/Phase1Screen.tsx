@@ -194,15 +194,7 @@ function pickUltraWideRearDevice(devices: CameraDeviceInfo[], mainDeviceId?: str
   const explicitUltra =
     rearDevices.find((device) => isUltraWideHint(device.label || device.deviceId) && device.deviceId !== mainDeviceId)
     || null
-  if (explicitUltra) return explicitUltra
-
-  const alternates = rearDevices.filter((device) => device.deviceId !== mainDeviceId)
-  if (alternates.length === 0) return null
-
-  return (
-    alternates.find((device) => !isMainRearHint(device.label || device.deviceId))
-    || alternates[0]
-  )
+  return explicitUltra
 }
 
 function getAvailableLensPresets(devices: CameraDeviceInfo[]): number[] {
