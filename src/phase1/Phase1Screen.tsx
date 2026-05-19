@@ -103,29 +103,39 @@ function formatCameraDeviceLabel(label: string): string {
 
 function scoreDeviceForZoomPreset(deviceLabel: string, zoom: number): number {
   const label = formatCameraDeviceLabel(deviceLabel).toLowerCase()
+  const band = zoom <= 0.75
+    ? 'ultra'
+    : zoom < 1.5
+      ? 'main'
+      : zoom < 2.5
+        ? 'tele2'
+        : zoom < 4.5
+          ? 'tele3'
+          : 'telemax'
 
   let score = 0
-  if (zoom <= 0.75) {
-    if (label.includes('ultra')) score += 100
-    if (label.includes('0.5')) score += 90
-    if (label.includes('wide')) score += 80
-    if (label.includes('rear')) score += 10
-  } else if (zoom < 1.5) {
-    if (label.includes('main')) score += 100
-    if (label.includes('wide')) score += 90
-    if (label.includes('rear')) score += 70
-  } else if (zoom < 2.5) {
-    if (label.includes('tele')) score += 100
-    if (label.includes('2')) score += 90
-    if (label.includes('rear')) score += 60
-  } else if (zoom < 4.5) {
-    if (label.includes('tele')) score += 100
-    if (label.includes('3')) score += 90
-    if (label.includes('rear')) score += 50
+  if (band === 'ultra') {
+    if (label.includes('ultra')) score += 400
+    if (label.includes('0.5')) score += 350
+    if (label.includes('wide')) score += 240
+    if (label.includes('rear')) score += 30
+  } else if (band === 'main') {
+    if (label.includes('main')) score += 400
+    if (label.includes('wide')) score += 260
+    if (label.includes('triple')) score += 220
+    if (label.includes('rear')) score += 40
+  } else if (band === 'tele2') {
+    if (label.includes('tele')) score += 420
+    if (label.includes('2')) score += 360
+    if (label.includes('rear')) score += 45
+  } else if (band === 'tele3') {
+    if (label.includes('tele')) score += 420
+    if (label.includes('3')) score += 360
+    if (label.includes('rear')) score += 45
   } else {
-    if (label.includes('tele')) score += 100
-    if (label.includes('zoom')) score += 90
-    if (label.includes('rear')) score += 50
+    if (label.includes('tele')) score += 420
+    if (label.includes('zoom')) score += 360
+    if (label.includes('rear')) score += 45
   }
 
   if (label.includes('triple')) score += 5
@@ -154,10 +164,6 @@ function pickCameraDeviceForZoomPreset(devices: CameraDeviceInfo[], zoom: number
 
   const best = scored[0]
   if (best.score <= 0) {
-    return currentDevice
-  }
-
-  if (currentDevice && scoreDeviceForZoomPreset(currentDevice.label || currentDevice.deviceId, zoom) >= best.score) {
     return currentDevice
   }
 
@@ -3159,7 +3165,7 @@ export function WorkspaceScreen() {
   }, [applyTapFocusPoint, canTapToFocus, getPreviewPoint])
 
   const handlePreviewTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    if (!cameraTestOpen || !canPinchToZoom) {
+    if (!canPinchToZoom) {
       return
     }
     if (event.touches.length !== 2) {
@@ -3178,10 +3184,10 @@ export function WorkspaceScreen() {
     pinchStartDistanceRef.current = Math.max(1, Math.hypot(dx, dy))
     pinchStartZoomRef.current = capabilities?.trackSettings?.zoom ?? zoomCap.min ?? 1
     pinchLastAppliedZoomRef.current = pinchStartZoomRef.current
-  }, [cameraTestOpen, canPinchToZoom, capabilities])
+  }, [canPinchToZoom, capabilities])
 
   const handlePreviewTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    if (!cameraTestOpen || !canPinchToZoom) {
+    if (!canPinchToZoom) {
       return
     }
     if (event.touches.length !== 2 || pinchApplyingRef.current) {
@@ -3214,7 +3220,7 @@ export function WorkspaceScreen() {
       .finally(() => {
         pinchApplyingRef.current = false
       })
-  }, [cameraTestOpen, canPinchToZoom, capabilities, handleApplyCameraTestConstraint])
+  }, [canPinchToZoom, capabilities, handleApplyCameraTestConstraint])
 
   const handlePreviewTouchEnd = useCallback(() => {
     pinchStartDistanceRef.current = null
