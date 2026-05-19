@@ -21,6 +21,11 @@ export interface CaptureDiagnostics {
   initialStreamHeight?: number
   capabilitiesWidthMax?: number
   capabilitiesHeightMax?: number
+  previewQualityAttempted?: boolean
+  previewQualityRequestedConstraints?: string[]
+  previewQualityApplied?: boolean
+  previewQualityError?: string
+  previewQualityTrackSettings?: TrackSettings
   maxConstraintCandidatesAttempted?: string[]
   finalStreamWidth?: number
   finalStreamHeight?: number
@@ -56,6 +61,19 @@ export interface TrackSettings {
   facingMode: string | undefined
   deviceId: string | undefined
   zoom: number | undefined
+  torch: boolean | undefined
+  focusMode: string | undefined
+  focusDistance: number | undefined
+  exposureMode: string | undefined
+  exposureTime: number | undefined
+  exposureCompensation: number | undefined
+  whiteBalanceMode: string | undefined
+  brightness: number | undefined
+  contrast: number | undefined
+  saturation: number | undefined
+  sharpness: number | undefined
+  iso: number | undefined
+  frameRate: number | undefined
 }
 
 export interface CameraCapabilities {
@@ -66,6 +84,30 @@ export interface CameraCapabilities {
   deviceLabels: string[]
   raw: MediaTrackCapabilities | null
   trackSettings: TrackSettings | null
+}
+
+export interface CameraDeviceInfo {
+  kind: string
+  deviceId: string
+  label: string
+  groupId: string
+}
+
+export interface CameraTestConstraintSet extends MediaTrackConstraintSet {
+  zoom?: number | ConstrainDoubleRange
+  focusMode?: string | string[] | ConstrainDOMStringParameters
+  focusDistance?: number | ConstrainDoubleRange
+  pointsOfInterest?: { x: number; y: number } | { x: number; y: number }[]
+  torch?: boolean
+  exposureMode?: string | string[] | ConstrainDOMStringParameters
+  exposureTime?: number | ConstrainDoubleRange
+  exposureCompensation?: number | ConstrainDoubleRange
+  whiteBalanceMode?: string | string[] | ConstrainDOMStringParameters
+  brightness?: number | ConstrainDoubleRange
+  contrast?: number | ConstrainDoubleRange
+  saturation?: number | ConstrainDoubleRange
+  sharpness?: number | ConstrainDoubleRange
+  iso?: number | ConstrainDoubleRange
 }
 
 export interface CameraAdapter {
@@ -80,9 +122,10 @@ export interface CameraAdapter {
 
 export class BrowserCameraAdapter implements CameraAdapter {
   private stream: MediaStream | null = null
+  private videoEl: HTMLVideoElement | null = null
+  private track: MediaStreamTrack | null = null
   private capabilities: CameraCapabilities | null = null
   private diagnostics: CaptureDiagnostics = {}
-  private videoEl: HTMLVideoElement | null = null
 
   async start(videoEl: HTMLVideoElement): Promise<void> {
     if (this.stream) {
@@ -116,6 +159,7 @@ export class BrowserCameraAdapter implements CameraAdapter {
 
     let stream = await navigator.mediaDevices.getUserMedia(initialConstraints)
     this.stream = stream
+    this.videoEl = videoEl
     videoEl.srcObject = stream
     await videoEl.play()
 
@@ -123,6 +167,7 @@ export class BrowserCameraAdapter implements CameraAdapter {
     if (!track) {
       throw new Error('No video track available')
     }
+    this.track = track
 
     // Record initial stream dimensions
     this.diagnostics.initialStreamWidth = videoEl.videoWidth
@@ -141,9 +186,12 @@ export class BrowserCameraAdapter implements CameraAdapter {
     this.diagnostics.capabilitiesHeightMax = rawCaps.height?.max
     console.log(`Stage A - Capabilities max: ${rawCaps.width?.max}x${rawCaps.height?.max}`)
 
-    // Stage B: DISABLED - Keep preview lightweight for battery/performance
-    // ImageCapture.takePhoto() can still return high-res from low-res preview streams
-    // Only enable temporary constraint upgrade if evidence shows takePhoto returns low-res
+    await this.applyBestEffortPreviewQualityUpgrade(track)
+
+    this.capabilities = probeCapabilities(track, videoEl)
+    this.diagnostics.finalStreamWidth = videoEl.videoWidth
+    this.diagnostics.finalStreamHeight = videoEl.videoHeight
+    console.log(`Stage A - Final stream after preview quality pass: ${videoEl.videoWidth}x${videoEl.videoHeight}`)
   }
 
   stop(): void {
@@ -151,6 +199,8 @@ export class BrowserCameraAdapter implements CameraAdapter {
       this.stream.getTracks().forEach((t) => t.stop())
       this.stream = null
     }
+    this.track = null
+    this.videoEl = null
     this.capabilities = null
     this.videoEl = null
   }
@@ -404,38 +454,98 @@ export class BrowserCameraAdapter implements CameraAdapter {
   }
 
   getActiveTrack(): MediaStreamTrack | null {
-    return this.stream?.getVideoTracks()[0] ?? null
+    return this.track
   }
 
-  async applyTestConstraints(constraints: MediaTrackConstraintSet): Promise<CameraCapabilities | null> {
-    const track = this.getActiveTrack()
+  async listVideoInputDevices(): Promise<CameraDeviceInfo[]> {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      return []
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    return devices
+      .filter((device) => device.kind === 'videoinput')
+      .map((device) => ({
+        kind: device.kind,
+        deviceId: device.deviceId,
+        label: device.label || `Camera ${device.deviceId.slice(0, 4)}`,
+        groupId: device.groupId || '',
+      }))
+  }
+
+  async applyTestConstraints(constraints: CameraTestConstraintSet): Promise<CameraCapabilities | null> {
+    const track = this.track
     if (!track) {
       throw new Error('Camera not started')
     }
 
-    await track.applyConstraints({ advanced: [constraints] })
+    const { width: _width, height: _height, ...safeConstraints } = constraints as CameraTestConstraintSet & {
+      width?: unknown
+      height?: unknown
+    }
+
+    await track.applyConstraints({
+      advanced: [safeConstraints] as MediaTrackConstraintSet[],
+    })
     this.capabilities = probeCapabilities(track, this.videoEl ?? undefined)
     return this.capabilities
   }
 
+  private async applyBestEffortPreviewQualityUpgrade(track: MediaStreamTrack): Promise<void> {
+    const requestedAdvanced = buildBestEffortPreviewQualityConstraints(track)
+    this.diagnostics.previewQualityAttempted = true
+    this.diagnostics.previewQualityRequestedConstraints = requestedAdvanced.map((entry) => JSON.stringify(entry))
+    console.log(`Preview quality request: ${this.diagnostics.previewQualityRequestedConstraints.join(' | ')}`)
+
+    try {
+      await track.applyConstraints({
+        advanced: requestedAdvanced as MediaTrackConstraintSet[],
+      })
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      this.diagnostics.previewQualityApplied = true
+      this.diagnostics.previewQualityTrackSettings = readTrackSettings(track)
+      console.log(
+        `Preview quality applied: ${this.diagnostics.previewQualityTrackSettings.width ?? '?'}x${this.diagnostics.previewQualityTrackSettings.height ?? '?'}` +
+          ` @ ${this.diagnostics.previewQualityTrackSettings.frameRate ?? '?'}fps`,
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.diagnostics.previewQualityApplied = false
+      this.diagnostics.previewQualityError = msg
+      console.warn(`Preview quality request failed: ${msg}`)
+    }
+  }
+
   async switchDevice(deviceId: string): Promise<CameraCapabilities | null> {
-    if (!this.videoEl) {
-      throw new Error('Camera preview not ready')
+    const videoEl = this.videoEl
+    if (!videoEl) {
+      throw new Error('Camera view not attached')
     }
 
-    const previousStream = this.stream
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Camera API unavailable')
+    }
+
+    const currentDeviceId = this.track?.getSettings().deviceId
+    if (currentDeviceId && currentDeviceId === deviceId) {
+      return this.capabilities
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: deviceId } },
       audio: false,
     })
 
+    const previousStream = this.stream
     this.stream = stream
-    this.videoEl.srcObject = stream
-    await this.videoEl.play()
-    const track = stream.getVideoTracks()[0]
-    this.capabilities = track ? probeCapabilities(track, this.videoEl) : null
+    this.track = stream.getVideoTracks()[0] || null
+    videoEl.srcObject = stream
+    await videoEl.play()
 
-    previousStream?.getTracks().forEach((t) => t.stop())
+    if (previousStream) {
+      previousStream.getTracks().forEach((t) => t.stop())
+    }
+
+    this.capabilities = this.track ? probeCapabilities(this.track, videoEl) : null
     return this.capabilities
   }
 }
@@ -464,7 +574,21 @@ function probeCapabilities(track: MediaStreamTrack, videoEl?: HTMLVideoElement):
   let trackSettings: TrackSettings | null = null
   try {
     const s = track.getSettings()
-    const ext = s as typeof s & { zoom?: number }
+    const ext = s as typeof s & {
+      zoom?: number
+      torch?: boolean
+      focusMode?: string
+      focusDistance?: number
+      exposureMode?: string
+      exposureTime?: number
+      exposureCompensation?: number
+      whiteBalanceMode?: string
+      brightness?: number
+      contrast?: number
+      saturation?: number
+      sharpness?: number
+      iso?: number
+    }
     trackSettings = {
       width: s.width,
       height: s.height,
@@ -472,6 +596,19 @@ function probeCapabilities(track: MediaStreamTrack, videoEl?: HTMLVideoElement):
       facingMode: s.facingMode,
       deviceId: s.deviceId,
       zoom: ext.zoom,
+      torch: ext.torch,
+      focusMode: ext.focusMode,
+      focusDistance: ext.focusDistance,
+      exposureMode: ext.exposureMode,
+      exposureTime: ext.exposureTime,
+      exposureCompensation: ext.exposureCompensation,
+      whiteBalanceMode: ext.whiteBalanceMode,
+      brightness: ext.brightness,
+      contrast: ext.contrast,
+      saturation: ext.saturation,
+      sharpness: ext.sharpness,
+      iso: ext.iso,
+      frameRate: s.frameRate,
     }
     if (videoEl) {
       trackSettings.width = trackSettings.width ?? (videoEl.videoWidth || undefined)
@@ -495,7 +632,21 @@ function probeCapabilities(track: MediaStreamTrack, videoEl?: HTMLVideoElement):
 function readTrackSettings(track: MediaStreamTrack): TrackSettings {
   try {
     const s = track.getSettings()
-    const ext = s as typeof s & { zoom?: number }
+    const ext = s as typeof s & {
+      zoom?: number
+      torch?: boolean
+      focusMode?: string
+      focusDistance?: number
+      exposureMode?: string
+      exposureTime?: number
+      exposureCompensation?: number
+      whiteBalanceMode?: string
+      brightness?: number
+      contrast?: number
+      saturation?: number
+      sharpness?: number
+      iso?: number
+    }
     return {
       width: s.width,
       height: s.height,
@@ -503,10 +654,76 @@ function readTrackSettings(track: MediaStreamTrack): TrackSettings {
       facingMode: s.facingMode,
       deviceId: s.deviceId,
       zoom: ext.zoom,
+      torch: ext.torch,
+      focusMode: ext.focusMode,
+      focusDistance: ext.focusDistance,
+      exposureMode: ext.exposureMode,
+      exposureTime: ext.exposureTime,
+      exposureCompensation: ext.exposureCompensation,
+      whiteBalanceMode: ext.whiteBalanceMode,
+      brightness: ext.brightness,
+      contrast: ext.contrast,
+      saturation: ext.saturation,
+      sharpness: ext.sharpness,
+      iso: ext.iso,
+      frameRate: s.frameRate,
     }
   } catch {
-    return { width: undefined, height: undefined, aspectRatio: undefined, facingMode: undefined, deviceId: undefined, zoom: undefined }
+    return {
+      width: undefined,
+      height: undefined,
+      aspectRatio: undefined,
+      facingMode: undefined,
+      deviceId: undefined,
+      zoom: undefined,
+      torch: undefined,
+      focusMode: undefined,
+      focusDistance: undefined,
+      exposureMode: undefined,
+      exposureTime: undefined,
+      exposureCompensation: undefined,
+      whiteBalanceMode: undefined,
+      brightness: undefined,
+      contrast: undefined,
+      saturation: undefined,
+      sharpness: undefined,
+      iso: undefined,
+      frameRate: undefined,
+    }
   }
+}
+
+function buildBestEffortPreviewQualityConstraints(track: MediaStreamTrack): Array<Record<string, unknown>> {
+  let rawCaps: (MediaTrackCapabilities & { width?: { max?: number }; height?: { max?: number } }) | null = null
+  try {
+    rawCaps = track.getCapabilities() as MediaTrackCapabilities & { width?: { max?: number }; height?: { max?: number } }
+  } catch {
+    rawCaps = null
+  }
+
+  const widthMax = rawCaps?.width?.max
+  const heightMax = rawCaps?.height?.max
+  const idealWidth = widthMax && widthMax >= 1920 ? widthMax : 4032
+  const idealHeight = heightMax && heightMax >= 1440 ? heightMax : 3024
+
+  return [
+    {
+      width: { ideal: idealWidth },
+      height: { ideal: idealHeight },
+      frameRate: { ideal: 60, max: 60 },
+      aspectRatio: { ideal: 4 / 3 },
+    },
+    {
+      width: { ideal: 1920 },
+      height: { ideal: 1440 },
+      frameRate: { ideal: 30, max: 60 },
+    },
+    {
+      width: { ideal: 1280 },
+      height: { ideal: 960 },
+      frameRate: { ideal: 30, max: 60 },
+    },
+  ]
 }
 
 // Shutter-time high-res track upgrade.

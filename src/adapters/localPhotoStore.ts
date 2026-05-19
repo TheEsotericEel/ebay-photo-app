@@ -1,15 +1,22 @@
 import { OutputRatio } from './imageProcessing'
-import { DB_NAME, DB_VERSION, PHOTO_STORE_NAME, ITEM_STORE_NAME } from './dbConfig'
+import { BATCH_STORE_NAME, DB_NAME, DB_VERSION, ITEM_STORE_NAME, PHOTO_STORE_NAME, STORE_STORE_NAME } from './dbConfig'
 
 const STORE_NAME = PHOTO_STORE_NAME
 
 export interface StoredPhoto {
   id: string
+  remoteId?: string
   blob: Blob
   mimeType: string
   size: number
   capturedAt: string
   savedAt: string
+  uploadStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'failed'
+  remoteStatus?: 'not_uploaded' | 'uploaded' | 'verified' | 'delete_eligible' | 'deleting' | 'deleted' | 'failed'
+  localStatus?: 'present' | 'safe_to_clear' | 'cleared' | 'missing'
+  remoteDeleteEligibleAt?: string
+  remoteExpiresAt?: string
+  remoteDeletedAt?: string
   // Optional metadata for diagnostics - backward compatible
   sourceWidth?: number
   sourceHeight?: number
@@ -40,6 +47,8 @@ export interface StoredPhoto {
 export interface LocalPhotoStore {
   save(photo: Omit<StoredPhoto, 'savedAt'>): Promise<StoredPhoto>
   getAll(): Promise<StoredPhoto[]>
+  getPhoto(id: string): Promise<StoredPhoto | null>
+  updatePhoto(id: string, patch: Partial<StoredPhoto>): Promise<void>
   delete(id: string): Promise<void>
   clearAll(): Promise<void>
   count(): Promise<number>
@@ -57,6 +66,14 @@ function openDb(
       // Create pending-photos store
       if (!db.objectStoreNames.contains(PHOTO_STORE_NAME)) {
         db.createObjectStore(PHOTO_STORE_NAME, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(STORE_STORE_NAME)) {
+        db.createObjectStore(STORE_STORE_NAME, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(BATCH_STORE_NAME)) {
+        const batchStore = db.createObjectStore(BATCH_STORE_NAME, { keyPath: 'id' })
+        batchStore.createIndex('storeId', 'storeId', { unique: false })
+        batchStore.createIndex('status', 'status', { unique: false })
       }
       // Create item-packets store (for compatibility when photo store opens first)
       if (!db.objectStoreNames.contains(ITEM_STORE_NAME)) {
@@ -96,7 +113,13 @@ export class IndexedDbPhotoStore implements LocalPhotoStore {
   }
 
   async save(photo: Omit<StoredPhoto, 'savedAt'>): Promise<StoredPhoto> {
-    const record: StoredPhoto = { ...photo, savedAt: new Date().toISOString() }
+    const record: StoredPhoto = {
+      ...photo,
+      uploadStatus: photo.uploadStatus || 'local',
+      remoteStatus: photo.remoteStatus || 'not_uploaded',
+      localStatus: photo.localStatus || 'present',
+      savedAt: new Date().toISOString(),
+    }
     await this.tx('readwrite', (store) => store.put(record))
     return record
   }
@@ -110,6 +133,31 @@ export class IndexedDbPhotoStore implements LocalPhotoStore {
       req.onsuccess = () => resolve(req.result as StoredPhoto[])
       req.onerror = () => reject(req.error)
     })
+  }
+
+  async getPhoto(id: string): Promise<StoredPhoto | null> {
+    const db = await this.dbPromise
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.storeName, 'readonly')
+      const store = tx.objectStore(this.storeName)
+      const req = store.get(id)
+      req.onsuccess = () => resolve((req.result as StoredPhoto) || null)
+      req.onerror = () => reject(req.error)
+    })
+  }
+
+  async updatePhoto(id: string, patch: Partial<StoredPhoto>): Promise<void> {
+    const current = await this.getPhoto(id)
+    if (!current) {
+      throw new Error(`Photo ${id} not found`)
+    }
+
+    const updated: StoredPhoto = {
+      ...current,
+      ...patch,
+    }
+
+    await this.tx('readwrite', (store) => store.put(updated))
   }
 
   async delete(id: string): Promise<void> {

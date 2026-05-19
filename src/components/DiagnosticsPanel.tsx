@@ -84,6 +84,53 @@ export function DiagnosticsPanel({ cameraState, capabilities, captureErrors, sto
               {capabilities.trackSettings.zoom !== undefined && (
                 <TextRow label="zoom (active)" val={String(capabilities.trackSettings.zoom)} />
               )}
+              {capabilities.trackSettings.frameRate !== undefined && (
+                <TextRow label="frameRate" val={capabilities.trackSettings.frameRate.toString()} />
+              )}
+            </>
+          )}
+          {lastCaptureDiagnostics?.previewQualityAttempted !== undefined && (
+            <>
+              <div style={s.heading}>Preview Quality</div>
+              <TextRow
+                label="attempted"
+                val={lastCaptureDiagnostics.previewQualityAttempted ? 'yes' : 'no'}
+              />
+              {lastCaptureDiagnostics.previewQualityRequestedConstraints && (
+                <TextRow
+                  label="requested"
+                  val={lastCaptureDiagnostics.previewQualityRequestedConstraints.join(' | ')}
+                />
+              )}
+              <TextRow
+                label="applied"
+                val={
+                  lastCaptureDiagnostics.previewQualityApplied === undefined
+                    ? '?'
+                    : lastCaptureDiagnostics.previewQualityApplied
+                      ? 'yes'
+                      : 'no'
+                }
+              />
+              {lastCaptureDiagnostics.previewQualityError && (
+                <div style={s.err}>{lastCaptureDiagnostics.previewQualityError}</div>
+              )}
+              {lastCaptureDiagnostics.previewQualityTrackSettings && (
+                <>
+                  <TextRow
+                    label="previewW"
+                    val={lastCaptureDiagnostics.previewQualityTrackSettings.width?.toString() ?? '?'}
+                  />
+                  <TextRow
+                    label="previewH"
+                    val={lastCaptureDiagnostics.previewQualityTrackSettings.height?.toString() ?? '?'}
+                  />
+                  <TextRow
+                    label="previewFPS"
+                    val={lastCaptureDiagnostics.previewQualityTrackSettings.frameRate?.toString() ?? '?'}
+                  />
+                </>
+              )}
             </>
           )}
           <div style={s.heading}>Capabilities</div>

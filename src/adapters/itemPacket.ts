@@ -4,6 +4,7 @@
  */
 
 export type ItemStatus = 'draft' | 'complete' | 'uploaded'
+export type ListingStatus = 'new' | 'listed' | 'hold' | 'needs_retake'
 
 export interface PhotoReference {
   photoId: string
@@ -12,6 +13,7 @@ export interface PhotoReference {
 
 export interface ItemPacket {
   id: string
+  remoteId?: string
   storeId: string
   batchId: string
   itemNumber: number
@@ -19,25 +21,36 @@ export interface ItemPacket {
   updatedAt: string
   status: ItemStatus
   photoIds: string[]
+  listingStatus?: ListingStatus
+  uploadStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'failed'
+  remoteStatus?: 'local' | 'queued' | 'uploading' | 'uploaded' | 'verified' | 'deleted' | 'failed'
+  remoteUpdatedAt?: string
+  listedAt?: string
+  remoteDeleteEligibleAt?: string
+  remoteExpiresAt?: string
+  remoteDeletedAt?: string
   // Optional metadata
   sku?: string
   note?: string
   weight?: string
+  dimensions?: string
 }
 
 export interface LocalItemPacketStore {
   createItem(storeId: string, batchId: string): Promise<ItemPacket>
   addItemPhoto(itemId: string, photoId: string): Promise<void>
-  updateItemMetadata(itemId: string, metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight'>>): Promise<void>
+  updateItemMetadata(itemId: string, metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight' | 'dimensions'>>): Promise<void>
+  setListingStatus(itemId: string, listingStatus: ListingStatus): Promise<void>
+  updateItem(itemId: string, patch: Partial<ItemPacket>): Promise<void>
   finalizeItem(itemId: string): Promise<void>
-  getCurrentItem(): Promise<ItemPacket | null>
+  getCurrentItem(storeId?: string, batchId?: string): Promise<ItemPacket | null>
   getAllItems(): Promise<ItemPacket[]>
   getItem(itemId: string): Promise<ItemPacket | null>
   deleteItem(itemId: string): Promise<void>
   clearAll(): Promise<void>
 }
 
-import { DB_NAME, DB_VERSION, ITEM_STORE_NAME, PHOTO_STORE_NAME } from './dbConfig'
+import { BATCH_STORE_NAME, DB_NAME, DB_VERSION, ITEM_STORE_NAME, PHOTO_STORE_NAME, STORE_STORE_NAME } from './dbConfig'
 
 const DEFAULT_STORE_ID = 'default-store'
 const DEFAULT_BATCH_ID = 'default-batch'
@@ -62,6 +75,14 @@ function openItemDb(
       // Ensure pending-photos store exists (for compatibility when item store opens first)
       if (!db.objectStoreNames.contains(PHOTO_STORE_NAME)) {
         db.createObjectStore(PHOTO_STORE_NAME, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(STORE_STORE_NAME)) {
+        db.createObjectStore(STORE_STORE_NAME, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(BATCH_STORE_NAME)) {
+        const batchStore = db.createObjectStore(BATCH_STORE_NAME, { keyPath: 'id' })
+        batchStore.createIndex('storeId', 'storeId', { unique: false })
+        batchStore.createIndex('status', 'status', { unique: false })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -107,6 +128,8 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
       updatedAt: new Date().toISOString(),
       status: 'draft',
       photoIds: [],
+      listingStatus: 'new',
+      uploadStatus: 'local',
     }
 
     await this.tx('readwrite', (store) => store.put(item))
@@ -132,8 +155,20 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
 
   async updateItemMetadata(
     itemId: string,
-    metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight'>>,
+    metadata: Partial<Pick<ItemPacket, 'sku' | 'note' | 'weight' | 'dimensions'>>,
   ): Promise<void> {
+    await this.updateItem(itemId, metadata)
+  }
+
+  async setListingStatus(itemId: string, listingStatus: ListingStatus): Promise<void> {
+    const listedAt = listingStatus === 'listed' ? new Date().toISOString() : undefined
+    await this.updateItem(itemId, {
+      listingStatus,
+      listedAt,
+    })
+  }
+
+  async updateItem(itemId: string, patch: Partial<ItemPacket>): Promise<void> {
     const item = await this.getItem(itemId)
     if (!item) {
       throw new Error(`Item ${itemId} not found`)
@@ -141,7 +176,7 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
 
     const updatedItem: ItemPacket = {
       ...item,
-      ...metadata,
+      ...patch,
       updatedAt: new Date().toISOString(),
     }
 
@@ -149,24 +184,17 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
   }
 
   async finalizeItem(itemId: string): Promise<void> {
-    const item = await this.getItem(itemId)
-    if (!item) {
-      throw new Error(`Item ${itemId} not found`)
-    }
-
-    const updatedItem: ItemPacket = {
-      ...item,
-      status: 'complete',
-      updatedAt: new Date().toISOString(),
-    }
-
-    await this.tx('readwrite', (store) => store.put(updatedItem))
+    await this.updateItem(itemId, { status: 'complete' })
   }
 
-  async getCurrentItem(): Promise<ItemPacket | null> {
+  async getCurrentItem(storeId?: string, batchId?: string): Promise<ItemPacket | null> {
     const allItems = await this.getAllItems()
     // Return the most recent draft item, if any
-    const draftItems = allItems.filter((i) => i.status === 'draft')
+    const draftItems = allItems.filter((i) => {
+      const matchesStore = storeId ? i.storeId === storeId : true
+      const matchesBatch = batchId ? i.batchId === batchId : true
+      return i.status === 'draft' && matchesStore && matchesBatch
+    })
     if (draftItems.length === 0) {
       return null
     }

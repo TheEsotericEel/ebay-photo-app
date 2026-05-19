@@ -14,6 +14,7 @@ export function isValidOutputRatio(value: string | null | undefined): value is O
  * Loads the default ratio from localStorage with validation.
  * Returns the stored ratio if valid, otherwise returns 'full' as fallback.
  * This is the single source of truth for ratio persistence across the app.
+ * Phase 0: Full frame is the default; user-selected ratios persist.
  */
 export function loadDefaultRatioFromStorage(): OutputRatio {
   const saved = localStorage.getItem('defaultRatio')

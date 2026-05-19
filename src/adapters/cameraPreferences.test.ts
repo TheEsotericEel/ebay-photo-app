@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearCameraPreferences, loadCameraPreferences, saveCameraPreferences } from './cameraPreferences'
 
 describe('cameraPreferences', () => {
@@ -6,7 +6,11 @@ describe('cameraPreferences', () => {
     localStorage.clear()
   })
 
-  it('defaults zoom to 1 when nothing is saved', () => {
+  afterEach(() => {
+    clearCameraPreferences()
+  })
+
+  it('defaults preferredZoom to 1', () => {
     expect(loadCameraPreferences()).toEqual({ preferredZoom: 1 })
   })
 
@@ -26,9 +30,13 @@ describe('cameraPreferences', () => {
     })
   })
 
-  it('clear removes stored preferences', () => {
-    saveCameraPreferences({ preferredZoom: 2 })
-    clearCameraPreferences()
+  it('saves and restores preferredZoom', () => {
+    saveCameraPreferences({ preferredZoom: 0.5 })
+    expect(loadCameraPreferences()).toEqual({ preferredZoom: 0.5 })
+  })
+
+  it('falls back to 1 for invalid stored values', () => {
+    localStorage.setItem('cameraPreferences', JSON.stringify({ preferredZoom: 'bad' }))
     expect(loadCameraPreferences()).toEqual({ preferredZoom: 1 })
   })
 })

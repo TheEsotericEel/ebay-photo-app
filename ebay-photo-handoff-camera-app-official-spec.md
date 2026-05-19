@@ -3,7 +3,7 @@
 **Status:** Source-of-truth planning document  
 **Intended location:** Repository documentation, e.g. `docs/PROJECT_SPEC.md`  
 **Audience:** AI IDE, developer, reviewer, future maintainer  
-**Current build direction:** iPhone-first PWA capture app + cloud-backed item packets + store-organized desktop listing queue  
+**Current build direction:** iPhone-first PWA capture app + cloud-backed item packets + store-organized desktop listing queue on one shared account  
 **Primary goal:** Replace the current Telegram-based eBay photo handoff workflow with a faster, cleaner, item-aware capture and listing queue system.  
 **Non-goal:** This is not an eBay automation platform, AI listing writer, pricing tool, permanent photo archive, inventory/accounting system, or SaaS-first product.
 
@@ -13,7 +13,7 @@
 
 Build a fast iPhone inventory camera app for eBay workflows.
 
-The app captures item photos into clearly separated **item packets**, optionally attaches lightweight metadata such as notes, SKU, and weight, uploads photos off the phone during a foreground upload session, and gives a Mac/desktop lister a clean **store-organized queue** for manual eBay listing and checkoff.
+The app captures item photos into clearly separated **item packets**, optionally attaches lightweight metadata such as notes, SKU, and weight, uploads photos off the phone during a foreground upload session, and gives the same signed-in user a Mac/desktop queue for manual eBay listing and checkoff.
 
 The product should feel like:
 
@@ -78,6 +78,7 @@ A fast iPhone inventory camera app for eBay workflows that:
 - lets the lister manually list on eBay and check off completed items
 - keeps metadata/status longer than photo files
 - treats remote photos as temporary handoff assets, not permanent records
+- uses one shared account on the phone and desktop for now
 
 ---
 
@@ -141,6 +142,8 @@ Needs:
 ### 5.2 Lister
 
 The Mac/desktop user manually creating eBay listings.
+
+For MVP, the photographer and lister are the same person using the same shared account.
 
 Needs:
 
@@ -271,6 +274,8 @@ Open desktop web queue
 → move to next unlisted item
 ```
 
+The photographer and lister are the same person using the same shared account on phone and desktop.
+
 The default lister view should prioritize unlisted items.
 
 ---
@@ -341,6 +346,7 @@ Must include:
   - hold
   - needs retake
 - upload completeness per item
+- same shared account as the mobile capture session
 
 Should include if easy:
 
@@ -423,6 +429,12 @@ These should not be guaranteed until tested on the target iPhone/Safari/PWA conf
 - manual white balance
 - pro camera UI
 - advanced focus slider
+
+The following are also out of MVP scope for now:
+
+- multi-user auth
+- team permissions
+- separate phone and desktop accounts
 
 ### 10.4 Square Capture Rule
 
@@ -1265,7 +1277,7 @@ Prove the full workflow beats Telegram, even with rough UI.
 
 Limit the vertical slice to:
 
-- 1 user/account
+- 1 shared account
 - 1 store
 - 1 batch
 - 3 items
@@ -1280,6 +1292,7 @@ Limit the vertical slice to:
 - item detail page
 - mark listed
 - manual local cleanup after confirmed upload
+- one shared login on phone and desktop
 
 This phase should include the desktop queue because the queue is half the product.
 
@@ -1421,6 +1434,7 @@ The app passes if:
 The app passes if:
 
 - lister can open desktop queue
+- lister can use the same account on phone and desktop
 - lister can choose store
 - lister can see unlisted items first
 - lister can open item packet
@@ -1602,6 +1616,7 @@ Start with:
 - temporary remote photo storage
 - desktop store queue
 - manual listed checkoff
+- single shared account for capture and listing
 
 Use:
 - React
@@ -1617,3 +1632,33 @@ Fallback:
 ```
 
 The project is ready to start building if the first milestone is the camera feasibility spike, followed immediately by an ugly end-to-end vertical slice.
+
+---
+
+## 25. Current MVP Gap
+
+The app is close enough to the spec’s MVP slice that the remaining work should stay narrow.
+
+### What Is In Place
+
+- camera capture
+- item packet grouping
+- store/batch context
+- Supabase auth
+- batch sync to remote tables
+- retry/resume for uploads
+- local cleanup after verified upload
+- desktop store/batch/item queue
+- item detail view
+- single shared account on phone and desktop
+
+### What Still Needs Work
+
+- photo retention dates and visibility on the desktop queue
+- remote cleanup/retention actions after listing is complete
+- stronger item availability state for listed vs retained photos
+- one more real-world batch test on phone + desktop before calling it done
+
+### Next Spec-Aligned Step
+
+Add photo-retention state to the desktop queue and item detail view, then wire the remote cleanup policy around listed/completed batches.

@@ -169,6 +169,19 @@ export function Phase0Screen() {
               facingMode: undefined,
               deviceId: undefined,
               zoom: undefined,
+              torch: undefined,
+              focusMode: undefined,
+              focusDistance: undefined,
+              exposureMode: undefined,
+              exposureTime: undefined,
+              exposureCompensation: undefined,
+              whiteBalanceMode: undefined,
+              brightness: undefined,
+              contrast: undefined,
+              saturation: undefined,
+              sharpness: undefined,
+              iso: undefined,
+              frameRate: undefined,
             },
       })
     } else {
@@ -254,6 +267,10 @@ export function Phase0Screen() {
     setCapturing(true)
     setStatusMsg('Capturing…')
 
+    // Use ref to get current values and avoid stale closures
+    const currentRatio = selectedRatio
+    const item = currentItem
+
     try {
       const frame = await cameraRef.current.captureFrame()
       
@@ -261,7 +278,7 @@ export function Phase0Screen() {
       const processed = await imageProcessor.process(
         frame.blob,
         frame.capturedAt,
-        selectedRatio,
+        currentRatio,
         frame.width,
         frame.height,
       )
@@ -326,8 +343,8 @@ export function Phase0Screen() {
       const stored = await photoStore.save(photoRecord)
 
       // Assign photo to current item
-      if (currentItem) {
-        await itemPacketStore.addItemPhoto(currentItem.id, id)
+      if (item) {
+        await itemPacketStore.addItemPhoto(item.id, id)
         setCurrentItem((prev) => {
           if (!prev) return prev
           return {
@@ -341,8 +358,8 @@ export function Phase0Screen() {
       setPhotos((prev) => [...prev, stored])
       
       const method = frame.diagnostics?.captureMethod || 'unknown'
-      const itemPhotoCount = currentItem?.photoIds.length || 0
-      const statusText = `Captured ${frame.width}x${frame.height} via ${method} — Item ${currentItem?.itemNumber || '?'} photo ${itemPhotoCount + 1}`
+      const itemPhotoCount = item?.photoIds.length || 0
+      const statusText = `Captured ${frame.width}x${frame.height} via ${method} — Item ${item?.itemNumber || '?'} photo ${itemPhotoCount + 1}`
       setStatusMsg(upscaleRisk ? `${statusText} — ⚠️ Upscale risk` : statusText)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -351,7 +368,7 @@ export function Phase0Screen() {
     } finally {
       setCapturing(false)
     }
-  }, [capturing])
+  }, [capturing, selectedRatio, currentItem])
 
   const handlePhotoClick = useCallback((photo: StoredPhoto) => {
     setSelectedPhoto(photo)
@@ -451,6 +468,14 @@ export function Phase0Screen() {
   const handleDoneNextItem = useCallback(async () => {
     if (!currentItem) return
     try {
+      // Preserve any unsaved metadata before finalizing
+      const metadataToSave = {
+        sku: itemSku || undefined,
+        note: itemNote || undefined,
+        weight: itemWeight || undefined,
+      }
+      await itemPacketStore.updateItemMetadata(currentItem.id, metadataToSave)
+
       // Finalize current item
       await itemPacketStore.finalizeItem(currentItem.id)
       
@@ -466,13 +491,23 @@ export function Phase0Screen() {
       const msg = err instanceof Error ? err.message : String(err)
       setStorageErrors((prev) => [...prev, `Done/Next failed: ${msg}`])
     }
-  }, [currentItem])
+  }, [currentItem, itemSku, itemNote, itemWeight])
 
   const handleClear = useCallback(async () => {
     try {
+      // Phase 0 reset: clear both photos and item packets
       await photoStore.clearAll()
+      await itemPacketStore.clearAll()
       setPhotos([])
-      setStatusMsg('Local test images cleared')
+      
+      // Create a fresh draft item after reset
+      const newItem = await itemPacketStore.createItem()
+      setCurrentItem(newItem)
+      setItemSku('')
+      setItemNote('')
+      setItemWeight('')
+      
+      setStatusMsg('Reset complete — fresh item ready')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setStorageErrors((prev) => [...prev, `Clear failed: ${msg}`])
@@ -500,7 +535,6 @@ export function Phase0Screen() {
               position: 'absolute',
               left: `${focusMarker.x * 100}%`,
               top: `${focusMarker.y * 100}%`,
-              transform: 'translate(-50%, -50%)',
               width: focusMarker.kind === 'success' ? 28 : 20,
               height: focusMarker.kind === 'success' ? 28 : 20,
               borderRadius: focusMarker.kind === 'success' ? 999 : 4,
@@ -592,14 +626,14 @@ export function Phase0Screen() {
 
         <div style={s.statusMsg}>{statusMsg}</div>
 
-        {/* TODO: Change capture button text back to "⊙ Capture" - currently showing "SABRINA 😊" for fun */}
+        {/* Capture button - large, camera-first, clear text */}
         <button
           style={{ ...s.btn, ...(canCapture ? s.captureBtn : s.captureBtnDisabled), fontSize: 20, padding: '20px 0' }}
           onClick={handleCapture}
           disabled={!canCapture}
           aria-label="Capture photo"
         >
-          {capturing ? 'Capturing…' : 'SABRINA 😊'}
+          {capturing ? 'Capturing…' : '⊙ Capture'}
         </button>
 
         {/* Done / Next Item button */}
@@ -709,10 +743,10 @@ export function Phase0Screen() {
             padding: '8px 0',
           }}
           onClick={handleClear}
-          disabled={photos.length === 0}
-          aria-label="Clear local test images"
+          disabled={photos.length === 0 && !currentItem}
+          aria-label="Reset local Phase 0 test data"
         >
-          Clear ({photos.length})
+          Reset Phase 0 Test Data
         </button>
 
         {lastCaptureDiagnostics && (
