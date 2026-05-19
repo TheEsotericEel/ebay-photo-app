@@ -193,8 +193,19 @@ function pickUltraWideRearDevice(devices: CameraDeviceInfo[], mainDeviceId?: str
 
   const explicitUltra =
     rearDevices.find((device) => isUltraWideHint(device.label || device.deviceId) && device.deviceId !== mainDeviceId)
-    || null
-  return explicitUltra
+  if (explicitUltra) {
+    return explicitUltra
+  }
+
+  const secondaryRear = rearDevices
+    .filter((device) => device.deviceId !== mainDeviceId)
+    .map((device) => ({
+      device,
+      score: scoreDeviceForZoomPreset(device.label || device.deviceId, 0.5),
+    }))
+    .sort((a, b) => b.score - a.score)[0]?.device ?? null
+
+  return secondaryRear
 }
 
 function getAvailableLensPresets(devices: CameraDeviceInfo[]): number[] {
