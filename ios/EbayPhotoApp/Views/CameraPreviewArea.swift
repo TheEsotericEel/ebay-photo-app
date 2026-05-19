@@ -10,53 +10,68 @@ struct CameraPreviewArea: View {
   let thumbnailImage: UIImage?
   let onSelectLens: (CameraLensPreset) -> Void
   let onToggleLockForSelectedLens: (CameraLensPreset) -> Void
+  private let cornerRadius: CGFloat = 20
 
   var body: some View {
-    ZStack(alignment: .bottomTrailing) {
-      CameraPreviewView(session: session)
-        .frame(maxWidth: .infinity)
-        .aspectRatio(3 / 4, contentMode: .fit)
-        .background(.black)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-          PreviewInteractionLayer(
-            cameraService: cameraService,
-            cameraPreferences: cameraPreferences,
-            pinchStartZoom: $pinchStartZoom
+    GeometryReader { geo in
+      let squareSide = max(min(geo.size.width, geo.size.height), 120)
+      VStack(spacing: 0) {
+        squarePreview(side: squareSide)
+
+        subBar
+          .frame(maxWidth: squareSide)
+          .padding(.top, 10)
+      }
+      .frame(maxWidth: .infinity, alignment: .center)
+    }
+  }
+
+  @ViewBuilder
+  private func squarePreview(side: CGFloat) -> some View {
+    CameraPreviewView(session: session)
+      .frame(width: side, height: side)
+      .background(.black)
+      .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+      .overlay {
+        PreviewInteractionLayer(
+          cameraService: cameraService,
+          cameraPreferences: cameraPreferences,
+          pinchStartZoom: $pinchStartZoom
+        )
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+      }
+      .overlay {
+        if cameraPreferences.gridEnabled || cameraPreferences.horizonGuideEnabled {
+          CameraGuideOverlay(
+            gridEnabled: cameraPreferences.gridEnabled,
+            horizonGuideEnabled: cameraPreferences.horizonGuideEnabled,
+            cornerRadius: cornerRadius
           )
         }
-        .padding(.horizontal)
-
-      if cameraPreferences.gridEnabled || cameraPreferences.squareGuideEnabled || cameraPreferences.horizonGuideEnabled {
-        CameraGuideOverlay(
-          gridEnabled: cameraPreferences.gridEnabled,
-          squareGuideEnabled: cameraPreferences.squareGuideEnabled,
-          horizonGuideEnabled: cameraPreferences.horizonGuideEnabled
-        )
-        .padding(.horizontal)
       }
-
-      if let indicator = cameraService.focusIndicator {
+      .overlay {
         GeometryReader { proxy in
-          FocusIndicatorView(indicator: indicator)
-            .position(
-              x: min(max(indicator.normalizedPoint.x * proxy.size.width, 24), proxy.size.width - 24),
-              y: min(max(indicator.normalizedPoint.y * proxy.size.height, 24), proxy.size.height - 24)
-            )
-        }
-      }
-
-      if let thumbnailImage {
-        VStack {
-          Spacer()
-          HStack {
-            thumbnailPreview(thumbnailImage)
-            Spacer()
+          if let indicator = cameraService.focusIndicator {
+            FocusIndicatorView(indicator: indicator)
+              .position(
+                x: min(max(indicator.normalizedPoint.x * proxy.size.width, 24), proxy.size.width - 24),
+                y: min(max(indicator.normalizedPoint.y * proxy.size.height, 24), proxy.size.height - 24)
+              )
           }
         }
-        .padding(.leading, 20)
-        .padding(.bottom, 28)
       }
+  }
+
+  private var subBar: some View {
+    HStack(spacing: 12) {
+      if let thumbnailImage {
+        thumbnailPreview(thumbnailImage)
+      } else {
+        Color.clear
+          .frame(width: 48, height: 48)
+      }
+
+      Spacer(minLength: 0)
 
       LensChipRow(
         preferredLens: cameraPreferences.preferredLens,
@@ -65,17 +80,15 @@ struct CameraPreviewArea: View {
         onSelectLens: onSelectLens,
         onToggleLockForSelectedLens: onToggleLockForSelectedLens
       )
-      .padding(.trailing, 24)
-      .padding(.bottom, 28)
     }
-    .padding(.top, 4)
+    .frame(maxWidth: .infinity)
   }
 
   private func thumbnailPreview(_ image: UIImage) -> some View {
     Image(uiImage: image)
       .resizable()
       .scaledToFill()
-      .frame(width: 56, height: 56)
+      .frame(width: 48, height: 48)
       .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
       .overlay {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -146,8 +159,8 @@ private struct PreviewInteractionLayer: View {
 
 private struct CameraGuideOverlay: View {
   let gridEnabled: Bool
-  let squareGuideEnabled: Bool
   let horizonGuideEnabled: Bool
+  let cornerRadius: CGFloat
 
   var body: some View {
     GeometryReader { proxy in
@@ -168,14 +181,6 @@ private struct CameraGuideOverlay: View {
           .stroke(.white.opacity(0.18), lineWidth: 1)
         }
 
-        if squareGuideEnabled {
-          let side = min(proxy.size.width, proxy.size.height) * 0.8
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .stroke(.white.opacity(0.35), lineWidth: 1.5)
-            .frame(width: side, height: side)
-            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
-        }
-
         if horizonGuideEnabled {
           Path { path in
             path.move(to: CGPoint(x: 0, y: proxy.size.height / 2))
@@ -186,7 +191,7 @@ private struct CameraGuideOverlay: View {
         }
       }
       .allowsHitTesting(false)
-      .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+      .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
   }
 }

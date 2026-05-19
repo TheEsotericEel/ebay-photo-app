@@ -2,7 +2,6 @@ import SwiftUI
 
 struct GuideToggleRow: View {
   @Binding var gridEnabled: Bool
-  @Binding var squareGuideEnabled: Bool
   @Binding var horizonGuideEnabled: Bool
   let showsTapToFocusHint: Bool
 
@@ -10,9 +9,6 @@ struct GuideToggleRow: View {
     HStack(spacing: 8) {
       guideChip("Grid", isOn: gridEnabled) {
         gridEnabled.toggle()
-      }
-      guideChip("1:1", isOn: squareGuideEnabled) {
-        squareGuideEnabled.toggle()
       }
       guideChip("Horizon", isOn: horizonGuideEnabled) {
         horizonGuideEnabled.toggle()

@@ -10,6 +10,7 @@
 		4A8F1D4F2C2F4D5D8B900001 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */; };
 		4A8F1D4F2C2F4D5D8B900002 /* EbayPhotoAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */; };
 		4A8F1D4F2C2F4D5D8B900003 /* CapturedPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900003 /* CapturedPhoto.swift */; };
+		4A8F1D4F2C2F4D5D8B900016 /* PhotoFraming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900016 /* PhotoFraming.swift */; };
 		4A8F1D4F2C2F4D5D8B900004 /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900004 /* CameraService.swift */; };
 		4A8F1D4F2C2F4D5D8B900005 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900005 /* SupabaseService.swift */; };
 		4A8F1D4F2C2F4D5D8B900006 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900006 /* CameraPreviewView.swift */; };
@@ -30,6 +31,7 @@
 		4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbayPhotoAppApp.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900003 /* CapturedPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPhoto.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900016 /* PhotoFraming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFraming.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900004 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900005 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900006 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
@@ -97,6 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				4A8F1D4E2C2F4D5D8B900003 /* CapturedPhoto.swift */,
+				4A8F1D4E2C2F4D5D8B900016 /* PhotoFraming.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -223,6 +226,7 @@
 				4A8F1D4F2C2F4D5D8B900001 /* AppState.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900002 /* EbayPhotoAppApp.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900003 /* CapturedPhoto.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900016 /* PhotoFraming.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900004 /* CameraService.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900005 /* SupabaseService.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900006 /* CameraPreviewView.swift in Sources */,

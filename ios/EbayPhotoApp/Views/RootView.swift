@@ -167,13 +167,14 @@ private struct CameraSessionView: View {
   @State private var pinchStartZoom: Double?
 
   var body: some View {
-    VStack(spacing: 10) {
+    VStack(spacing: 8) {
       CameraTopBar(
         itemNumber: appState.currentItemNumber,
         photoCount: appState.capturedPhotos.count,
         onBack: onBack,
         onDetails: { showingDetails = true }
       )
+      .padding(.top, 4)
 
       CameraPreviewArea(
         session: cameraService.session,
@@ -183,6 +184,7 @@ private struct CameraSessionView: View {
         thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
         onSelectLens: { lens in
           cameraPreferences.preferredLens = lens
+          cameraPreferences.switchingMode = .locked
           reconfigureCamera()
         },
         onToggleLockForSelectedLens: { _ in
@@ -190,18 +192,19 @@ private struct CameraSessionView: View {
           reconfigureCamera()
         }
       )
+      .frame(maxHeight: .infinity)
+      .padding(.top, 4)
 
       ZoomControlRow(
         currentZoom: cameraService.currentZoom,
         minZoom: cameraService.minZoom,
-        maxZoom: cameraService.maxZoom,
+        maxZoom: min(cameraService.maxZoom, 10.0),
         onZoomChange: updateZoom,
         formatZoom: formatZoom
       )
 
       GuideToggleRow(
         gridEnabled: $cameraPreferences.gridEnabled,
-        squareGuideEnabled: $cameraPreferences.squareGuideEnabled,
         horizonGuideEnabled: $cameraPreferences.horizonGuideEnabled,
         showsTapToFocusHint: cameraService.supportsFocusPoint || cameraService.supportsExposurePoint
       )
@@ -215,7 +218,7 @@ private struct CameraSessionView: View {
         onCapture: {
           Task {
             do {
-              let photo = try await cameraService.capturePhoto()
+              let photo = try await cameraService.capturePhoto(aspectMode: cameraPreferences.aspectMode)
               appState.capturedPhotos.append(photo)
               appState.statusMessage = "Captured \(appState.capturedPhotos.count) photo(s)"
             } catch {
@@ -228,36 +231,10 @@ private struct CameraSessionView: View {
         },
         onDone: onDone
       )
-
-      if let status = appState.statusMessage.nonEmpty {
-        Text(status)
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal)
-      }
-
-      #if DEBUG
-      DisclosureGroup("Debug") {
-        VStack(alignment: .leading, spacing: 8) {
-          Text(cameraService.debugSummary)
-            .font(.footnote)
-          Text("Device: \(cameraService.activeDeviceLabel)")
-            .font(.footnote)
-          Text("Probe: \(cameraService.capabilityProbe.selectedDeviceType) | \(cameraService.capabilityProbe.activeDeviceId)")
-            .font(.footnote)
-          Text("Zoom: \(String(format: "%.2f", cameraService.currentZoom)) [\(String(format: "%.2f", cameraService.minZoom))-\(String(format: "%.2f", cameraService.maxZoom))]")
-            .font(.footnote)
-          if let reason = cameraService.capabilityProbe.fallbackReason {
-            Text("Fallback: \(reason)")
-              .font(.footnote)
-          }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .padding(.horizontal)
-      #endif
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .background(Color.black.ignoresSafeArea())
+    .padding(.bottom, 6)
     .onAppear {
       startCamera()
     }
@@ -317,11 +294,5 @@ private struct CameraSessionView: View {
       return String(format: "%.0fx", zoom)
     }
     return String(format: "%.1fx", zoom)
-  }
-}
-
-private extension String {
-  var nonEmpty: String? {
-    isEmpty ? nil : self
   }
 }

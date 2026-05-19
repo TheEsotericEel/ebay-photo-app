@@ -15,6 +15,11 @@ enum LensSwitchingMode: String, Codable {
   case locked
 }
 
+enum PreviewAspectMode: String, Codable {
+  case square
+  case native
+}
+
 struct CameraLensState: Codable, Equatable {
   var preferredLens: CameraLensPreset
   var switchingMode: LensSwitchingMode
@@ -47,8 +52,9 @@ private struct PersistedCameraPreferences: Codable {
   var switchingModeRawValue: String
   var zoomByLens: [String: Double]
   var gridEnabled: Bool
-  var squareGuideEnabled: Bool
   var horizonGuideEnabled: Bool
+  var aspectModeRawValue: String?
+  var squareGuideEnabled: Bool?
 }
 
 @MainActor
@@ -69,11 +75,11 @@ final class CameraPreferencesStore: ObservableObject {
     didSet { save() }
   }
 
-  @Published var squareGuideEnabled: Bool {
+  @Published var horizonGuideEnabled: Bool {
     didSet { save() }
   }
 
-  @Published var horizonGuideEnabled: Bool {
+  @Published var aspectMode: PreviewAspectMode {
     didSet { save() }
   }
 
@@ -88,8 +94,8 @@ final class CameraPreferencesStore: ObservableObject {
       switchingMode = loaded.switchingMode
       zoomByLens = loaded.zoomByLens
       gridEnabled = loaded.gridEnabled
-      squareGuideEnabled = loaded.squareGuideEnabled
       horizonGuideEnabled = loaded.horizonGuideEnabled
+      aspectMode = loaded.aspectMode
     } else {
       preferredLens = .wide
       switchingMode = .auto
@@ -98,8 +104,8 @@ final class CameraPreferencesStore: ObservableObject {
         CameraLensPreset.wide.rawValue: 1.0,
       ]
       gridEnabled = false
-      squareGuideEnabled = true
       horizonGuideEnabled = false
+      aspectMode = .square
     }
   }
 
@@ -123,8 +129,9 @@ final class CameraPreferencesStore: ObservableObject {
       switchingModeRawValue: switchingMode.rawValue,
       zoomByLens: zoomByLens,
       gridEnabled: gridEnabled,
-      squareGuideEnabled: squareGuideEnabled,
-      horizonGuideEnabled: horizonGuideEnabled
+      horizonGuideEnabled: horizonGuideEnabled,
+      aspectModeRawValue: aspectMode.rawValue,
+      squareGuideEnabled: nil
     )
     if let data = try? JSONEncoder().encode(payload) {
       defaults.set(data, forKey: storageKey)
@@ -140,13 +147,17 @@ final class CameraPreferencesStore: ObservableObject {
       return nil
     }
 
+    let aspectMode = payload.aspectModeRawValue
+      .flatMap(PreviewAspectMode.init(rawValue:))
+      ?? .square
+
     return CameraPreferencesSnapshot(
       preferredLens: lens,
       switchingMode: mode,
       zoomByLens: payload.zoomByLens,
       gridEnabled: payload.gridEnabled,
-      squareGuideEnabled: payload.squareGuideEnabled,
-      horizonGuideEnabled: payload.horizonGuideEnabled
+      horizonGuideEnabled: payload.horizonGuideEnabled,
+      aspectMode: aspectMode
     )
   }
 }
@@ -156,8 +167,8 @@ private struct CameraPreferencesSnapshot {
   let switchingMode: LensSwitchingMode
   let zoomByLens: [String: Double]
   let gridEnabled: Bool
-  let squareGuideEnabled: Bool
   let horizonGuideEnabled: Bool
+  let aspectMode: PreviewAspectMode
 }
 
 @MainActor
@@ -306,7 +317,7 @@ final class CameraService: NSObject, ObservableObject {
     )
   }
 
-  func capturePhoto() async throws -> CapturedPhoto {
+  func capturePhoto(aspectMode: PreviewAspectMode) async throws -> CapturedPhoto {
     guard canCapture, !captureInFlight else {
       throw NSError(domain: "CameraService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Capture is already in progress."])
     }
@@ -335,9 +346,17 @@ final class CameraService: NSObject, ObservableObject {
           self.captureDelegate = nil
           switch result {
           case .success(let data):
-            let preview = UIImage(data: data)?.ebp_thumbnailData()
+            let deliverableData: Data
+            switch aspectMode {
+            case .square:
+              deliverableData = PhotoFraming.squareDeliverableJPEG(from: data) ?? data
+            case .native:
+              deliverableData = data
+            }
+
+            let preview = UIImage(data: deliverableData)?.ebp_thumbnailData()
             let capturedPhoto = CapturedPhoto(
-              data: data,
+              data: deliverableData,
               thumbnailData: preview,
               lensLabel: self.activeLensState.preferredLens.rawValue,
               capturedAt: .now
@@ -475,7 +494,18 @@ final class CameraService: NSObject, ObservableObject {
       )
     }
 
-    let chosenZoom = clampZoom(zoom, device: activeDevice)
+    // In AUTO mode with a virtual/composite device, default to the wide-angle
+    // perspective (user-facing "1x"). virtualDeviceSwitchOverVideoZoomFactors
+    // gives the exact factor where the composite switches from ultrawide → wide.
+    // For locked modes use the persisted per-lens zoom value unchanged.
+    let effectiveZoom: Double
+    if lensState.switchingMode == .auto,
+       !activeDevice.constituentDevices.isEmpty {
+      effectiveZoom = wideEquivalentZoom(for: activeDevice)
+    } else {
+      effectiveZoom = zoom
+    }
+    let chosenZoom = clampZoom(effectiveZoom, device: activeDevice)
     applyZoom(chosenZoom, to: activeDevice)
 
     let supportsFocus = activeDevice.isFocusPointOfInterestSupported
@@ -575,6 +605,18 @@ final class CameraService: NSObject, ObservableObject {
     let minimum = Double(device.minAvailableVideoZoomFactor)
     let maximum = Double(device.maxAvailableVideoZoomFactor)
     return min(max(zoom, minimum), maximum)
+  }
+
+  /// Returns the zoom factor on a virtual/composite device that corresponds to
+  /// the wide-angle camera perspective (the user-facing "1x" default).
+  /// Uses `virtualDeviceSwitchOverVideoZoomFactors.first` — the exact factor
+  /// at which the composite switches from ultrawide → wide physical camera.
+  /// Falls back to 2.0, which is correct on virtually all current iPhones.
+  private func wideEquivalentZoom(for device: AVCaptureDevice) -> Double {
+    if let switchOver = device.virtualDeviceSwitchOverVideoZoomFactors.first {
+      return Double(switchOver)
+    }
+    return 2.0
   }
 
   private func preferredMaxPhotoDimensions(for device: AVCaptureDevice?) -> CMVideoDimensions? {

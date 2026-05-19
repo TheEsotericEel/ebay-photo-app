@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Three-mode lens selector. Tap to cycle: 1x → .5 → AUTO → 1x → …
+///
+/// Modes map to physical devices via CameraService.selectDevice:
+///   1x   → builtInWideAngleCamera  (switchingMode: .locked)
+///   .5   → builtInUltraWideCamera  (switchingMode: .locked)
+///   AUTO → builtInDualWideCamera   (switchingMode: .auto, system-managed)
+///
+/// Lock/auto is internal plumbing only — not surfaced in the UI.
 struct LensChipRow: View {
   let preferredLens: CameraLensPreset
   let switchingMode: LensSwitchingMode
@@ -8,55 +16,62 @@ struct LensChipRow: View {
   let onToggleLockForSelectedLens: (CameraLensPreset) -> Void
 
   var body: some View {
-    HStack(spacing: 8) {
-      lensChip(.ultraWide)
-      lensChip(.wide)
-    }
-    .padding(8)
-    .background(.black.opacity(0.22))
-    .clipShape(Capsule(style: .continuous))
-    .overlay(
-      Capsule(style: .continuous)
-        .stroke(.white.opacity(0.15), lineWidth: 1)
-    )
-  }
-
-  private func lensChip(_ lens: CameraLensPreset) -> some View {
-    let isSelected = preferredLens == lens
-    let isLocked = isSelected && switchingMode == .locked
-    let supported = supportedLenses.isEmpty || supportedLenses.contains(lens)
-
-    return Button {
-      guard supported else { return }
-      onSelectLens(lens)
-    } label: {
+    Button(action: cycleLensMode) {
       VStack(spacing: 2) {
-        Text(lens.rawValue)
-          .font(.headline.weight(.semibold))
-          .frame(width: 40, height: 32)
+        Text(mainLabel)
+          .font(.subheadline.weight(.semibold))
 
-        Text(isLocked ? "LOCK" : "AUTO")
-          .font(.caption2.weight(.semibold))
-          .tracking(0.6)
-          .opacity(isSelected ? 1 : 0.55)
+        Text(subLabel)
+          .font(.system(size: 10, weight: .medium))
+          .tracking(0.5)
+          .foregroundStyle(.white.opacity(0.5))
       }
-      .foregroundStyle(isSelected ? .black : .white)
-      .padding(.vertical, 4)
-      .padding(.horizontal, 6)
+      .foregroundStyle(.white)
+      .padding(.vertical, 6)
+      .padding(.horizontal, 16)
       .background {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .fill(isSelected ? Color.white : Color.black.opacity(0.35))
+        Capsule(style: .continuous)
+          .fill(Color.black.opacity(0.45))
       }
       .overlay {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .stroke(isLocked ? Color.orange.opacity(0.9) : Color.white.opacity(0.18), lineWidth: isLocked ? 2 : 1)
+        Capsule(style: .continuous)
+          .stroke(Color.white.opacity(0.22), lineWidth: 1)
       }
     }
     .buttonStyle(.plain)
-    .disabled(supported == false)
-    .onLongPressGesture {
-      guard supported, isSelected else { return }
-      onToggleLockForSelectedLens(lens)
+  }
+
+  // MARK: - Labels
+
+  private var mainLabel: String {
+    switch switchingMode {
+    case .locked: return preferredLens.rawValue
+    case .auto:   return "AUTO"
+    }
+  }
+
+  private var subLabel: String {
+    switch switchingMode {
+    case .locked:
+      return preferredLens == .wide ? "WIDE" : "ULTRA"
+    case .auto:
+      return "LENS"
+    }
+  }
+
+  // MARK: - Cycle
+
+  /// 1x (wide, locked) → .5 (ultrawide, locked) → AUTO → 1x → …
+  private func cycleLensMode() {
+    switch (switchingMode, preferredLens) {
+    case (.locked, .wide):
+      onSelectLens(.ultraWide)
+
+    case (.locked, .ultraWide):
+      onToggleLockForSelectedLens(preferredLens)  // → .auto
+
+    case (.auto, _):
+      onSelectLens(.wide)  // → 1x locked
     }
   }
 }
