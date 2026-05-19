@@ -1944,7 +1944,6 @@ export function WorkspaceScreen() {
   const [cameraPermissionRemembered, setCameraPermissionRemembered] = useState(() => loadCameraPermissionGranted())
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
-  const [cameraPreferences, setCameraPreferences] = useState(() => loadCameraPreferences())
   const [preferredZoom, setPreferredZoom] = useState<number>(() => loadCameraPreferences().preferredZoom ?? 1)
   const [captureErrors, setCaptureErrors] = useState<string[]>([])
   const [storageErrors, setStorageErrors] = useState<string[]>([])
@@ -2885,11 +2884,7 @@ export function WorkspaceScreen() {
       const zoomValue = typeof constraint.zoom === 'number' ? constraint.zoom : undefined
       if (zoomValue !== undefined && refreshed?.trackSettings?.zoom === zoomValue) {
         setPreferredZoom(zoomValue)
-        setCameraPreferences((current) => {
-          const next = { ...current, preferredZoom: zoomValue }
-          saveCameraPreferences(next)
-          return next
-        })
+        saveCameraPreferences({ preferredZoom: zoomValue })
       }
 
       setCameraTestMessage('Applied camera test setting.')
@@ -2965,11 +2960,7 @@ export function WorkspaceScreen() {
       const zoomValue = typeof constraint.zoom === 'number' ? constraint.zoom : undefined
       if (zoomValue !== undefined && afterSettings?.zoom === zoomValue) {
         setPreferredZoom(zoomValue)
-        setCameraPreferences((current) => {
-          const next = { ...current, preferredZoom: zoomValue }
-          saveCameraPreferences(next)
-          return next
-        })
+        saveCameraPreferences({ preferredZoom: zoomValue })
       }
 
       setCameraSettingsMessage('Applied camera setting.')
@@ -3056,34 +3047,26 @@ export function WorkspaceScreen() {
     }
 
     const currentDeviceId = capabilities?.trackSettings?.deviceId
-    const savedDeviceId = cameraPreferences.preferredLensDeviceIds?.[String(preset)]
-    const savedDevice = savedDeviceId ? cameraDevices.find((device) => device.deviceId === savedDeviceId) || null : null
     const mainDevice = pickMainRearDevice(cameraDevices)
     const inferredDevice =
       preset <= 0.75
         ? pickUltraWideRearDevice(cameraDevices, mainDevice?.deviceId)
         : mainDevice
-    const targetDevice = savedDevice || inferredDevice || pickCameraDeviceForZoomPreset(cameraDevices, preset, currentDeviceId)
+    const targetDevice = inferredDevice || pickCameraDeviceForZoomPreset(cameraDevices, preset, currentDeviceId)
+
+    if (!targetDevice) {
+      setStatusMsg(`Lens ${formatLensPresetLabel(preset)} unavailable on this device.`)
+      return
+    }
+
     if (targetDevice && targetDevice.deviceId !== currentDeviceId) {
       await handleSelectCameraDevice(targetDevice.deviceId)
     }
 
     setPreferredZoom(preset)
-    setCameraPreferences((current) => {
-      const next = {
-        ...current,
-        preferredZoom: preset,
-        preferredLensDeviceIds: targetDevice
-          ? {
-              ...(current.preferredLensDeviceIds ?? {}),
-              [String(preset)]: targetDevice.deviceId,
-            }
-          : current.preferredLensDeviceIds ?? {},
-      }
-      saveCameraPreferences(next)
-      return next
-    })
-  }, [cameraDevices, cameraPreferences.preferredLensDeviceIds, capabilities?.trackSettings?.deviceId, handleSelectCameraDevice])
+    saveCameraPreferences({ preferredZoom: preset })
+    setStatusMsg(`Lens ${formatLensPresetLabel(preset)} selected: ${formatCameraDeviceLabel(targetDevice.label || targetDevice.deviceId)}`)
+  }, [cameraDevices, capabilities?.trackSettings?.deviceId, handleSelectCameraDevice, saveCameraPreferences])
 
   useEffect(() => {
     if (cameraState !== 'active' || !restorePreferredZoomPendingRef.current || !cameraRef.current) {

@@ -11,28 +11,16 @@ describe('cameraPreferences', () => {
   })
 
   it('defaults preferredZoom to 1', () => {
-    expect(loadCameraPreferences()).toEqual({ preferredZoom: 1, preferredLensDeviceIds: {} })
+    expect(loadCameraPreferences()).toEqual({ preferredZoom: 1 })
   })
 
   it('saves and restores preferredZoom', () => {
     saveCameraPreferences({ preferredZoom: 0.5 })
-    expect(loadCameraPreferences()).toEqual({ preferredZoom: 0.5, preferredLensDeviceIds: {} })
+    expect(loadCameraPreferences()).toEqual({ preferredZoom: 0.5 })
   })
 
   it('falls back to 1 for invalid stored values', () => {
     localStorage.setItem('cameraPreferences', JSON.stringify({ preferredZoom: 'bad' }))
-    expect(loadCameraPreferences()).toEqual({ preferredZoom: 1, preferredLensDeviceIds: {} })
-  })
-
-  it('saves and restores preferred lens device ids', () => {
-    saveCameraPreferences({
-      preferredZoom: 2,
-      preferredLensDeviceIds: { '2': 'device-tele' },
-    })
-
-    expect(loadCameraPreferences()).toEqual({
-      preferredZoom: 2,
-      preferredLensDeviceIds: { '2': 'device-tele' },
-    })
+    expect(loadCameraPreferences()).toEqual({ preferredZoom: 1 })
   })
 })
