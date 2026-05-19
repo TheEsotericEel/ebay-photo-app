@@ -54,29 +54,9 @@ interface ExtendedMediaTrackCapabilities extends MediaTrackCapabilities {
   iso?: { min: number; max: number; step: number }
 }
 
-const QUICK_ZOOM_PRESETS = [0.5, 1, 2, 3, 5]
-
-function getQuickZoomPresets(capabilities: CameraCapabilities | null): number[] {
-  const raw = capabilities?.raw as ExtendedMediaTrackCapabilities | null
-  const zoom = raw?.zoom
-  if (!zoom) {
-    return []
-  }
-
-  const min = zoom.min ?? 0
-  const max = zoom.max ?? 0
-  const presets = QUICK_ZOOM_PRESETS.filter((preset) => preset >= min - 0.01 && preset <= max + 0.01)
-
-  if (presets.length === 0) {
-    return [min, max].filter((value, index, array) => Number.isFinite(value) && array.indexOf(value) === index)
-  }
-
-  return presets
-}
-
-function formatZoomPreset(value: number): string {
-  const raw = Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)
-  return `${raw.startsWith('0.') ? raw.slice(1) : raw}x`
+function formatLensPresetLabel(value: number): string {
+  if (value <= 0.75) return '.5'
+  return '1x'
 }
 
 function isPresetActive(current: number | undefined, preset: number): boolean {
@@ -168,6 +148,21 @@ function pickCameraDeviceForZoomPreset(devices: CameraDeviceInfo[], zoom: number
   }
 
   return best.device
+}
+
+function getAvailableLensPresets(devices: CameraDeviceInfo[]): number[] {
+  const mainDevice = pickCameraDeviceForZoomPreset(devices, 1)
+  const ultraWideDevice = pickCameraDeviceForZoomPreset(devices, 0.5, mainDevice?.deviceId)
+
+  const presets: number[] = []
+  if (ultraWideDevice && mainDevice && ultraWideDevice.deviceId !== mainDevice.deviceId) {
+    presets.push(0.5)
+  }
+  if (mainDevice) {
+    presets.push(1)
+  }
+
+  return presets.length > 0 ? presets : [1]
 }
 
 const s: Record<string, React.CSSProperties> = {
@@ -559,14 +554,13 @@ const s: Record<string, React.CSSProperties> = {
     right: 12,
     bottom: 12,
     zIndex: 4,
-    display: 'grid',
-    justifyItems: 'end',
+    display: 'flex',
     gap: 6,
   },
   mobileLensButton: {
-    minWidth: 52,
+    minWidth: 48,
     height: 34,
-    padding: '0 12px',
+    padding: '0 10px',
     borderRadius: 999,
     border: '1px solid rgba(255, 255, 255, 0.18)',
     background: 'rgba(16, 16, 16, 0.92)',
@@ -580,32 +574,6 @@ const s: Record<string, React.CSSProperties> = {
     background: '#f2f2f2',
     color: '#111',
     borderColor: '#f2f2f2',
-  },
-  mobileLensMenu: {
-    display: 'grid',
-    gap: 4,
-    minWidth: 92,
-    padding: 6,
-    borderRadius: 16,
-    border: '1px solid rgba(255, 255, 255, 0.12)',
-    background: 'rgba(8, 8, 8, 0.96)',
-    boxShadow: '0 16px 36px rgba(0, 0, 0, 0.35)',
-    backdropFilter: 'blur(18px)',
-  },
-  mobileLensMenuItem: {
-    width: '100%',
-    padding: '9px 12px',
-    borderRadius: 12,
-    border: '1px solid transparent',
-    background: 'transparent',
-    color: '#f8fafc',
-    fontSize: 13,
-    fontWeight: 700,
-    textAlign: 'left' as const,
-  },
-  mobileLensMenuItemActive: {
-    background: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   mobileCameraTopBar: {
     position: 'absolute',
@@ -1634,42 +1602,8 @@ function MobileWorkspace({
   setMobileMode: React.Dispatch<React.SetStateAction<'home' | 'camera'>>
 }) {
   const rawCapabilities = capabilities?.raw as ExtendedMediaTrackCapabilities | null
-  const quickZoomPresets = useMemo(() => getQuickZoomPresets(capabilities), [capabilities])
-  const currentZoom = preferredZoom
-  const [lensMenuOpen, setLensMenuOpen] = useState(false)
-  const lensMenuRef = useRef<HTMLDivElement>(null)
-  const availableZoomChoices = quickZoomPresets.length > 1 ? quickZoomPresets : []
-  const lensButtonLabel = formatZoomPreset(currentZoom)
-
-  useEffect(() => {
-    if (!lensMenuOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target
-      if (lensMenuRef.current && target instanceof Node && !lensMenuRef.current.contains(target)) {
-        setLensMenuOpen(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-    }
-  }, [lensMenuOpen])
-
-  useEffect(() => {
-    if (mobileMode !== 'camera') {
-      setLensMenuOpen(false)
-    }
-  }, [mobileMode])
-
-  useEffect(() => {
-    if (metadataOverlayOpen || cameraSettingsOpen || cameraTestOpen) {
-      setLensMenuOpen(false)
-    }
-  }, [cameraSettingsOpen, cameraTestOpen, metadataOverlayOpen])
+  const currentLensPreset = preferredZoom <= 0.75 ? 0.5 : 1
+  const availableLensChoices = useMemo(() => getAvailableLensPresets(cameraDevices), [cameraDevices])
 
   if (mobileMode === 'camera') {
     return (
@@ -1692,42 +1626,23 @@ function MobileWorkspace({
               fit="full-frame"
             />
 
-            {availableZoomChoices.length > 0 && (
-              <div ref={lensMenuRef} style={s.mobileLensControl}>
-                {lensMenuOpen && (
-                  <div style={s.mobileLensMenu}>
-                    {availableZoomChoices.map((preset) => (
-                      <button
-                        key={preset}
-                        style={{
-                          ...s.mobileLensMenuItem,
-                          ...(isPresetActive(currentZoom, preset) ? s.mobileLensMenuItemActive : {}),
-                        }}
-                        onClick={() => {
-                          void handleApplyLensPreset(preset)
-                          setLensMenuOpen(false)
-                        }}
-                      >
-                        {formatZoomPreset(preset)}
-                      </button>
-                    ))}
-                  </div>
-                )}
+            {availableLensChoices.length > 0 && (
+              <div style={s.mobileLensControl}>
+                {availableLensChoices.map((preset) => (
                   <button
-                  style={{
-                    ...s.mobileLensButton,
-                    ...(availableZoomChoices.some((preset) => isPresetActive(currentZoom, preset))
-                      ? s.mobileLensButtonActive
-                      : {}),
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setLensMenuOpen((open) => !open)
-                  }}
-                  aria-label="Choose zoom"
-                >
-                  {lensButtonLabel}
-                </button>
+                    key={preset}
+                    style={{
+                      ...s.mobileLensButton,
+                      ...(currentLensPreset === preset ? s.mobileLensButtonActive : {}),
+                    }}
+                    onClick={() => {
+                      void handleApplyLensPreset(preset)
+                    }}
+                    aria-label={`Use ${formatLensPresetLabel(preset)} lens`}
+                  >
+                    {formatLensPresetLabel(preset)}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -3115,27 +3030,21 @@ export function WorkspaceScreen() {
       return
     }
 
-    const liveCapabilities = cameraRef.current.getCapabilities() ?? capabilities
-    const supportedZoomChoices = getQuickZoomPresets(liveCapabilities)
-    if (supportedZoomChoices.length === 0) {
+    const supportedLensChoices = getAvailableLensPresets(cameraDevices)
+    if (supportedLensChoices.length === 0) {
       return
     }
 
-    const zoomToRestore =
-      supportedZoomChoices.some((preset) => isPresetActive(preferredZoom, preset))
+    const lensToRestore =
+      supportedLensChoices.some((preset) => isPresetActive(preferredZoom, preset))
         ? preferredZoom
-        : supportedZoomChoices.some((preset) => isPresetActive(1, preset))
+        : supportedLensChoices.some((preset) => isPresetActive(1, preset))
           ? 1
-          : supportedZoomChoices[0]
-
-    if (isPresetActive(capabilities?.trackSettings?.zoom, zoomToRestore)) {
-      restorePreferredZoomPendingRef.current = false
-      return
-    }
+          : supportedLensChoices[0]
 
     restorePreferredZoomPendingRef.current = false
-    void handleApplyLensPreset(zoomToRestore)
-  }, [cameraState, capabilities, cameraPreferences.preferredLensDeviceIds, handleApplyLensPreset, preferredZoom])
+    void handleApplyLensPreset(lensToRestore)
+  }, [cameraDevices, cameraState, handleApplyLensPreset, preferredZoom])
 
   const handleChangeCameraTestPreviewRatio = useCallback((ratio: OutputRatio) => {
     setCameraTestPreviewRatio(ratio)
@@ -3152,17 +3061,14 @@ export function WorkspaceScreen() {
     }))
   }, [appendCameraTestLog, getCameraTestLogContext])
 
-  const quickZoomPresets = useMemo(() => getQuickZoomPresets(capabilities), [capabilities])
-  const availableZoomChoices = quickZoomPresets.length > 1 ? quickZoomPresets : []
-
   const canTapToFocus = useMemo(() => {
     const raw = capabilities?.raw as ExtendedMediaTrackCapabilities | null
     return Boolean(raw?.pointsOfInterest?.length)
   }, [capabilities])
 
   const canPinchToZoom = useMemo(() => {
-    return availableZoomChoices.length > 0
-  }, [availableZoomChoices])
+    return false
+  }, [])
 
   const getPreviewPoint = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -3242,12 +3148,7 @@ export function WorkspaceScreen() {
     const distance = Math.max(1, Math.hypot(dx, dy))
     const ratio = distance / pinchStartDistanceRef.current
     const nextZoom = Math.min(zoomCap.max, Math.max(zoomCap.min, pinchStartZoomRef.current * ratio))
-    const nextPreset = availableZoomChoices.reduce((best, preset) => {
-      if (Math.abs(preset - nextZoom) < Math.abs(best - nextZoom)) {
-        return preset
-      }
-      return best
-    }, availableZoomChoices[0] ?? nextZoom)
+    const nextPreset = nextZoom <= 0.75 ? 0.5 : 1
 
     if (pinchLastAppliedZoomRef.current !== null && Math.abs(nextPreset - pinchLastAppliedZoomRef.current) < (zoomCap.step || 0.1) / 2) {
       return
@@ -3260,7 +3161,7 @@ export function WorkspaceScreen() {
       .finally(() => {
         pinchApplyingRef.current = false
       })
-  }, [availableZoomChoices, canPinchToZoom, capabilities, handleApplyLensPreset])
+  }, [canPinchToZoom, capabilities, handleApplyLensPreset])
 
   const handlePreviewTouchEnd = useCallback(() => {
     pinchStartDistanceRef.current = null
