@@ -1974,6 +1974,7 @@ export function WorkspaceScreen() {
   const [cameraPermissionRemembered, setCameraPermissionRemembered] = useState(() => loadCameraPermissionGranted())
   const [cameraState, setCameraState] = useState<CameraState>('idle')
   const [capabilities, setCapabilities] = useState<CameraCapabilities | null>(null)
+  const [cameraPreferences, setCameraPreferences] = useState(() => loadCameraPreferences())
   const [preferredZoom, setPreferredZoom] = useState<number>(() => loadCameraPreferences().preferredZoom ?? 1)
   const [captureErrors, setCaptureErrors] = useState<string[]>([])
   const [storageErrors, setStorageErrors] = useState<string[]>([])
@@ -2911,9 +2912,14 @@ export function WorkspaceScreen() {
         return
       }
 
-      if (typeof constraint.zoom === 'number' && refreshed?.trackSettings?.zoom === constraint.zoom) {
-        setPreferredZoom(constraint.zoom)
-        saveCameraPreferences({ preferredZoom: constraint.zoom })
+      const zoomValue = typeof constraint.zoom === 'number' ? constraint.zoom : undefined
+      if (zoomValue !== undefined && refreshed?.trackSettings?.zoom === zoomValue) {
+        setPreferredZoom(zoomValue)
+        setCameraPreferences((current) => {
+          const next = { ...current, preferredZoom: zoomValue }
+          saveCameraPreferences(next)
+          return next
+        })
       }
 
       setCameraTestMessage('Applied camera test setting.')
@@ -2986,9 +2992,14 @@ export function WorkspaceScreen() {
         return
       }
 
-      if (typeof constraint.zoom === 'number' && afterSettings?.zoom === constraint.zoom) {
-        setPreferredZoom(constraint.zoom)
-        saveCameraPreferences({ preferredZoom: constraint.zoom })
+      const zoomValue = typeof constraint.zoom === 'number' ? constraint.zoom : undefined
+      if (zoomValue !== undefined && afterSettings?.zoom === zoomValue) {
+        setPreferredZoom(zoomValue)
+        setCameraPreferences((current) => {
+          const next = { ...current, preferredZoom: zoomValue }
+          saveCameraPreferences(next)
+          return next
+        })
       }
 
       setCameraSettingsMessage('Applied camera setting.')
@@ -2997,7 +3008,7 @@ export function WorkspaceScreen() {
       setCameraSettingsError(msg)
       setCameraSettingsMessage('Camera setting failed.')
     }
-  }, [applyCameraConstraint, cameraRef, saveCameraPreferences])
+  }, [applyCameraConstraint, cameraRef])
 
   const handleSelectCameraDevice = useCallback(async (deviceId: string) => {
     if (!cameraRef.current) {
@@ -3075,14 +3086,29 @@ export function WorkspaceScreen() {
     }
 
     const currentDeviceId = capabilities?.trackSettings?.deviceId
-    const targetDevice = pickCameraDeviceForZoomPreset(cameraDevices, preset, currentDeviceId)
+    const savedDeviceId = cameraPreferences.preferredLensDeviceIds?.[String(preset)]
+    const savedDevice = savedDeviceId ? cameraDevices.find((device) => device.deviceId === savedDeviceId) || null : null
+    const targetDevice = savedDevice || pickCameraDeviceForZoomPreset(cameraDevices, preset, currentDeviceId)
     if (targetDevice && targetDevice.deviceId !== currentDeviceId) {
       await handleSelectCameraDevice(targetDevice.deviceId)
     }
 
     setPreferredZoom(preset)
-    saveCameraPreferences({ preferredZoom: preset })
-  }, [cameraDevices, capabilities?.trackSettings?.deviceId, handleSelectCameraDevice, saveCameraPreferences])
+    setCameraPreferences((current) => {
+      const next = {
+        ...current,
+        preferredZoom: preset,
+        preferredLensDeviceIds: targetDevice
+          ? {
+              ...(current.preferredLensDeviceIds ?? {}),
+              [String(preset)]: targetDevice.deviceId,
+            }
+          : current.preferredLensDeviceIds ?? {},
+      }
+      saveCameraPreferences(next)
+      return next
+    })
+  }, [cameraDevices, cameraPreferences.preferredLensDeviceIds, capabilities?.trackSettings?.deviceId, handleSelectCameraDevice])
 
   useEffect(() => {
     if (cameraState !== 'active' || !restorePreferredZoomPendingRef.current || !cameraRef.current) {
@@ -3109,7 +3135,7 @@ export function WorkspaceScreen() {
 
     restorePreferredZoomPendingRef.current = false
     void handleApplyLensPreset(zoomToRestore)
-  }, [cameraState, capabilities, handleApplyLensPreset, preferredZoom])
+  }, [cameraState, capabilities, cameraPreferences.preferredLensDeviceIds, handleApplyLensPreset, preferredZoom])
 
   const handleChangeCameraTestPreviewRatio = useCallback((ratio: OutputRatio) => {
     setCameraTestPreviewRatio(ratio)
