@@ -14,6 +14,12 @@
 		4A8F1D4F2C2F4D5D8B900005 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900005 /* SupabaseService.swift */; };
 		4A8F1D4F2C2F4D5D8B900006 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900006 /* CameraPreviewView.swift */; };
 		4A8F1D4F2C2F4D5D8B900007 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900007 /* RootView.swift */; };
+		4A8F1D4F2C2F4D5D8B900010 /* CameraTopBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900010 /* CameraTopBar.swift */; };
+		4A8F1D4F2C2F4D5D8B900011 /* CameraPreviewArea.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900011 /* CameraPreviewArea.swift */; };
+		4A8F1D4F2C2F4D5D8B900012 /* LensChipRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900012 /* LensChipRow.swift */; };
+		4A8F1D4F2C2F4D5D8B900013 /* ZoomControlRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900013 /* ZoomControlRow.swift */; };
+		4A8F1D4F2C2F4D5D8B900014 /* GuideToggleRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900014 /* GuideToggleRow.swift */; };
+		4A8F1D4F2C2F4D5D8B900015 /* CameraActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900015 /* CameraActionBar.swift */; };
 		4A8F1D4F2C2F4D5D8B900008 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900008 /* AVFoundation.framework */; };
 		4A8F1D4F2C2F4D5D8B900009 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900009 /* SwiftUI.framework */; };
 		4A8F1D4F2C2F4D5D8B90000A /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90000A /* UIKit.framework */; };
@@ -28,6 +34,12 @@
 		4A8F1D4E2C2F4D5D8B900005 /* SupabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseService.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900006 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900007 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900010 /* CameraTopBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraTopBar.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900011 /* CameraPreviewArea.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewArea.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900012 /* LensChipRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LensChipRow.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900013 /* ZoomControlRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomControlRow.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900014 /* GuideToggleRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideToggleRow.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900015 /* CameraActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraActionBar.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900008 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		4A8F1D4E2C2F4D5D8B900009 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		4A8F1D4E2C2F4D5D8B90000A /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
@@ -110,6 +122,12 @@
 			isa = PBXGroup;
 			children = (
 				4A8F1D4E2C2F4D5D8B900006 /* CameraPreviewView.swift */,
+				4A8F1D4E2C2F4D5D8B900011 /* CameraPreviewArea.swift */,
+				4A8F1D4E2C2F4D5D8B900012 /* LensChipRow.swift */,
+				4A8F1D4E2C2F4D5D8B900013 /* ZoomControlRow.swift */,
+				4A8F1D4E2C2F4D5D8B900014 /* GuideToggleRow.swift */,
+				4A8F1D4E2C2F4D5D8B900015 /* CameraActionBar.swift */,
+				4A8F1D4E2C2F4D5D8B900010 /* CameraTopBar.swift */,
 				4A8F1D4E2C2F4D5D8B900007 /* RootView.swift */,
 			);
 			path = Views;
@@ -208,6 +226,12 @@
 				4A8F1D4F2C2F4D5D8B900004 /* CameraService.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900005 /* SupabaseService.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900006 /* CameraPreviewView.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900011 /* CameraPreviewArea.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900012 /* LensChipRow.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900013 /* ZoomControlRow.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900014 /* GuideToggleRow.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900015 /* CameraActionBar.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900010 /* CameraTopBar.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900007 /* RootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
