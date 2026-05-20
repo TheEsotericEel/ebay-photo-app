@@ -1,0 +1,444 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { IndexedDbItemPacketStore, ItemPacket, ListingStatus } from './itemPacket'
+import { IndexedDbPhotoStore, StoredPhoto } from './localPhotoStore'
+import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from './workflowStore'
+
+type RemoteItemStatus = 'new' | 'listed' | 'hold' | 'needs_retake'
+type RemotePhotoUploadStatus = 'local' | 'uploading' | 'uploaded' | 'failed'
+type RemotePhotoStatus = 'not_uploaded' | 'uploaded' | 'verified' | 'delete_eligible' | 'deleting' | 'deleted' | 'failed'
+
+interface RemoteStoreRow {
+  id: string
+}
+
+interface RemoteBatchRow {
+  id: string
+  remote_retention_mode?: BatchRecord['remoteRetentionMode'] | null
+}
+
+interface RemoteItemRow {
+  id: string
+  sequence: number
+  status: RemoteItemStatus
+  sku: string | null
+  notes: string | null
+  weight: string | null
+  dimensions: string | null
+  listed_at: string | null
+  photo_retention_until: string | null
+  photos_cleaned_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface RemotePhotoRow {
+  id: string
+  item_id: string
+  order_index: number
+  captured_at: string
+  upload_status: RemotePhotoUploadStatus
+  remote_status: RemotePhotoStatus
+  local_status: StoredPhoto['localStatus']
+  remote_delete_eligible_at: string | null
+  remote_expires_at: string | null
+  remote_deleted_at: string | null
+}
+
+interface RemoteVariantRow {
+  photo_id: string
+  variant_type: 'thumbnail' | 'listing'
+  storage_bucket: string
+  storage_key: string
+  width: number | null
+  height: number | null
+  bytes: number | null
+  mime_type: string | null
+}
+
+export interface RemoteImportSummary {
+  importedItems: number
+  skippedItems: number
+  importedPhotos: number
+  conflicts: number
+  errors: string[]
+}
+
+export interface RemoteImportOptions {
+  client: SupabaseClient
+  store: StoreRecord
+  batch: BatchRecord
+  localItems: ItemPacket[]
+  localPhotos: StoredPhoto[]
+  workflowStore: IndexedDbWorkflowStore
+  itemStore: IndexedDbItemPacketStore
+  photoStore: IndexedDbPhotoStore
+}
+
+function mapListingStatus(status: string | null | undefined): ListingStatus {
+  if (status === 'listed' || status === 'hold' || status === 'needs_retake') {
+    return status
+  }
+  return 'new'
+}
+
+function mapPhotoUploadStatus(status: string | null | undefined): StoredPhoto['uploadStatus'] {
+  if (status === 'uploading' || status === 'uploaded' || status === 'failed') {
+    return status
+  }
+  return 'local'
+}
+
+function mapPhotoRemoteStatus(status: string | null | undefined): StoredPhoto['remoteStatus'] {
+  if (
+    status === 'uploaded'
+    || status === 'verified'
+    || status === 'delete_eligible'
+    || status === 'deleting'
+    || status === 'deleted'
+    || status === 'failed'
+  ) {
+    return status
+  }
+  return 'not_uploaded'
+}
+
+function makeLocalId(prefix: string, remoteId: string, usedIds: Set<string>): string {
+  const base = `${prefix}-import-${remoteId}`
+  if (!usedIds.has(base)) {
+    usedIds.add(base)
+    return base
+  }
+
+  let suffix = 1
+  while (usedIds.has(`${base}-${suffix}`)) {
+    suffix += 1
+  }
+  const id = `${base}-${suffix}`
+  usedIds.add(id)
+  return id
+}
+
+function deriveItemStatuses(itemPhotos: RemotePhotoRow[]): Pick<ItemPacket, 'uploadStatus' | 'remoteStatus'> {
+  if (itemPhotos.length === 0) {
+    return {
+      uploadStatus: 'local',
+      remoteStatus: 'local',
+    }
+  }
+
+  if (itemPhotos.some((photo) => photo.upload_status === 'failed' || photo.remote_status === 'failed')) {
+    return {
+      uploadStatus: 'failed',
+      remoteStatus: 'failed',
+    }
+  }
+
+  const allVerifiedOrDeleted = itemPhotos.every((photo) => photo.remote_status === 'verified' || photo.remote_status === 'deleted')
+  if (allVerifiedOrDeleted) {
+    return {
+      uploadStatus: 'verified',
+      remoteStatus: 'verified',
+    }
+  }
+
+  const allUploadedLike = itemPhotos.every((photo) => (
+    photo.upload_status === 'uploaded'
+    || photo.remote_status === 'uploaded'
+    || photo.remote_status === 'verified'
+    || photo.remote_status === 'deleted'
+  ))
+  if (allUploadedLike) {
+    return {
+      uploadStatus: 'uploaded',
+      remoteStatus: 'uploaded',
+    }
+  }
+
+  if (itemPhotos.some((photo) => photo.upload_status === 'uploading' || photo.remote_status === 'deleting')) {
+    return {
+      uploadStatus: 'uploading',
+      remoteStatus: 'uploading',
+    }
+  }
+
+  return {
+    uploadStatus: 'queued',
+    remoteStatus: 'queued',
+  }
+}
+
+async function downloadPreferredVariant(
+  client: SupabaseClient,
+  photo: RemotePhotoRow,
+  variantsByPhotoId: Map<string, RemoteVariantRow[]>,
+): Promise<{ blob: Blob; variant: RemoteVariantRow | null; error: string | null }> {
+  const variants = variantsByPhotoId.get(photo.id) || []
+  const thumbnail = variants.find((variant) => variant.variant_type === 'thumbnail')
+  const listingFallback = variants.find((variant) => variant.variant_type === 'listing')
+  const preferred = thumbnail || listingFallback || null
+
+  if (!preferred) {
+    return {
+      blob: new Blob([]),
+      variant: null,
+      error: `Photo ${photo.id} has no thumbnail/listing variant`,
+    }
+  }
+
+  const { data, error } = await client
+    .storage
+    .from(preferred.storage_bucket)
+    .download(preferred.storage_key)
+
+  if (error || !data) {
+    return {
+      blob: new Blob([]),
+      variant: preferred,
+      error: `Photo ${photo.id} variant download failed: ${error?.message || 'missing data'}`,
+    }
+  }
+
+  return {
+    blob: data,
+    variant: preferred,
+    error: null,
+  }
+}
+
+export async function importRemoteBatchToLocal(options: RemoteImportOptions): Promise<RemoteImportSummary> {
+  const summary: RemoteImportSummary = {
+    importedItems: 0,
+    skippedItems: 0,
+    importedPhotos: 0,
+    conflicts: 0,
+    errors: [],
+  }
+
+  const {
+    client,
+    store,
+    batch,
+    localItems,
+    localPhotos,
+    workflowStore,
+    itemStore,
+    photoStore,
+  } = options
+
+  const { data: remoteStore, error: storeError } = await client
+    .from('stores')
+    .select('id')
+    .eq('short_code', store.shortCode)
+    .maybeSingle<RemoteStoreRow>()
+
+  if (storeError) {
+    summary.errors.push(`Resolve remote store failed: ${storeError.message}`)
+    return summary
+  }
+  if (!remoteStore?.id) {
+    summary.errors.push(`Remote store not found for short code ${store.shortCode}`)
+    return summary
+  }
+
+  await workflowStore.updateStore(store.id, { remoteId: remoteStore.id }).catch((error: unknown) => {
+    const msg = error instanceof Error ? error.message : String(error)
+    summary.errors.push(`Local store linkage update failed: ${msg}`)
+  })
+
+  const { data: remoteBatch, error: batchError } = await client
+    .from('batches')
+    .select('id, remote_retention_mode')
+    .eq('store_id', remoteStore.id)
+    .eq('name', batch.name)
+    .maybeSingle<RemoteBatchRow>()
+
+  if (batchError) {
+    summary.errors.push(`Resolve remote batch failed: ${batchError.message}`)
+    return summary
+  }
+  if (!remoteBatch?.id) {
+    summary.errors.push(`Remote batch not found for ${store.shortCode} / ${batch.name}`)
+    return summary
+  }
+
+  await workflowStore.updateBatch(batch.id, {
+    remoteId: remoteBatch.id,
+    remoteRetentionMode: remoteBatch.remote_retention_mode || batch.remoteRetentionMode,
+  }).catch((error: unknown) => {
+    const msg = error instanceof Error ? error.message : String(error)
+    summary.errors.push(`Local batch linkage update failed: ${msg}`)
+  })
+
+  const { data: remoteItems, error: itemsError } = await client
+    .from('items')
+    .select('id, sequence, status, sku, notes, weight, dimensions, listed_at, photo_retention_until, photos_cleaned_at, created_at, updated_at')
+    .eq('batch_id', remoteBatch.id)
+    .order('sequence', { ascending: true })
+    .returns<RemoteItemRow[]>()
+
+  if (itemsError) {
+    summary.errors.push(`Fetch remote items failed: ${itemsError.message}`)
+    return summary
+  }
+
+  if (!remoteItems || remoteItems.length === 0) {
+    return summary
+  }
+
+  const remoteItemIds = remoteItems.map((item) => item.id)
+  const { data: remotePhotos, error: photosError } = await client
+    .from('photos')
+    .select('id, item_id, order_index, captured_at, upload_status, remote_status, local_status, remote_delete_eligible_at, remote_expires_at, remote_deleted_at')
+    .in('item_id', remoteItemIds)
+    .order('order_index', { ascending: true })
+    .returns<RemotePhotoRow[]>()
+
+  if (photosError) {
+    summary.errors.push(`Fetch remote photos failed: ${photosError.message}`)
+    return summary
+  }
+
+  const remotePhotoIds = (remotePhotos || []).map((photo) => photo.id)
+  let remoteVariants: RemoteVariantRow[] = []
+  if (remotePhotoIds.length > 0) {
+    const { data, error } = await client
+      .from('photo_variants')
+      .select('photo_id, variant_type, storage_bucket, storage_key, width, height, bytes, mime_type')
+      .in('photo_id', remotePhotoIds)
+      .in('variant_type', ['thumbnail', 'listing'])
+      .returns<RemoteVariantRow[]>()
+
+    if (error) {
+      summary.errors.push(`Fetch remote variants failed: ${error.message}`)
+      return summary
+    }
+    remoteVariants = data || []
+  }
+
+  const photosByItemId = new Map<string, RemotePhotoRow[]>()
+  for (const photo of remotePhotos || []) {
+    const current = photosByItemId.get(photo.item_id) || []
+    current.push(photo)
+    photosByItemId.set(photo.item_id, current)
+  }
+  for (const [itemId, itemPhotos] of photosByItemId.entries()) {
+    itemPhotos.sort((a, b) => a.order_index - b.order_index)
+    photosByItemId.set(itemId, itemPhotos)
+  }
+
+  const variantsByPhotoId = new Map<string, RemoteVariantRow[]>()
+  for (const variant of remoteVariants) {
+    const current = variantsByPhotoId.get(variant.photo_id) || []
+    current.push(variant)
+    variantsByPhotoId.set(variant.photo_id, current)
+  }
+
+  const localItemByRemoteId = new Map(localItems.filter((item) => item.remoteId).map((item) => [item.remoteId as string, item]))
+  const localPhotoByRemoteId = new Map(localPhotos.filter((photo) => photo.remoteId).map((photo) => [photo.remoteId as string, photo]))
+  const localItemIds = new Set(localItems.map((item) => item.id))
+  const localPhotoIds = new Set(localPhotos.map((photo) => photo.id))
+
+  for (const remoteItem of remoteItems) {
+    if (localItemByRemoteId.has(remoteItem.id)) {
+      summary.skippedItems += 1
+      continue
+    }
+
+    const hasLocalConflict = localItems.some((item) => (
+      item.storeId === store.id
+      && item.batchId === batch.id
+      && item.itemNumber === remoteItem.sequence
+      && !item.remoteId
+    ))
+    if (hasLocalConflict) {
+      summary.conflicts += 1
+      continue
+    }
+
+    const itemPhotos = photosByItemId.get(remoteItem.id) || []
+    const itemLocalPhotoIds: string[] = []
+
+    for (const remotePhoto of itemPhotos) {
+      const existingLocalPhoto = localPhotoByRemoteId.get(remotePhoto.id)
+      if (existingLocalPhoto) {
+        itemLocalPhotoIds.push(existingLocalPhoto.id)
+        continue
+      }
+
+      const download = await downloadPreferredVariant(client, remotePhoto, variantsByPhotoId)
+      if (download.error) {
+        summary.errors.push(download.error)
+      }
+
+      const blob = download.blob
+      const mimeType = download.variant?.mime_type || blob.type || 'image/jpeg'
+      const localPhotoId = makeLocalId('photo', remotePhoto.id, localPhotoIds)
+      const uploadedAt = remotePhoto.captured_at || new Date().toISOString()
+      const storedPhotoInput: Omit<StoredPhoto, 'savedAt'> = {
+        id: localPhotoId,
+        remoteId: remotePhoto.id,
+        blob,
+        mimeType,
+        size: blob.size,
+        capturedAt: uploadedAt,
+        uploadStatus: mapPhotoUploadStatus(remotePhoto.upload_status),
+        remoteStatus: mapPhotoRemoteStatus(remotePhoto.remote_status),
+        localStatus: 'missing',
+        remoteDeleteEligibleAt: remotePhoto.remote_delete_eligible_at || undefined,
+        remoteExpiresAt: remotePhoto.remote_expires_at || undefined,
+        remoteDeletedAt: remotePhoto.remote_deleted_at || undefined,
+        thumbnailBlob: blob,
+        thumbnailSize: blob.size,
+        thumbnailWidth: download.variant?.width || undefined,
+        thumbnailHeight: download.variant?.height || undefined,
+        outputWidth: download.variant?.width || undefined,
+        outputHeight: download.variant?.height || undefined,
+      }
+
+      try {
+        const savedPhoto = await photoStore.save(storedPhotoInput)
+        localPhotoByRemoteId.set(remotePhoto.id, savedPhoto)
+        itemLocalPhotoIds.push(savedPhoto.id)
+        summary.importedPhotos += 1
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        summary.errors.push(`Local photo save failed (${remotePhoto.id}): ${msg}`)
+      }
+    }
+
+    const localItemId = makeLocalId('item', remoteItem.id, localItemIds)
+    const derivedStatuses = deriveItemStatuses(itemPhotos)
+    const item: ItemPacket = {
+      id: localItemId,
+      remoteId: remoteItem.id,
+      storeId: store.id,
+      batchId: batch.id,
+      itemNumber: remoteItem.sequence,
+      createdAt: remoteItem.created_at,
+      updatedAt: remoteItem.updated_at || new Date().toISOString(),
+      status: itemLocalPhotoIds.length > 0 ? 'complete' : 'draft',
+      photoIds: itemLocalPhotoIds,
+      listingStatus: mapListingStatus(remoteItem.status),
+      uploadStatus: derivedStatuses.uploadStatus,
+      remoteStatus: derivedStatuses.remoteStatus,
+      listedAt: remoteItem.listed_at || undefined,
+      remoteExpiresAt: remoteItem.photo_retention_until || undefined,
+      remoteDeletedAt: remoteItem.photos_cleaned_at || undefined,
+      sku: remoteItem.sku || undefined,
+      note: remoteItem.notes || undefined,
+      weight: remoteItem.weight || undefined,
+      dimensions: remoteItem.dimensions || undefined,
+    }
+
+    try {
+      await itemStore.upsertItem(item)
+      localItemByRemoteId.set(remoteItem.id, item)
+      summary.importedItems += 1
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      summary.errors.push(`Local item save failed (${remoteItem.id}): ${msg}`)
+    }
+  }
+
+  return summary
+}

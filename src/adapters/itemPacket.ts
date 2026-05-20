@@ -46,6 +46,7 @@ export interface LocalItemPacketStore {
   getCurrentItem(storeId?: string, batchId?: string): Promise<ItemPacket | null>
   getAllItems(): Promise<ItemPacket[]>
   getItem(itemId: string): Promise<ItemPacket | null>
+  upsertItem(item: ItemPacket): Promise<void>
   deleteItem(itemId: string): Promise<void>
   clearAll(): Promise<void>
 }
@@ -222,6 +223,10 @@ export class IndexedDbItemPacketStore implements LocalItemPacketStore {
       req.onsuccess = () => resolve(req.result as ItemPacket || null)
       req.onerror = () => reject(req.error)
     })
+  }
+
+  async upsertItem(item: ItemPacket): Promise<void> {
+    await this.tx('readwrite', (store) => store.put(item))
   }
 
   async deleteItem(itemId: string): Promise<void> {

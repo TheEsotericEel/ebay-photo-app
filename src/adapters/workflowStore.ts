@@ -2,6 +2,7 @@ import { BATCH_STORE_NAME, DB_NAME, DB_VERSION, STORE_STORE_NAME } from './dbCon
 
 export interface StoreRecord {
   id: string
+  remoteId?: string
   name: string
   shortCode: string
   createdAt: string
@@ -12,6 +13,7 @@ export type BatchStatus = 'active' | 'ready_for_listing' | 'archived'
 
 export interface BatchRecord {
   id: string
+  remoteId?: string
   storeId: string
   name: string
   status: BatchStatus
@@ -126,6 +128,20 @@ export class IndexedDbWorkflowStore {
     return store
   }
 
+  async updateStore(storeId: string, patch: Partial<StoreRecord>): Promise<void> {
+    const store = await this.getStore(storeId)
+    if (!store) {
+      throw new Error(`Store ${storeId} not found`)
+    }
+
+    const updated: StoreRecord = {
+      ...store,
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    }
+    await this.tx(STORE_STORE_NAME, 'readwrite', (dbStore) => dbStore.put(updated))
+  }
+
   async getBatches(storeId: string): Promise<BatchRecord[]> {
     const batches = await this.getAll<BatchRecord>(BATCH_STORE_NAME)
     return batches.filter((batch) => batch.storeId === storeId)
@@ -199,6 +215,20 @@ export class IndexedDbWorkflowStore {
     const updated: BatchRecord = {
       ...batch,
       status,
+      updatedAt: new Date().toISOString(),
+    }
+    await this.tx(BATCH_STORE_NAME, 'readwrite', (dbStore) => dbStore.put(updated))
+  }
+
+  async updateBatch(batchId: string, patch: Partial<BatchRecord>): Promise<void> {
+    const batch = await this.getBatch(batchId)
+    if (!batch) {
+      throw new Error(`Batch ${batchId} not found`)
+    }
+
+    const updated: BatchRecord = {
+      ...batch,
+      ...patch,
       updatedAt: new Date().toISOString(),
     }
     await this.tx(BATCH_STORE_NAME, 'readwrite', (dbStore) => dbStore.put(updated))

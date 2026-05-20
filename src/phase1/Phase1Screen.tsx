@@ -14,6 +14,7 @@ import { attachOrderedPhotosToItem, getItemReadiness, sortItems } from '../adapt
 import { getBatchUploadStateSummary, getCleanupReport } from '../adapters/uploadState'
 import { calculateRetentionWindow, getRetentionModeLabel, RemoteRetentionMode } from '../adapters/retention'
 import { deleteEligibleRemotePhotos, getRemoteCleanupReport, RemoteCleanupProgress } from '../adapters/remoteCleanup'
+import { importRemoteBatchToLocal, RemoteImportSummary } from '../adapters/remoteImport'
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
 import { CameraCapabilities, CameraDeviceInfo, CameraTestConstraintSet, CaptureDiagnostics } from '../adapters/camera'
@@ -1984,8 +1985,10 @@ export function WorkspaceScreen() {
   const [uploadProgress, setUploadProgress] = useState<BatchUploadProgress | null>(null)
   const [remoteCleanupProgress, setRemoteCleanupProgress] = useState<RemoteCleanupProgress | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [importingRemote, setImportingRemote] = useState(false)
   const [remoteCleaning, setRemoteCleaning] = useState(false)
   const [cleanupMessage, setCleanupMessage] = useState('')
+  const [remoteImportSummary, setRemoteImportSummary] = useState<RemoteImportSummary | null>(null)
 
   useEffect(() => {
     if (!isMobile) {
@@ -2453,6 +2456,48 @@ export function WorkspaceScreen() {
       setUploading(false)
     }
   }, [allItems, allPhotos, batches, loadData, photoStore, selectedBatchId, selectedStoreId, session, stores, uploading])
+
+  const handleImportFromSupabase = useCallback(async () => {
+    if (!supabase || !session || importingRemote) {
+      return
+    }
+
+    const store = stores.find((entry) => entry.id === selectedStoreId)
+    const batch = batches.find((entry) => entry.id === selectedBatchId)
+    if (!store || !batch) {
+      setStorageErrors((prev) => [...prev, 'Import failed: selected store or batch is missing'])
+      return
+    }
+
+    setImportingRemote(true)
+    setRemoteImportSummary(null)
+
+    try {
+      const summary = await importRemoteBatchToLocal({
+        client: supabase,
+        store,
+        batch,
+        localItems: allItems,
+        localPhotos: allPhotos,
+        workflowStore,
+        itemStore: itemPacketStore,
+        photoStore,
+      })
+      await loadData()
+      setRemoteImportSummary(summary)
+      setStatusMsg(
+        `Imported ${summary.importedItems} item${summary.importedItems === 1 ? '' : 's'} and ${summary.importedPhotos} photo${summary.importedPhotos === 1 ? '' : 's'} from Supabase`,
+      )
+      if (summary.errors.length > 0) {
+        setStorageErrors((prev) => [...prev, ...summary.errors.map((msg) => `Import failed: ${msg}`)])
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setStorageErrors((prev) => [...prev, `Import failed: ${msg}`])
+    } finally {
+      setImportingRemote(false)
+    }
+  }, [allItems, allPhotos, batches, importingRemote, loadData, photoStore, selectedBatchId, selectedStoreId, session, stores])
 
   const handleClearVerifiedLocalCopies = useCallback(async () => {
     const report = getCleanupReport(allItems, allPhotos, selectedStoreId, selectedBatchId)
@@ -3677,8 +3722,32 @@ export function WorkspaceScreen() {
                   <div style={s.desktopPanelTitle}>Queue</div>
                   <div style={s.desktopPanelMeta}>Stores, batches, and item lists.</div>
                 </div>
+                {session && selectedStoreId && selectedBatchId && (
+                  <button
+                    style={{ ...s.button, ...s.buttonSmall }}
+                    onClick={handleImportFromSupabase}
+                    disabled={importingRemote}
+                  >
+                    {importingRemote ? 'Importing…' : 'Import from Supabase'}
+                  </button>
+                )}
               </div>
               <div style={s.desktopScrollList}>
+                {remoteImportSummary && (
+                  <div style={{ ...s.progressBox, marginBottom: 12 }}>
+                    Imported items: {remoteImportSummary.importedItems} •
+                    {' '}Skipped: {remoteImportSummary.skippedItems} •
+                    {' '}Imported photos: {remoteImportSummary.importedPhotos} •
+                    {' '}Conflicts: {remoteImportSummary.conflicts} •
+                    {' '}Errors: {remoteImportSummary.errors.length}
+                    {remoteImportSummary.errors.length > 0 && (
+                      <>
+                        <br />
+                        {remoteImportSummary.errors.slice(0, 3).join(' | ')}
+                      </>
+                    )}
+                  </div>
+                )}
                 <div style={s.label}>Stores</div>
                 <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
                   {desktopStoreCards.length === 0 ? (
