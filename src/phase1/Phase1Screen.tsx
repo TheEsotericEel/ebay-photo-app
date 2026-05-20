@@ -906,6 +906,18 @@ const s: Record<string, React.CSSProperties> = {
     color: '#111',
     borderColor: '#e5e7eb',
   },
+  desktopLegacyBackLink: {
+    padding: '10px 12px',
+    borderRadius: 999,
+    border: '1px solid #2b2b2b',
+    background: '#161616',
+    color: '#93c5fd',
+    fontSize: 12,
+    fontWeight: 700,
+    textDecoration: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+  },
   desktopContext: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr)',
@@ -1942,7 +1954,7 @@ export function WorkspaceScreen() {
   const pinchApplyingRef = useRef(false)
   const restorePreferredZoomPendingRef = useRef(false)
   const isMobile = useIsMobile()
-  const { session, loading: authLoading, error: authError, sendMagicLink, signOut, configured: supabaseReady } = useSupabaseSession()
+  const { session, loading: authLoading, error: authError, signInWithPassword, signOut, configured: supabaseReady } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
   const [desktopMode, setDesktopMode] = useState<DesktopMode>(() => loadWorkspacePreferences().desktopMode || 'queue')
   const [cameraPermissionRemembered, setCameraPermissionRemembered] = useState(() => loadCameraPermissionGranted())
@@ -1981,7 +1993,9 @@ export function WorkspaceScreen() {
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('new')
   const [selectedQueueItemId, setSelectedQueueItemId] = useState<string>('')
   const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
   const [authMessage, setAuthMessage] = useState('')
+  const [authSubmitting, setAuthSubmitting] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<BatchUploadProgress | null>(null)
   const [remoteCleanupProgress, setRemoteCleanupProgress] = useState<RemoteCleanupProgress | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -2390,16 +2404,19 @@ export function WorkspaceScreen() {
     }
   }, [loadData])
 
-  const handleSendMagicLink = useCallback(async () => {
+  const handleSignInWithPassword = useCallback(async () => {
     try {
+      setAuthSubmitting(true)
       setAuthMessage('')
-      await sendMagicLink(authEmail)
-      setAuthMessage(`Magic link sent to ${authEmail.trim()}`)
+      await signInWithPassword(authEmail, authPassword)
+      setAuthMessage(`Signed in as ${authEmail.trim()}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setAuthMessage(`Auth failed: ${msg}`)
+    } finally {
+      setAuthSubmitting(false)
     }
-  }, [authEmail, sendMagicLink])
+  }, [authEmail, authPassword, signInWithPassword])
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -3473,6 +3490,7 @@ export function WorkspaceScreen() {
                 {label}
               </button>
             ))}
+            <a href="/" style={s.desktopLegacyBackLink}>Open new lister UI</a>
           </div>
         </div>
 
@@ -3666,17 +3684,24 @@ export function WorkspaceScreen() {
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <input
                         style={s.select}
-                        placeholder="Email for magic link"
+                        placeholder="Email"
                         value={authEmail}
                         onChange={(e) => setAuthEmail(e.target.value)}
                         type="email"
                       />
+                      <input
+                        style={s.select}
+                        placeholder="Password"
+                        value={authPassword}
+                        onChange={(e) => setAuthPassword(e.target.value)}
+                        type="password"
+                      />
                       <button
                         style={{ ...s.button, ...s.buttonPrimary }}
-                        onClick={handleSendMagicLink}
-                        disabled={!authEmail.trim()}
+                        onClick={handleSignInWithPassword}
+                        disabled={authSubmitting || !authEmail.trim() || !authPassword.trim()}
                       >
-                        Send link
+                        {authSubmitting ? 'Signing in…' : 'Sign in'}
                       </button>
                     </div>
                   )}
@@ -3924,17 +3949,24 @@ export function WorkspaceScreen() {
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <input
                       style={s.select}
-                      placeholder="Email for magic link"
+                      placeholder="Email"
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
                       type="email"
                     />
+                    <input
+                      style={s.select}
+                      placeholder="Password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      type="password"
+                    />
                     <button
                       style={{ ...s.button, ...s.buttonPrimary }}
-                      onClick={handleSendMagicLink}
-                      disabled={!authEmail.trim()}
+                      onClick={handleSignInWithPassword}
+                      disabled={authSubmitting || !authEmail.trim() || !authPassword.trim()}
                     >
-                      Send link
+                      {authSubmitting ? 'Signing in…' : 'Sign in'}
                     </button>
                   </div>
                 )}

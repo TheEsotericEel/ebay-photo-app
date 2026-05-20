@@ -7,6 +7,7 @@ export interface SupabaseSessionState {
   loading: boolean
   error: string | null
   sendMagicLink: (email: string) => Promise<void>
+  signInWithPassword: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   configured: boolean
 }
@@ -85,11 +86,35 @@ export function useSupabaseSession(): SupabaseSessionState {
     }
   }, [])
 
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
+    if (!supabase) {
+      throw new Error('Supabase client is not configured')
+    }
+
+    const trimmedEmail = email.trim()
+    const trimmedPassword = password.trim()
+    if (!trimmedEmail) {
+      throw new Error('Email address is required')
+    }
+    if (!trimmedPassword) {
+      throw new Error('Password is required')
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: trimmedEmail,
+      password: trimmedPassword,
+    })
+    if (signInError) {
+      throw signInError
+    }
+  }, [])
+
   return {
     session,
     loading,
     error,
     sendMagicLink,
+    signInWithPassword,
     signOut,
     configured: supabaseConfig.ready,
   }
