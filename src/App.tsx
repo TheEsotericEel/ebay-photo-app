@@ -17,17 +17,10 @@ export function App() {
     const previousRootOverscroll = root.style.overscrollBehavior
     const previousBodyOverscroll = body.style.overscrollBehavior
 
-    if (isMobile) {
-      root.style.overflow = 'hidden'
-      body.style.overflow = 'hidden'
-      root.style.overscrollBehavior = 'none'
-      body.style.overscrollBehavior = 'none'
-    } else {
-      root.style.overflow = 'auto'
-      body.style.overflow = 'auto'
-      root.style.overscrollBehavior = 'auto'
-      body.style.overscrollBehavior = 'auto'
-    }
+    root.style.overflow = 'auto'
+    body.style.overflow = 'auto'
+    root.style.overscrollBehavior = 'auto'
+    body.style.overscrollBehavior = 'auto'
 
     return () => {
       root.style.overflow = previousRootOverflow
@@ -35,7 +28,7 @@ export function App() {
       root.style.overscrollBehavior = previousRootOverscroll
       body.style.overscrollBehavior = previousBodyOverscroll
     }
-  }, [isMobile])
+  }, [])
 
   if (isLabView) {
     return <CameraLab />

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 
+// Temporary: native iOS is the capture client; web is desktop management only.
+const DESKTOP_ONLY_MODE = true
+
 function readMatchMedia(query: string): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false
@@ -9,6 +12,10 @@ function readMatchMedia(query: string): boolean {
 }
 
 export function useIsMobile(breakpointPx = 900): boolean {
+  if (DESKTOP_ONLY_MODE) {
+    return false
+  }
+
   const query = `(max-width: ${breakpointPx}px)`
   const [matches, setMatches] = useState(() => readMatchMedia(query))
 
