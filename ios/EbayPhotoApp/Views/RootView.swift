@@ -187,8 +187,10 @@ private struct CameraSessionView: View {
           cameraPreferences.switchingMode = .locked
           reconfigureCamera()
         },
-        onToggleLockForSelectedLens: { _ in
-          cameraPreferences.switchingMode = cameraPreferences.switchingMode == .auto ? .locked : .auto
+        onSelectAuto: {
+          // Always set auto — never toggle. LensChipRow guards against
+          // calling this when already in .auto, so no double-fire risk.
+          cameraPreferences.switchingMode = .auto
           reconfigureCamera()
         }
       )
@@ -198,7 +200,7 @@ private struct CameraSessionView: View {
       ZoomControlRow(
         currentZoom: cameraService.currentZoom,
         minZoom: cameraService.minZoom,
-        maxZoom: min(cameraService.maxZoom, 10.0),
+        maxZoom: cameraService.userFacingMaxZoom,
         onZoomChange: updateZoom,
         formatZoom: formatZoom
       )
@@ -280,19 +282,22 @@ private struct CameraSessionView: View {
 
   private func updateZoom(_ zoom: Double) {
     let lens = cameraPreferences.preferredLens
-    let clamped = min(max(zoom, cameraService.minZoom), max(cameraService.maxZoom, cameraService.minZoom))
+    let cap = cameraService.userFacingMaxZoom
+    let clamped = min(max(zoom, cameraService.minZoom), max(cap, cameraService.minZoom))
     cameraPreferences.setZoom(clamped, for: lens)
     cameraService.setZoom(clamped)
   }
 
   private func formatZoom(_ zoom: Double) -> String {
     if zoom < 1 {
-      return String(format: "%.1fx", zoom)
+      // Strip leading zero: 0.5 → ".5x" matching native Camera style.
+      let s = String(format: "%.1f", zoom)  // "0.5"
+      return String(s.dropFirst()) + "x"    // ".5x"
     }
     let whole = zoom.rounded(.towardZero)
     if abs(zoom - whole) < 0.05 {
-      return String(format: "%.0fx", zoom)
+      return String(format: "%.0fx", zoom)  // "2x"
     }
-    return String(format: "%.1fx", zoom)
+    return String(format: "%.1fx", zoom)    // "1.2x"
   }
 }

@@ -9,7 +9,7 @@ struct CameraPreviewArea: View {
   @Binding var pinchStartZoom: Double?
   let thumbnailImage: UIImage?
   let onSelectLens: (CameraLensPreset) -> Void
-  let onToggleLockForSelectedLens: (CameraLensPreset) -> Void
+  let onSelectAuto: () -> Void
   private let cornerRadius: CGFloat = 20
 
   var body: some View {
@@ -78,7 +78,7 @@ struct CameraPreviewArea: View {
         switchingMode: cameraPreferences.switchingMode,
         supportedLenses: cameraService.supportedLenses,
         onSelectLens: onSelectLens,
-        onToggleLockForSelectedLens: onToggleLockForSelectedLens
+        onSelectAuto: onSelectAuto
       )
     }
     .frame(maxWidth: .infinity)
@@ -136,7 +136,8 @@ private struct PreviewInteractionLayer: View {
         }
         if let base = pinchStartZoom {
           let target = base * scale
-          let clamped = min(max(target, cameraService.minZoom), max(cameraService.maxZoom, cameraService.minZoom))
+          let effectiveMax = max(cameraService.userFacingMaxZoom, cameraService.minZoom)
+          let clamped = min(max(target, cameraService.minZoom), effectiveMax)
           cameraService.setZoom(clamped)
           cameraPreferences.setZoom(clamped, for: cameraPreferences.preferredLens)
         }

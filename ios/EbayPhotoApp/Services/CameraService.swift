@@ -3,6 +3,32 @@ import Combine
 import Foundation
 import UIKit
 
+// MARK: - Capture timing probes (remove when bottleneck identified)
+/// Prints millisecond timestamps at each stage of the capture pipeline.
+/// Filter by "[CAP]" in the Xcode console.
+private struct CaptureTimer {
+  private let label: String
+  private let start: Date
+  private var last: Date
+
+  init(_ label: String) {
+    self.label = label
+    let now = Date()
+    self.start = now
+    self.last = now
+    let ts = String(format: "%.3f", now.timeIntervalSince1970.truncatingRemainder(dividingBy: 1000))
+    print("[CAP] \(label) START ts=\(ts)")
+  }
+
+  mutating func mark(_ event: String) {
+    let now = Date()
+    let sinceStart = Int(now.timeIntervalSince(start) * 1000)
+    let sinceLast  = Int(now.timeIntervalSince(last)  * 1000)
+    print("[CAP] \(label) +\(sinceStart)ms (+\(sinceLast)ms) \(event)")
+    last = now
+  }
+}
+
 enum CameraLensPreset: String, CaseIterable, Identifiable, Codable {
   case ultraWide = ".5"
   case wide = "1x"
@@ -182,6 +208,14 @@ final class CameraService: NSObject, ObservableObject {
   @Published private(set) var currentZoom: Double = 1
   @Published private(set) var minZoom: Double = 1
   @Published private(set) var maxZoom: Double = 1
+
+  /// User-facing zoom ceiling. Matches the native Camera app's range (~10x)
+  /// on the wide and ultrawide lenses. The device's own hardware max is used
+  /// if it's lower than 10x (ultrawide digital zoom headroom varies by model).
+  var userFacingMaxZoom: Double {
+    return min(maxZoom, 10.0)
+  }
+
   @Published private(set) var supportsFocusPoint = false
   @Published private(set) var supportsExposurePoint = false
   @Published private(set) var focusIndicator: FocusIndicator?
@@ -243,18 +277,18 @@ final class CameraService: NSObject, ObservableObject {
         return
       }
 
-      let result = self.sessionQueue.sync {
-        self.configureSession(lensState: lensState, zoom: zoom)
-      }
-      self.apply(result)
-      if result.isConfigured {
-        self.sessionQueue.sync {
-          if !self.session.isRunning {
-            self.session.startRunning()
+      // Run session configuration and startRunning on the session queue,
+      // never on the main thread (Thread Performance Checker warning).
+      self.sessionQueue.async {
+        let result = self.configureSession(lensState: lensState, zoom: zoom)
+        Task { @MainActor in self.apply(result) }
+        if result.isConfigured, !self.session.isRunning {
+          self.session.startRunning()
+          Task { @MainActor in
+            self.isRunning = true
+            self.canCapture = true
           }
         }
-        self.isRunning = true
-        self.canCapture = true
       }
     }
   }
@@ -331,30 +365,59 @@ final class CameraService: NSObject, ObservableObject {
 
     return try await withCheckedThrowingContinuation { continuation in
       captureContinuation = continuation
-      let settings = AVCapturePhotoSettings()
+      
+      // Request uncompressed pixels to completely bypass the hardware JPEG encode + software decode bottleneck.
+      let format = [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)]
+      let settings = AVCapturePhotoSettings(format: format)
+      
       if let preferredPhotoDimensions, photoOutput.connection(with: .video) != nil {
         settings.maxPhotoDimensions = preferredPhotoDimensions
       } else if preferredPhotoDimensions != nil {
         print("Skipping capture maxPhotoDimensions: photo output is not connected to a video source.")
       }
-      settings.photoQualityPrioritization = .quality
+      var timer = CaptureTimer("capturePhoto")
+
+      let maxPriority = photoOutput.maxPhotoQualityPrioritization
+      let desiredPriority = AVCapturePhotoOutput.QualityPrioritization.balanced
+      settings.photoQualityPrioritization =
+        desiredPriority.rawValue <= maxPriority.rawValue ? desiredPriority : maxPriority
+      print("[CAP] quality=\(settings.photoQualityPrioritization.rawValue) maxAllowed=\(maxPriority.rawValue) preferredDimensions=\(String(describing: settings.maxPhotoDimensions))")
 
       let delegate = PhotoCaptureDelegate { [weak self] result in
+        timer.mark("delegate fired (hardware→app)")
         guard let self else { return }
-        Task { @MainActor in
-          self.captureInFlight = false
-          self.captureDelegate = nil
-          switch result {
-          case .success(let data):
-            let deliverableData: Data
-            switch aspectMode {
-            case .square:
-              deliverableData = PhotoFraming.squareDeliverableJPEG(from: data) ?? data
-            case .native:
-              deliverableData = data
-            }
 
-            let preview = UIImage(data: deliverableData)?.ebp_thumbnailData()
+        switch result {
+        case .success(let cgImage):
+          timer.mark("received uncompressed CGImage")
+
+          let deliverableData: Data
+          let preview: Data?
+
+          switch aspectMode {
+          case .square:
+            if let result = PhotoFraming.squareDeliverableAndThumbnail(from: cgImage) {
+              deliverableData = result.jpeg
+              preview = result.thumbnail
+            } else {
+              deliverableData = Data()
+              preview = nil
+            }
+          case .native:
+            if let result = PhotoFraming.nativeDeliverableAndThumbnail(from: cgImage) {
+              deliverableData = result.jpeg
+              preview = result.thumbnail
+            } else {
+              deliverableData = Data()
+              preview = nil
+            }
+          }
+          timer.mark("image processing done (crop+thumb)")
+
+          Task { @MainActor in
+            timer.mark("MainActor task started")
+            self.captureInFlight = false
+            self.captureDelegate = nil
             let capturedPhoto = CapturedPhoto(
               data: deliverableData,
               thumbnailData: preview,
@@ -363,8 +426,13 @@ final class CameraService: NSObject, ObservableObject {
             )
             self.captureContinuation?.resume(returning: capturedPhoto)
             self.captureContinuation = nil
+            timer.mark("continuation resumed — capture complete")
             self.scheduleCaptureCooldown()
-          case .failure(let error):
+          }
+        case .failure(let error):
+          Task { @MainActor in
+            self.captureInFlight = false
+            self.captureDelegate = nil
             self.captureContinuation?.resume(throwing: error)
             self.captureContinuation = nil
             self.scheduleCaptureCooldown()
@@ -623,11 +691,25 @@ final class CameraService: NSObject, ObservableObject {
     guard let device else { return nil }
     guard #available(iOS 16.0, *) else { return nil }
     let candidates = device.activeFormat.supportedMaxPhotoDimensions
-    return candidates.max { lhs, rhs in
-      let lhsPixels = Int64(lhs.width) * Int64(lhs.height)
-      let rhsPixels = Int64(rhs.width) * Int64(rhs.height)
-      return lhsPixels < rhsPixels
+
+    // Target the 12MP tier (shorter side ≈ 3024px on iPhone 15 Pro main camera).
+    // After square crop this yields 3024×3024 — more than 3× eBay's recommended
+    // 1600px ceiling but fast to process. The 48MP mode (8064×6048) produces a
+    // 10 MB JPEG that takes 2.5 s to decode + re-encode in software.
+    //
+    // Selection rule: prefer the candidate whose short-side is at most 3024px
+    // while maximising pixel count. Fall back to the overall minimum if nothing
+    // fits (ultrawide sensor may only have one tier).
+    let targetShortSide: Int32 = 3024
+    let eligible = candidates.filter { min($0.width, $0.height) <= targetShortSide }
+    let pool = eligible.isEmpty ? candidates : eligible
+    let chosen = pool.max {
+      Int64($0.width) * Int64($0.height) < Int64($1.width) * Int64($1.height)
     }
+    if let d = chosen {
+      print("[CAP] selected capture dimensions \(d.width)×\(d.height) from \(candidates.count) candidates")
+    }
+    return chosen
   }
 
   private func applyPreferredPhotoDimensions(for device: AVCaptureDevice?) {
@@ -836,10 +918,10 @@ private struct DeviceCatalog {
 }
 
 private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-  private var completion: ((Result<Data, Error>) -> Void)?
+  private var completion: ((Result<CGImage, Error>) -> Void)?
   private var didComplete = false
 
-  init(completion: @escaping (Result<Data, Error>) -> Void) {
+  init(completion: @escaping (Result<CGImage, Error>) -> Void) {
     self.completion = completion
   }
 
@@ -856,12 +938,17 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
       return
     }
 
-    guard let data = photo.fileDataRepresentation() else {
+    // cgImageRepresentation() instantly wraps the uncompressed pixel buffer 
+    // and automatically applies the correct upright orientation.
+    guard let cgImage = photo.cgImageRepresentation() else {
+      didComplete = true
+      completion?(.failure(NSError(domain: "CameraService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to get CGImage from photo."])))
+      completion = nil
       return
     }
 
     didComplete = true
-    completion?(.success(data))
+    completion?(.success(cgImage))
     completion = nil
   }
 
