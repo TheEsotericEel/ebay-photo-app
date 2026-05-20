@@ -11,22 +11,27 @@ struct CaptureContextSheet: View {
 
   var body: some View {
     NavigationStack {
-      Form {
-        Section("Capture Context") {
-          TextField("Store name", text: $storeName)
-          TextField("Store short code", text: $storeShortCode)
-            .textInputAutocapitalization(.characters)
-            .autocorrectionDisabled()
-          TextField("Batch name", text: $batchName)
-          TextField("Item number", text: $itemNumberText)
-            .keyboardType(.numberPad)
-        }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          labeledField(title: "Store name", text: $storeName)
+          labeledField(
+            title: "Store short code",
+            text: $storeShortCode,
+            autocapitalize: .characters,
+            autocorrectDisabled: true
+          )
+          labeledField(title: "Batch name", text: $batchName)
+          labeledField(
+            title: "Item number",
+            text: $itemNumberText,
+            keyboardType: .numberPad
+          )
 
-        Section {
           Text("Uploads use this store, batch, and item number.")
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+        .padding()
       }
       .navigationTitle("Capture Context")
       .toolbar {
@@ -38,6 +43,26 @@ struct CaptureContextSheet: View {
         }
       }
       .onAppear(perform: loadDraftFromAppState)
+    }
+  }
+
+  @ViewBuilder
+  private func labeledField(
+    title: String,
+    text: Binding<String>,
+    autocapitalize: TextInputAutocapitalization? = nil,
+    autocorrectDisabled: Bool = false,
+    keyboardType: UIKeyboardType = .default
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(title)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      TextField(title, text: text)
+        .textFieldStyle(.roundedBorder)
+        .keyboardType(keyboardType)
+        .modifier(OptionalAutocapitalize(autocapitalize: autocapitalize))
+        .autocorrectionDisabled(autocorrectDisabled)
     }
   }
 
@@ -59,5 +84,17 @@ struct CaptureContextSheet: View {
     )
     appState.statusMessage = "Capture context updated."
     dismiss()
+  }
+}
+
+private struct OptionalAutocapitalize: ViewModifier {
+  let autocapitalize: TextInputAutocapitalization?
+
+  func body(content: Content) -> some View {
+    if let autocapitalize {
+      content.textInputAutocapitalization(autocapitalize)
+    } else {
+      content
+    }
   }
 }

@@ -503,22 +503,8 @@ private struct CameraSessionView: View {
         .environmentObject(appState)
     }
     .sheet(isPresented: $showingDetails) {
-      NavigationStack {
-        Form {
-          Section("Item Details") {
-            TextField("SKU", text: $appState.currentItemSku)
-            TextField("Weight", text: $appState.currentItemWeight)
-            TextField("Dimensions", text: $appState.currentItemDimensions)
-            TextField("Notes", text: $appState.currentItemNotes)
-          }
-        }
-        .navigationTitle("Details")
-        .toolbar {
-          ToolbarItem(placement: .topBarTrailing) {
-            Button("Done") { showingDetails = false }
-          }
-        }
-      }
+      ItemDetailsSheet()
+        .environmentObject(appState)
     }
   }
 
