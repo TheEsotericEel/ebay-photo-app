@@ -320,45 +320,59 @@ private struct AuthView: View {
 
   var body: some View {
     NavigationStack {
-      Form {
-        Section("Sign In (recommended)") {
-          Text(
-            "Password sign-in does not send email. OTP and account creation count toward Supabase email limits (~few per hour on built-in SMTP)."
-          )
-          .font(.footnote)
-          .foregroundStyle(.secondary)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 20) {
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Sign In (recommended)")
+              .font(.headline)
+            Text(
+              "Password sign-in does not send email. OTP and account creation count toward Supabase email limits (~few per hour on built-in SMTP)."
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
 
-          TextField("Email", text: $email)
-            .keyboardType(.emailAddress)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
+            LabeledTextField(
+              title: "Email",
+              text: $email,
+              autocapitalize: .never,
+              autocorrectDisabled: true,
+              keyboardType: .emailAddress
+            )
+            LabeledTextField(title: "Password", text: $password, isSecure: true)
+            Button("Sign In with Password", action: onSignInWithPassword)
+              .buttonStyle(.borderedProminent)
+          }
 
-          SecureField("Password", text: $password)
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Email OTP (rate limited)")
+              .font(.headline)
+            Button("Send OTP Code", action: onSendCode)
+              .buttonStyle(.bordered)
+            LabeledTextField(title: "Code", text: $code, keyboardType: .numberPad)
+            Button("Sign In with OTP Code", action: onSignIn)
+              .buttonStyle(.borderedProminent)
+          }
 
-          Button("Sign In with Password", action: onSignInWithPassword)
-        }
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Create account (sends email)")
+              .font(.headline)
+            Button("Create Password Account", action: onCreatePasswordAccount)
+              .buttonStyle(.bordered)
+          }
 
-        Section("Email OTP (rate limited)") {
-          Button("Send OTP Code", action: onSendCode)
-
-          TextField("Code", text: $code)
-            .keyboardType(.numberPad)
-
-          Button("Sign In with OTP Code", action: onSignIn)
-        }
-
-        Section("Create account (sends email)") {
-          Button("Create Password Account", action: onCreatePasswordAccount)
-        }
-
-        Section("Status") {
-          Text(statusMessage)
-          if !errorMessage.isEmpty {
-            Text(errorMessage)
-              .foregroundStyle(.red)
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Status")
+              .font(.headline)
+            Text(statusMessage)
+            if !errorMessage.isEmpty {
+              Text(errorMessage)
+                .foregroundStyle(.red)
+            }
           }
         }
+        .padding()
       }
+      .scrollDismissesKeyboard(.interactively)
       .navigationTitle("Ebay Photo App")
     }
   }
@@ -424,35 +438,43 @@ private struct CameraSessionView: View {
   @State private var pendingCaptureCount = 0
   private let maxPendingCaptures = 2
 
+  private var isEditingOverlayPresented: Bool {
+    showingContext || showingDetails
+  }
+
   var body: some View {
     VStack(spacing: 8) {
       CameraTopBar(
         contextLabel: appState.captureContextChipLabel,
         photoCount: appState.capturedPhotos.count,
         onBack: onBack,
-        onContext: { showingContext = true },
-        onDetails: { showingDetails = true }
+        onContext: { presentContextEditor() },
+        onDetails: { presentDetailsEditor() }
       )
       .padding(.top, 4)
 
-      CameraPreviewArea(
-        session: cameraService.session,
-        cameraService: cameraService,
-        cameraPreferences: cameraPreferences,
-        pinchStartZoom: $pinchStartZoom,
-        thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
-        onSelectLens: { lens in
-          cameraPreferences.preferredLens = lens
-          cameraPreferences.switchingMode = .locked
-          reconfigureCamera()
-        },
-        onSelectAuto: {
-          // Always set auto — never toggle. LensChipRow guards against
-          // calling this when already in .auto, so no double-fire risk.
-          cameraPreferences.switchingMode = .auto
-          reconfigureCamera()
+      Group {
+        if isEditingOverlayPresented {
+          cameraPreviewPlaceholder
+        } else {
+          CameraPreviewArea(
+            session: cameraService.session,
+            cameraService: cameraService,
+            cameraPreferences: cameraPreferences,
+            pinchStartZoom: $pinchStartZoom,
+            thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
+            onSelectLens: { lens in
+              cameraPreferences.preferredLens = lens
+              cameraPreferences.switchingMode = .locked
+              reconfigureCamera()
+            },
+            onSelectAuto: {
+              cameraPreferences.switchingMode = .auto
+              reconfigureCamera()
+            }
+          )
         }
-      )
+      }
       .frame(maxHeight: .infinity)
       .padding(.top, 4)
 
@@ -498,13 +520,38 @@ private struct CameraSessionView: View {
     .onDisappear {
       cameraService.stop()
     }
-    .sheet(isPresented: $showingContext) {
+    .fullScreenCover(isPresented: $showingContext) {
       CaptureContextSheet()
         .environmentObject(appState)
     }
-    .sheet(isPresented: $showingDetails) {
+    .fullScreenCover(isPresented: $showingDetails) {
       ItemDetailsSheet()
         .environmentObject(appState)
+    }
+  }
+
+  private var cameraPreviewPlaceholder: some View {
+    GeometryReader { geo in
+      let side = max(min(geo.size.width, geo.size.height), 120)
+      Color.black
+        .frame(width: side, height: side)
+        .frame(maxWidth: .infinity)
+    }
+  }
+
+  private func presentContextEditor() {
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    withTransaction(transaction) {
+      showingContext = true
+    }
+  }
+
+  private func presentDetailsEditor() {
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    withTransaction(transaction) {
+      showingDetails = true
     }
   }
 

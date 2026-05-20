@@ -13,13 +13,14 @@ struct ItemDetailsSheet: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-          labeledField(title: "SKU", text: $sku)
-          labeledField(title: "Weight", text: $weight)
-          labeledField(title: "Dimensions", text: $dimensions)
-          labeledField(title: "Notes", text: $notes)
+          LabeledTextField(title: "SKU", text: $sku)
+          LabeledTextField(title: "Weight", text: $weight)
+          LabeledTextField(title: "Dimensions", text: $dimensions)
+          LabeledTextField(title: "Notes", text: $notes)
         }
         .padding()
       }
+      .scrollDismissesKeyboard(.interactively)
       .navigationTitle("Details")
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
@@ -30,16 +31,6 @@ struct ItemDetailsSheet: View {
         }
       }
       .onAppear(perform: loadDraftFromAppState)
-    }
-  }
-
-  private func labeledField(title: String, text: Binding<String>) -> some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(title)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      TextField(title, text: text)
-        .textFieldStyle(.roundedBorder)
     }
   }
 
