@@ -3,6 +3,17 @@ import Combine
 import Foundation
 import UIKit
 
+enum CameraServiceError: Error, LocalizedError {
+  case imageProcessingFailed
+  
+  var errorDescription: String? {
+    switch self {
+    case .imageProcessingFailed:
+      return "Failed to process the captured image."
+    }
+  }
+}
+
 // MARK: - Capture timing probes (remove when bottleneck identified)
 /// Prints millisecond timestamps at each stage of the capture pipeline.
 /// Filter by "[CAP]" in the Xcode console.
@@ -246,7 +257,6 @@ final class CameraService: NSObject, ObservableObject {
   private var preferredPhotoDimensions: CMVideoDimensions?
   private var captureDelegate: PhotoCaptureDelegate?
   private var captureContinuation: CheckedContinuation<CapturedPhoto, Error>?
-  private var captureCooldownWorkItem: DispatchWorkItem?
   private var focusIndicatorWorkItem: DispatchWorkItem?
 
   private struct SessionResult {
@@ -297,8 +307,6 @@ final class CameraService: NSObject, ObservableObject {
     sessionQueue.sync {
       captureDelegate = nil
       captureContinuation = nil
-      captureCooldownWorkItem?.cancel()
-      captureCooldownWorkItem = nil
       focusIndicatorWorkItem?.cancel()
       focusIndicatorWorkItem = nil
       if session.isRunning {
@@ -361,7 +369,6 @@ final class CameraService: NSObject, ObservableObject {
 
     captureInFlight = true
     canCapture = false
-    captureCooldownWorkItem?.cancel()
 
     return try await withCheckedThrowingContinuation { continuation in
       captureContinuation = continuation
@@ -396,21 +403,23 @@ final class CameraService: NSObject, ObservableObject {
 
           switch aspectMode {
           case .square:
-            if let result = PhotoFraming.squareDeliverableAndThumbnail(from: cgImage) {
-              deliverableData = result.jpeg
-              preview = result.thumbnail
-            } else {
-              deliverableData = Data()
-              preview = nil
+            guard let result = PhotoFraming.squareDeliverableAndThumbnail(from: cgImage) else {
+              self.captureInFlight = false
+              self.captureDelegate = nil
+              continuation.resume(throwing: CameraServiceError.imageProcessingFailed)
+              return
             }
+            deliverableData = result.jpeg
+            preview = result.thumbnail
           case .native:
-            if let result = PhotoFraming.nativeDeliverableAndThumbnail(from: cgImage) {
-              deliverableData = result.jpeg
-              preview = result.thumbnail
-            } else {
-              deliverableData = Data()
-              preview = nil
+            guard let result = PhotoFraming.nativeDeliverableAndThumbnail(from: cgImage) else {
+              self.captureInFlight = false
+              self.captureDelegate = nil
+              continuation.resume(throwing: CameraServiceError.imageProcessingFailed)
+              return
             }
+            deliverableData = result.jpeg
+            preview = result.thumbnail
           }
           timer.mark("image processing done (crop+thumb)")
 
@@ -427,7 +436,7 @@ final class CameraService: NSObject, ObservableObject {
             self.captureContinuation?.resume(returning: capturedPhoto)
             self.captureContinuation = nil
             timer.mark("continuation resumed — capture complete")
-            self.scheduleCaptureCooldown()
+            self.canCapture = true
           }
         case .failure(let error):
           Task { @MainActor in
@@ -435,7 +444,7 @@ final class CameraService: NSObject, ObservableObject {
             self.captureDelegate = nil
             self.captureContinuation?.resume(throwing: error)
             self.captureContinuation = nil
-            self.scheduleCaptureCooldown()
+            self.canCapture = true
           }
         }
       }
@@ -446,17 +455,6 @@ final class CameraService: NSObject, ObservableObject {
   }
 
   private var captureInFlight = false
-
-  private func scheduleCaptureCooldown() {
-    captureCooldownWorkItem?.cancel()
-    let workItem = DispatchWorkItem { [weak self] in
-      Task { @MainActor in
-        self?.canCapture = true
-      }
-    }
-    captureCooldownWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
-  }
 
   private func publishFocusIndicator(normalizedPoint: CGPoint, isSuccessful: Bool) {
     focusIndicatorWorkItem?.cancel()

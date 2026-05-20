@@ -165,6 +165,9 @@ private struct CameraSessionView: View {
   let onDone: () -> Void
 
   @State private var pinchStartZoom: Double?
+  @State private var isCaptureLoopRunning = false
+  @State private var pendingCaptureCount = 0
+  private let maxPendingCaptures = 2
 
   var body: some View {
     VStack(spacing: 8) {
@@ -213,19 +216,15 @@ private struct CameraSessionView: View {
 
       CameraActionBar(
         canUndo: !appState.capturedPhotos.isEmpty,
-        canCapture: cameraService.canCapture,
+        canCapture: cameraService.canCapture || (isCaptureLoopRunning && pendingCaptureCount < maxPendingCaptures),
         onUndo: {
           appState.undoLastCapture()
         },
         onCapture: {
-          Task {
-            do {
-              let photo = try await cameraService.capturePhoto(aspectMode: cameraPreferences.aspectMode)
-              appState.capturedPhotos.append(photo)
-              appState.statusMessage = "Captured \(appState.capturedPhotos.count) photo(s)"
-            } catch {
-              appState.statusMessage = "Capture failed: \(error.localizedDescription)"
-            }
+          if !isCaptureLoopRunning {
+            startCaptureLoop()
+          } else if pendingCaptureCount < maxPendingCaptures {
+            pendingCaptureCount += 1
           }
         },
         onNextItem: {
@@ -257,6 +256,30 @@ private struct CameraSessionView: View {
           ToolbarItem(placement: .topBarTrailing) {
             Button("Done") { showingDetails = false }
           }
+        }
+      }
+    }
+  }
+
+  private func startCaptureLoop() {
+    guard !isCaptureLoopRunning else { return }
+    isCaptureLoopRunning = true
+    
+    Task {
+      while true {
+        do {
+          let photo = try await cameraService.capturePhoto(aspectMode: cameraPreferences.aspectMode)
+          appState.capturedPhotos.append(photo)
+          appState.statusMessage = "Captured \(appState.capturedPhotos.count) photo(s)"
+        } catch {
+          appState.statusMessage = "Capture failed: \(error.localizedDescription)"
+        }
+        
+        if pendingCaptureCount > 0 {
+          pendingCaptureCount -= 1
+        } else {
+          isCaptureLoopRunning = false
+          break
         }
       }
     }
