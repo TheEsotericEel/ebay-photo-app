@@ -818,7 +818,7 @@ final class SupabaseService {
     request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    return try await execute(request, requestName: "Supabase auth request")
+    return try await execute(request, requestName: "Supabase auth request", authErrorFormatting: true)
   }
 
   private func performAuthedRequest(
@@ -852,7 +852,11 @@ final class SupabaseService {
     return try await execute(request, requestName: "Supabase request")
   }
 
-  private func execute(_ request: URLRequest, requestName: String) async throws -> Data {
+  private func execute(
+    _ request: URLRequest,
+    requestName: String,
+    authErrorFormatting: Bool = false
+  ) async throws -> Data {
     let (data, response): (Data, URLResponse)
     do {
       (data, response) = try await urlSession.data(for: request)
@@ -865,14 +869,53 @@ final class SupabaseService {
     }
 
     guard (200 ... 299).contains(httpResponse.statusCode) else {
-      let message = parseServerMessage(data: data)
+      let message = authErrorFormatting
+        ? formatAuthHTTPError(statusCode: httpResponse.statusCode, data: data)
+        : parseServerMessage(data: data)
       throw AppServiceError.server("\(requestName) failed (\(httpResponse.statusCode)): \(message)")
     }
     return data
   }
 
+  private func formatAuthHTTPError(statusCode: Int, data: Data) -> String {
+    let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    let errorCode = (json["error_code"] as? String) ?? (json["code"] as? String) ?? ""
+    let serverMessage = parseServerMessage(data: data)
+
+    if statusCode == 429, errorCode == "over_email_send_rate_limit" {
+      return """
+      Supabase email send rate limit exceeded. Built-in SMTP allows only a few auth emails per hour project-wide.
+
+      To unblock now:
+      1) Use "Sign In with Password" only (does not send email).
+      2) Create the user in Supabase Dashboard → Authentication → Users → Add user (enable Auto Confirm), then sign in with password.
+      3) Wait for the hourly limit to reset, or configure custom SMTP in Project Settings → Auth.
+      4) Avoid "Send OTP Code" and "Create Password Account" until the limit clears.
+
+      For simulator upload testing without auth, set DEVELOPMENT_AUTH_BYPASS = YES in Secrets.xcconfig (DEBUG only).
+      """
+    }
+
+    if statusCode == 429 {
+      return """
+      Supabase auth rate limit exceeded (\(serverMessage)).
+
+      Wait a few minutes and retry. Password sign-in does not send email; OTP and signup flows do.
+      """
+    }
+
+    if statusCode == 400, errorCode == "invalid_credentials" {
+      return """
+      Invalid email or password. If you have not created this account yet, add the user in Supabase Dashboard (Auto Confirm) or wait until email rate limits reset before using "Create Password Account".
+      """
+    }
+
+    return serverMessage
+  }
+
   private func parseServerMessage(data: Data) -> String {
     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+      if let message = json["msg"] as? String, !message.isEmpty { return message }
       if let message = json["message"] as? String, !message.isEmpty { return message }
       if let error = json["error"] as? String, !error.isEmpty { return error }
       if let hint = json["hint"] as? String, !hint.isEmpty { return hint }

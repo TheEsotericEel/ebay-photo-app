@@ -3,7 +3,7 @@
 Use the simulator for non-camera-critical work:
 
 - Supabase config validation
-- auth flow (send OTP, verify OTP, sign out, session restore)
+- auth flow (password sign-in preferred; OTP optional; sign out, session restore)
 - upload service behavior
 - storage path and DB row verification
 - status/failure handling
@@ -49,6 +49,14 @@ Behavior:
 - requires a real authenticated session unless development auth bypass is explicitly enabled
 
 This lets you validate auth + upload + storage + DB behavior in simulator without relying on physical camera capture.
+
+## Auth rate limits (`429 over_email_send_rate_limit`)
+
+If OTP or account creation fails with email rate limit errors, see:
+
+- `docs/SUPABASE_AUTH_RATE_LIMITS.md`
+
+Quick path: create an auto-confirmed user in Supabase Dashboard, then use **Sign In with Password** (no email sent).
 
 ## Physical iPhone logging
 

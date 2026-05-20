@@ -318,21 +318,33 @@ private struct AuthView: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("Sign In") {
+        Section("Sign In (recommended)") {
+          Text(
+            "Password sign-in does not send email. OTP and account creation count toward Supabase email limits (~few per hour on built-in SMTP)."
+          )
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+
           TextField("Email", text: $email)
             .keyboardType(.emailAddress)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
 
+          SecureField("Password", text: $password)
+
+          Button("Sign In with Password", action: onSignInWithPassword)
+        }
+
+        Section("Email OTP (rate limited)") {
           Button("Send OTP Code", action: onSendCode)
 
           TextField("Code", text: $code)
             .keyboardType(.numberPad)
 
-          SecureField("Password", text: $password)
-
           Button("Sign In with OTP Code", action: onSignIn)
-          Button("Sign In with Password", action: onSignInWithPassword)
+        }
+
+        Section("Create account (sends email)") {
           Button("Create Password Account", action: onCreatePasswordAccount)
         }
 
