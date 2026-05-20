@@ -2,52 +2,806 @@ import Foundation
 
 enum AppServiceError: LocalizedError {
   case notConfigured(String)
+  case invalidRequest(String)
+  case network(String)
+  case server(String)
 
   var errorDescription: String? {
     switch self {
     case .notConfigured(let message):
+      return message
+    case .invalidRequest(let message):
+      return message
+    case .network(let message):
+      return message
+    case .server(let message):
       return message
     }
   }
 }
 
 final class SupabaseService {
+  private struct Config {
+    let baseURL: URL
+    let anonKey: String
+    let bucket: String
+  }
+
+  private struct Session: Codable {
+    let accessToken: String
+    let refreshToken: String?
+    let userId: String?
+    let expiresAt: TimeInterval?
+  }
+
+  private enum AuthGrantType: String, Codable {
+    // This app uses numeric OTP code entry, so Supabase verify type should be email.
+    case emailOTP = "email"
+  }
+
+  private struct AuthVerifyResponse: Decodable {
+    let access_token: String
+    let refresh_token: String?
+    let expires_at: TimeInterval?
+    let user: AuthUser?
+  }
+
+  private struct AuthUser: Decodable {
+    let id: String?
+  }
+
+  private struct StoreRow: Decodable {
+    let id: String
+  }
+
+  private struct BatchRow: Decodable {
+    let id: String
+  }
+
+  private struct ItemRow: Decodable {
+    let id: String
+  }
+
+  private struct PhotoRow: Decodable {
+    let id: String
+  }
+
+  private struct BatchCountsUpdateBody: Encodable {
+    let item_count: Int
+    let photo_count: Int
+    let upload_status: String
+  }
+
+  private let sessionStoreKey = "ebp.supabase.session.v1"
+  private let defaultStorageBucket = "photo-assets"
+  private let userDefaults: UserDefaults
+  private let urlSession: URLSession
+  private var cachedSession: Session?
+
+  init(
+    userDefaults: UserDefaults = .standard,
+    urlSession: URLSession = .shared
+  ) {
+    self.userDefaults = userDefaults
+    self.urlSession = urlSession
+    cachedSession = Self.loadSession(from: userDefaults, key: sessionStoreKey)
+  }
+
   func sendOTP(email: String) async throws {
-    guard !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
       throw AppServiceError.notConfigured("Enter an email address first.")
     }
-    #if DEBUG
-    // Development-only stub: keep the auth flow in place without requiring a
-    // live Supabase project, secrets, or a working OTP backend yet.
-    return
-    #else
-    throw AppServiceError.notConfigured("Supabase auth is not wired yet.")
-    #endif
+
+    let config = try loadConfig()
+    let payload: [String: Any] = [
+      "email": trimmed,
+      "create_user": true,
+    ]
+    _ = try await performAuthJSONRequest(
+      config: config,
+      method: "POST",
+      path: "/auth/v1/otp",
+      body: payload
+    )
   }
 
   func verifyOTP(email: String, code: String) async throws {
-    guard !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedEmail.isEmpty else {
       throw AppServiceError.notConfigured("Enter an email address first.")
     }
-    guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    guard !trimmedCode.isEmpty else {
       throw AppServiceError.notConfigured("Enter the OTP code from email.")
     }
-    #if DEBUG
-    // Development-only stub: accept the login button path so the app can move
-    // into the capture flow before the real auth integration exists.
-    return
-    #else
-    throw AppServiceError.notConfigured("Supabase auth is not wired yet.")
-    #endif
+
+    let config = try loadConfig()
+    let payload: [String: Any] = [
+      "email": trimmedEmail,
+      "token": trimmedCode,
+      "type": AuthGrantType.emailOTP.rawValue,
+    ]
+
+    let data = try await performAuthJSONRequest(
+      config: config,
+      method: "POST",
+      path: "/auth/v1/verify",
+      body: payload
+    )
+
+    let response = try decode(AuthVerifyResponse.self, from: data)
+    let session = Session(
+      accessToken: response.access_token,
+      refreshToken: response.refresh_token,
+      userId: response.user?.id,
+      expiresAt: response.expires_at
+    )
+    saveSession(session)
   }
 
   func uploadCurrentBatch() async throws {
-    #if DEBUG
-    // Keep the upload call present for later wiring, but do not block the
-    // camera/dev flow while we are only testing the native app shell.
-    return
-    #else
-    throw AppServiceError.notConfigured("Upload is not wired yet.")
-    #endif
+    throw AppServiceError.notConfigured("Native upload requires a packet. Use uploadItemPacket(_:) for V1.")
+  }
+
+  @discardableResult
+  func uploadItemPacket(_ packet: NativeUploadItemPacketV1) async throws -> NativeUploadItemPacketV1Result {
+    guard !packet.photos.isEmpty else {
+      throw AppServiceError.invalidRequest("Item packet must include at least one photo.")
+    }
+
+    let config = try loadConfig()
+    let session = try requireSession()
+    var batchIdForFailure: String?
+    var preUploadedPhotoIdForFailure: String?
+    var successfulPhotoUploadCount = 0
+
+    do {
+      let storeId = try await resolveOrCreateStore(config: config, session: session, store: packet.store)
+      let batchId = try await resolveOrCreateBatch(config: config, session: session, storeId: storeId, batch: packet.batch)
+      batchIdForFailure = batchId
+      let itemId = try await upsertItem(
+        config: config,
+        session: session,
+        storeId: storeId,
+        batchId: batchId,
+        item: packet.item
+      )
+
+      var photoIdByLocalPhotoId: [String: String] = [:]
+      var listingStorageKeys: [String] = []
+      var thumbnailStorageKeys: [String] = []
+
+      for photo in packet.photos.sorted(by: { $0.orderIndex < $1.orderIndex }) {
+        let remotePhotoId = UUID().uuidString.lowercased()
+        photoIdByLocalPhotoId[photo.localPhotoId] = remotePhotoId
+
+        try await upsertPhotoPreUpload(
+          config: config,
+          session: session,
+          photoId: remotePhotoId,
+          storeId: storeId,
+          batchId: batchId,
+          itemId: itemId,
+          orderIndex: photo.orderIndex,
+          capturedAtISO8601: photo.capturedAtISO8601
+        )
+        preUploadedPhotoIdForFailure = remotePhotoId
+
+        let listingKey = storagePath(
+          storeId: storeId,
+          batchId: batchId,
+          itemId: itemId,
+          photoId: remotePhotoId,
+          variant: "listing"
+        )
+        let thumbnailKey = storagePath(
+          storeId: storeId,
+          batchId: batchId,
+          itemId: itemId,
+          photoId: remotePhotoId,
+          variant: "thumbnail"
+        )
+
+        try await uploadVariantToStorage(
+          config: config,
+          session: session,
+          key: listingKey,
+          bytes: photo.listing.bytes,
+          mimeType: photo.listing.mimeType
+        )
+
+        try await uploadVariantToStorage(
+          config: config,
+          session: session,
+          key: thumbnailKey,
+          bytes: photo.thumbnail.bytes,
+          mimeType: photo.thumbnail.mimeType
+        )
+
+        try await upsertPhotoVariant(
+          config: config,
+          session: session,
+          photoId: remotePhotoId,
+          variantType: "listing",
+          storageKey: listingKey,
+          payload: photo.listing
+        )
+
+        try await upsertPhotoVariant(
+          config: config,
+          session: session,
+          photoId: remotePhotoId,
+          variantType: "thumbnail",
+          storageKey: thumbnailKey,
+          payload: photo.thumbnail
+        )
+
+        try await finalizePhotoUpload(
+          config: config,
+          session: session,
+          photoId: remotePhotoId
+        )
+
+        successfulPhotoUploadCount += 1
+        preUploadedPhotoIdForFailure = nil
+        listingStorageKeys.append(listingKey)
+        thumbnailStorageKeys.append(thumbnailKey)
+      }
+
+      if let firstPhotoId = packet.photos
+        .sorted(by: { $0.orderIndex < $1.orderIndex })
+        .first
+        .flatMap({ photoIdByLocalPhotoId[$0.localPhotoId] }) {
+        try await updateItemMainPhoto(
+          config: config,
+          session: session,
+          itemId: itemId,
+          mainPhotoId: firstPhotoId
+        )
+      }
+
+      try await updateBatchCountsAndStatus(
+        config: config,
+        session: session,
+        batchId: batchId,
+        uploadStatus: "uploaded"
+      )
+
+      return NativeUploadItemPacketV1Result(
+        storeId: storeId,
+        batchId: batchId,
+        itemId: itemId,
+        photoIdByLocalPhotoId: photoIdByLocalPhotoId,
+        listingStorageKeys: listingStorageKeys,
+        thumbnailStorageKeys: thumbnailStorageKeys
+      )
+    } catch {
+      if let preUploadedPhotoIdForFailure {
+        try? await markPhotoFailed(
+          config: config,
+          session: session,
+          photoId: preUploadedPhotoIdForFailure,
+          errorMessage: error.localizedDescription
+        )
+      }
+
+      if let batchIdForFailure {
+        let batchStatus = successfulPhotoUploadCount > 0 ? "partial" : "failed"
+        try? await updateBatchCountsAndStatus(
+          config: config,
+          session: session,
+          batchId: batchIdForFailure,
+          uploadStatus: batchStatus
+        )
+      }
+      throw error
+    }
+  }
+
+  // MARK: - Internal REST operations
+
+  private func resolveOrCreateStore(
+    config: Config,
+    session: Session,
+    store: NativeUploadItemPacketV1.Store
+  ) async throws -> String {
+    let escapedShortCode = urlEncoded(store.shortCode)
+    let queryPath = "/rest/v1/stores?short_code=eq.\(escapedShortCode)&select=id&limit=1"
+    let existingData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: queryPath,
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let existingRows = try decode([StoreRow].self, from: existingData)
+    if let id = existingRows.first?.id {
+      return id
+    }
+
+    let body: [[String: String]] = [[
+      "name": store.name,
+      "short_code": store.shortCode,
+    ]]
+    let createData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "POST",
+      pathWithQuery: "/rest/v1/stores",
+      body: body,
+      additionalHeaders: [
+        "Prefer": "return=representation",
+      ]
+    )
+    let createdRows = try decode([StoreRow].self, from: createData)
+    guard let createdId = createdRows.first?.id else {
+      throw AppServiceError.server("Store creation returned no id.")
+    }
+    return createdId
+  }
+
+  private func resolveOrCreateBatch(
+    config: Config,
+    session: Session,
+    storeId: String,
+    batch: NativeUploadItemPacketV1.Batch
+  ) async throws -> String {
+    let queryPath = "/rest/v1/batches?store_id=eq.\(urlEncoded(storeId))&name=eq.\(urlEncoded(batch.name))&select=id&limit=1"
+    let existingData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: queryPath,
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let existingRows = try decode([BatchRow].self, from: existingData)
+    if let id = existingRows.first?.id {
+      return id
+    }
+
+    let body: [[String: Any]] = [[
+      "store_id": storeId,
+      "name": batch.name,
+      "status": batch.status,
+      "upload_status": "local",
+      "remote_retention_mode": "delete_7d_after_listed",
+    ]]
+
+    let createData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "POST",
+      pathWithQuery: "/rest/v1/batches",
+      body: body,
+      additionalHeaders: [
+        "Prefer": "return=representation",
+      ]
+    )
+    let createdRows = try decode([BatchRow].self, from: createData)
+    guard let createdId = createdRows.first?.id else {
+      throw AppServiceError.server("Batch creation returned no id.")
+    }
+    return createdId
+  }
+
+  private func upsertItem(
+    config: Config,
+    session: Session,
+    storeId: String,
+    batchId: String,
+    item: NativeUploadItemPacketV1.Item
+  ) async throws -> String {
+    let payload: [String: Any] = [
+      "store_id": storeId,
+      "batch_id": batchId,
+      "sequence": item.sequence,
+      "status": item.status,
+      "sku": jsonOrNull(item.sku),
+      "notes": jsonOrNull(item.notes),
+      "weight": jsonOrNull(item.weight),
+      "dimensions": jsonOrNull(item.dimensions),
+      "listed_at": jsonOrNull(item.listedAtISO8601),
+      "photo_retention_until": NSNull(),
+    ]
+
+    let data = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "POST",
+      pathWithQuery: "/rest/v1/items?on_conflict=batch_id,sequence",
+      body: [payload],
+      additionalHeaders: [
+        "Prefer": "resolution=merge-duplicates,return=representation",
+      ]
+    )
+    let rows = try decode([ItemRow].self, from: data)
+    guard let itemId = rows.first?.id else {
+      throw AppServiceError.server("Item upsert returned no id.")
+    }
+    return itemId
+  }
+
+  private func upsertPhotoPreUpload(
+    config: Config,
+    session: Session,
+    photoId: String,
+    storeId: String,
+    batchId: String,
+    itemId: String,
+    orderIndex: Int,
+    capturedAtISO8601: String
+  ) async throws {
+    let payload: [[String: Any]] = [[
+      "id": photoId,
+      "store_id": storeId,
+      "batch_id": batchId,
+      "item_id": itemId,
+      "order_index": orderIndex,
+      "local_status": "present",
+      "upload_status": "uploading",
+      "remote_status": "not_uploaded",
+      "captured_at": capturedAtISO8601,
+      "upload_attempt_count": 1,
+      "remote_delete_eligible_at": NSNull(),
+      "remote_expires_at": NSNull(),
+    ]]
+
+    _ = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "POST",
+      pathWithQuery: "/rest/v1/photos?on_conflict=id",
+      body: payload,
+      additionalHeaders: [
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+      ]
+    )
+  }
+
+  private func upsertPhotoVariant(
+    config: Config,
+    session: Session,
+    photoId: String,
+    variantType: String,
+    storageKey: String,
+    payload: NativeUploadItemPacketV1.VariantPayload
+  ) async throws {
+    let now = ISO8601DateFormatter().string(from: Date())
+    let body: [[String: Any]] = [[
+      "photo_id": photoId,
+      "variant_type": variantType,
+      "storage_bucket": config.bucket,
+      "storage_key": storageKey,
+      "width": jsonOrNull(payload.width),
+      "height": jsonOrNull(payload.height),
+      "bytes": payload.bytes.count,
+      "mime_type": payload.mimeType,
+      "uploaded_at": now,
+    ]]
+
+    _ = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "POST",
+      pathWithQuery: "/rest/v1/photo_variants?on_conflict=photo_id,variant_type",
+      body: body,
+      additionalHeaders: [
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+      ]
+    )
+  }
+
+  private func finalizePhotoUpload(
+    config: Config,
+    session: Session,
+    photoId: String
+  ) async throws {
+    let body: [[String: Any]] = [[
+      "upload_status": "uploaded",
+      "remote_status": "uploaded",
+      "local_status": "safe_to_clear",
+    ]]
+    _ = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "PATCH",
+      pathWithQuery: "/rest/v1/photos?id=eq.\(urlEncoded(photoId))",
+      body: body.first,
+      additionalHeaders: [
+        "Prefer": "return=minimal",
+      ]
+    )
+  }
+
+  private func markPhotoFailed(
+    config: Config,
+    session: Session,
+    photoId: String,
+    errorMessage: String
+  ) async throws {
+    let safeMessage = String(errorMessage.prefix(500))
+    let body: [String: Any] = [
+      "upload_status": "failed",
+      "remote_status": "failed",
+      "last_upload_error": safeMessage,
+    ]
+    _ = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "PATCH",
+      pathWithQuery: "/rest/v1/photos?id=eq.\(urlEncoded(photoId))",
+      body: body,
+      additionalHeaders: [
+        "Prefer": "return=minimal",
+      ]
+    )
+  }
+
+  private func updateItemMainPhoto(
+    config: Config,
+    session: Session,
+    itemId: String,
+    mainPhotoId: String
+  ) async throws {
+    let body: [String: Any] = [
+      "main_photo_id": mainPhotoId,
+    ]
+    _ = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "PATCH",
+      pathWithQuery: "/rest/v1/items?id=eq.\(urlEncoded(itemId))",
+      body: body,
+      additionalHeaders: [
+        "Prefer": "return=minimal",
+      ]
+    )
+  }
+
+  private func updateBatchCountsAndStatus(
+    config: Config,
+    session: Session,
+    batchId: String,
+    uploadStatus: String
+  ) async throws {
+    let itemCount = try await countRows(config: config, session: session, table: "items", batchId: batchId)
+    let photoCount = try await countRows(config: config, session: session, table: "photos", batchId: batchId)
+    let body = BatchCountsUpdateBody(
+      item_count: itemCount,
+      photo_count: photoCount,
+      upload_status: uploadStatus
+    )
+
+    _ = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "PATCH",
+      pathWithQuery: "/rest/v1/batches?id=eq.\(urlEncoded(batchId))",
+      body: body,
+      additionalHeaders: [
+        "Prefer": "return=minimal",
+      ]
+    )
+  }
+
+  private func countRows(
+    config: Config,
+    session: Session,
+    table: String,
+    batchId: String
+  ) async throws -> Int {
+    let path = "/rest/v1/\(table)?batch_id=eq.\(urlEncoded(batchId))&select=id"
+    let data = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: path,
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let rows = try decode([PhotoRow].self, from: data)
+    return rows.count
+  }
+
+  private func uploadVariantToStorage(
+    config: Config,
+    session: Session,
+    key: String,
+    bytes: Data,
+    mimeType: String
+  ) async throws {
+    let escapedKey = key
+      .split(separator: "/")
+      .map { urlEncoded(String($0)) }
+      .joined(separator: "/")
+
+    guard let endpoint = URL(string: "/storage/v1/object/\(config.bucket)/\(escapedKey)", relativeTo: config.baseURL) else {
+      throw AppServiceError.notConfigured("Invalid Supabase storage URL.")
+    }
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = "POST"
+    request.httpBody = bytes
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+    request.setValue("true", forHTTPHeaderField: "x-upsert")
+    request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+    request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+
+    let (data, response): (Data, URLResponse)
+    do {
+      (data, response) = try await urlSession.data(for: request)
+    } catch {
+      throw AppServiceError.network("Storage upload failed: \(error.localizedDescription)")
+    }
+
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw AppServiceError.server("Storage upload failed: invalid response.")
+    }
+
+    guard (200 ... 299).contains(httpResponse.statusCode) else {
+      let message = parseServerMessage(data: data)
+      throw AppServiceError.server("Storage upload failed (\(httpResponse.statusCode)): \(message)")
+    }
+  }
+
+  // MARK: - HTTP helpers
+
+  private func performAuthJSONRequest(
+    config: Config,
+    method: String,
+    path: String,
+    body: [String: Any]
+  ) async throws -> Data {
+    guard let endpoint = URL(string: path, relativeTo: config.baseURL) else {
+      throw AppServiceError.notConfigured("Invalid Supabase auth URL.")
+    }
+
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = method
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    return try await execute(request, requestName: "Supabase auth request")
+  }
+
+  private func performAuthedRequest(
+    config: Config,
+    session: Session,
+    method: String,
+    pathWithQuery: String,
+    body: Any?,
+    additionalHeaders: [String: String]
+  ) async throws -> Data {
+    guard let endpoint = URL(string: pathWithQuery, relativeTo: config.baseURL) else {
+      throw AppServiceError.notConfigured("Invalid Supabase endpoint.")
+    }
+
+    var request = URLRequest(url: endpoint)
+    request.httpMethod = method
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+    request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+    additionalHeaders.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+
+    if let body {
+      if let encodable = body as? BatchCountsUpdateBody {
+        request.httpBody = try JSONEncoder().encode(encodable)
+      } else {
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+      }
+    }
+
+    return try await execute(request, requestName: "Supabase request")
+  }
+
+  private func execute(_ request: URLRequest, requestName: String) async throws -> Data {
+    let (data, response): (Data, URLResponse)
+    do {
+      (data, response) = try await urlSession.data(for: request)
+    } catch {
+      throw AppServiceError.network("\(requestName) failed: \(error.localizedDescription)")
+    }
+
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw AppServiceError.server("\(requestName) failed: invalid response.")
+    }
+
+    guard (200 ... 299).contains(httpResponse.statusCode) else {
+      let message = parseServerMessage(data: data)
+      throw AppServiceError.server("\(requestName) failed (\(httpResponse.statusCode)): \(message)")
+    }
+    return data
+  }
+
+  private func parseServerMessage(data: Data) -> String {
+    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+      if let message = json["message"] as? String, !message.isEmpty { return message }
+      if let error = json["error"] as? String, !error.isEmpty { return error }
+      if let hint = json["hint"] as? String, !hint.isEmpty { return hint }
+    }
+    if let text = String(data: data, encoding: .utf8), !text.isEmpty {
+      return text
+    }
+    return "Unknown server error"
+  }
+
+  private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    do {
+      return try JSONDecoder().decode(type, from: data)
+    } catch {
+      throw AppServiceError.server("Failed to decode server response: \(error.localizedDescription)")
+    }
+  }
+
+  private func requireSession() throws -> Session {
+    if let cachedSession {
+      return cachedSession
+    }
+    throw AppServiceError.notConfigured("No Supabase session. Sign in first.")
+  }
+
+  private func loadConfig() throws -> Config {
+    guard let info = Bundle.main.infoDictionary else {
+      throw AppServiceError.notConfigured("Missing app runtime configuration. Check Info.plist/build settings.")
+    }
+
+    let rawURL = (info["SUPABASE_URL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !rawURL.isEmpty else {
+      throw AppServiceError.notConfigured("Missing SUPABASE_URL in Info.plist/build settings.")
+    }
+    guard let baseURL = URL(string: rawURL), let scheme = baseURL.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
+      throw AppServiceError.notConfigured("Invalid SUPABASE_URL value. Expected a full http(s) URL.")
+    }
+
+    let anonKey = (info["SUPABASE_ANON_KEY"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !anonKey.isEmpty else {
+      throw AppServiceError.notConfigured("Missing SUPABASE_ANON_KEY in Info.plist/build settings.")
+    }
+
+    let bucket = (info["SUPABASE_STORAGE_BUCKET"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Intentional V1 default from BACKEND_CONTRACT_V1.
+    let resolvedBucket = (bucket?.isEmpty == false) ? bucket! : defaultStorageBucket
+    return Config(
+      baseURL: baseURL,
+      anonKey: anonKey,
+      bucket: resolvedBucket
+    )
+  }
+
+  private func saveSession(_ session: Session) {
+    cachedSession = session
+    // DEV-ONLY: Storing auth tokens in UserDefaults is acceptable for MVP testing.
+    // Move session persistence to Keychain before production use.
+    if let encoded = try? JSONEncoder().encode(session) {
+      userDefaults.set(encoded, forKey: sessionStoreKey)
+    }
+  }
+
+  private static func loadSession(from defaults: UserDefaults, key: String) -> Session? {
+    guard
+      let data = defaults.data(forKey: key),
+      let session = try? JSONDecoder().decode(Session.self, from: data)
+    else {
+      return nil
+    }
+    return session
+  }
+
+  private func storagePath(storeId: String, batchId: String, itemId: String, photoId: String, variant: String) -> String {
+    "\(storeId)/batches/\(batchId)/items/\(itemId)/photos/\(photoId)/\(variant)"
+  }
+
+  private func jsonOrNull<T>(_ value: T?) -> Any {
+    value ?? NSNull()
+  }
+
+  private func urlEncoded(_ value: String) -> String {
+    value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
   }
 }

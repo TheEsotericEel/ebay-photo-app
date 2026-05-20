@@ -1,0 +1,12 @@
+---
+description: Commit and push after code changes by default
+alwaysApply: true
+---
+
+# Commit And Push Workflow
+
+- After making code changes, commit and push to GitHub in the same task by default.
+- Use clear commit messages that reflect the purpose of the change.
+- Do not push only when the user explicitly says not to commit/push for that task.
+- Before pushing, run relevant verification for the touched area when feasible.
+- Never commit secrets or environment tokens.

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
   @EnvironmentObject private var appState: AppState
@@ -27,8 +28,9 @@ struct RootView: View {
             onUploadBatch: {
               Task {
                 do {
-                  try await supabase.uploadCurrentBatch()
-                  appState.uploadMessage = "Upload not wired yet, but the call path is ready."
+                  let packet = try makeUploadPacket()
+                  let result = try await supabase.uploadItemPacket(packet)
+                  appState.uploadMessage = "Uploaded item \(appState.currentItemNumber) (\(result.photoIdByLocalPhotoId.count) photo(s))."
                 } catch {
                   appState.uploadMessage = error.localizedDescription
                 }
@@ -82,6 +84,80 @@ struct RootView: View {
       }
     }
   }
+
+  private func makeUploadPacket() throws -> NativeUploadItemPacketV1 {
+    guard !appState.capturedPhotos.isEmpty else {
+      throw AppServiceError.invalidRequest("Capture at least one photo before uploading.")
+    }
+
+    let formatter = ISO8601DateFormatter()
+    let photos = try appState.capturedPhotos.enumerated().map { index, photo in
+      guard let listingImage = UIImage(data: photo.data) else {
+        throw AppServiceError.invalidRequest("Photo \(index + 1) is invalid.")
+      }
+      let thumbnailData = photo.thumbnailData ?? listingImage.ebp_thumbnailData()
+      guard let thumbnailData, let thumbnailImage = UIImage(data: thumbnailData) else {
+        throw AppServiceError.invalidRequest("Unable to build thumbnail for photo \(index + 1).")
+      }
+
+      return NativeUploadItemPacketV1.Photo(
+        localPhotoId: photo.id.uuidString,
+        orderIndex: index,
+        capturedAtISO8601: formatter.string(from: photo.capturedAt),
+        listing: .init(
+          bytes: photo.data,
+          mimeType: "image/jpeg",
+          width: pixelWidth(from: listingImage),
+          height: pixelHeight(from: listingImage)
+        ),
+        thumbnail: .init(
+          bytes: thumbnailData,
+          mimeType: "image/jpeg",
+          width: pixelWidth(from: thumbnailImage),
+          height: pixelHeight(from: thumbnailImage)
+        )
+      )
+    }
+
+    return NativeUploadItemPacketV1(
+      store: .init(
+        shortCode: shortCode(from: appState.activeStore),
+        name: appState.activeStore
+      ),
+      batch: .init(
+        name: appState.activeBatch,
+        status: "active"
+      ),
+      item: .init(
+        sequence: appState.currentItemNumber,
+        status: "new",
+        sku: appState.currentItemSku.nonEmpty,
+        notes: appState.currentItemNotes.nonEmpty,
+        weight: appState.currentItemWeight.nonEmpty,
+        dimensions: appState.currentItemDimensions.nonEmpty,
+        listedAtISO8601: nil
+      ),
+      photos: photos
+    )
+  }
+
+  private func shortCode(from storeName: String) -> String {
+    let alnum = storeName.uppercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
+    let candidate = String(alnum.prefix(3))
+    return candidate.isEmpty ? "DEF" : candidate
+  }
+
+  private func pixelWidth(from image: UIImage) -> Int? {
+    if let cgImage = image.cgImage { return cgImage.width }
+    let value = Int((image.size.width * image.scale).rounded())
+    return value > 0 ? value : nil
+  }
+
+  private func pixelHeight(from image: UIImage) -> Int? {
+    if let cgImage = image.cgImage { return cgImage.height }
+    let value = Int((image.size.height * image.scale).rounded())
+    return value > 0 ? value : nil
+  }
 }
 
 private struct AuthView: View {
@@ -119,6 +195,13 @@ private struct AuthView: View {
       }
       .navigationTitle("Ebay Photo App")
     }
+  }
+}
+
+private extension String {
+  var nonEmpty: String? {
+    let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }
 
