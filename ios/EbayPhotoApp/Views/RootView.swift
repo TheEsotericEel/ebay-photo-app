@@ -187,11 +187,11 @@ struct RootView: View {
 
     return NativeUploadItemPacketV1(
       store: .init(
-        shortCode: shortCode(from: appState.activeStore),
-        name: appState.activeStore
+        shortCode: appState.captureStoreShortCode,
+        name: appState.captureStoreName
       ),
       batch: .init(
-        name: appState.activeBatch,
+        name: appState.captureBatchName,
         status: "active"
       ),
       item: .init(
@@ -205,12 +205,6 @@ struct RootView: View {
       ),
       photos: photos
     )
-  }
-
-  private func shortCode(from storeName: String) -> String {
-    let alnum = storeName.uppercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
-    let candidate = String(alnum.prefix(3))
-    return candidate.isEmpty ? "DEF" : candidate
   }
 
   private func pixelWidth(from image: UIImage) -> Int? {
@@ -262,11 +256,11 @@ struct RootView: View {
 
     return NativeUploadItemPacketV1(
       store: .init(
-        shortCode: shortCode(from: appState.activeStore),
-        name: appState.activeStore
+        shortCode: appState.captureStoreShortCode,
+        name: appState.captureStoreName
       ),
       batch: .init(
-        name: appState.activeBatch,
+        name: appState.captureBatchName,
         status: "active"
       ),
       item: .init(
@@ -388,8 +382,9 @@ private struct CaptureHomeView: View {
     NavigationStack {
       List {
         Section("Active Batch") {
-          LabeledContent("Store", value: appState.activeStore)
-          LabeledContent("Batch", value: appState.activeBatch)
+          LabeledContent("Store", value: appState.captureStoreName)
+          LabeledContent("Short code", value: appState.captureStoreShortCode)
+          LabeledContent("Batch", value: appState.captureBatchName)
           LabeledContent("Item", value: "\(appState.currentItemNumber)")
           LabeledContent("Photos", value: "\(appState.capturedPhotos.count)")
         }
@@ -423,6 +418,7 @@ private struct CameraSessionView: View {
   let onBack: () -> Void
   let onDone: () -> Void
 
+  @State private var showingContext = false
   @State private var pinchStartZoom: Double?
   @State private var isCaptureLoopRunning = false
   @State private var pendingCaptureCount = 0
@@ -431,9 +427,10 @@ private struct CameraSessionView: View {
   var body: some View {
     VStack(spacing: 8) {
       CameraTopBar(
-        itemNumber: appState.currentItemNumber,
+        contextLabel: appState.captureContextChipLabel,
         photoCount: appState.capturedPhotos.count,
         onBack: onBack,
+        onContext: { showingContext = true },
         onDetails: { showingDetails = true }
       )
       .padding(.top, 4)
@@ -501,6 +498,10 @@ private struct CameraSessionView: View {
     .onDisappear {
       cameraService.stop()
     }
+    .sheet(isPresented: $showingContext) {
+      CaptureContextSheet()
+        .environmentObject(appState)
+    }
     .sheet(isPresented: $showingDetails) {
       NavigationStack {
         Form {
@@ -508,6 +509,7 @@ private struct CameraSessionView: View {
             TextField("SKU", text: $appState.currentItemSku)
             TextField("Weight", text: $appState.currentItemWeight)
             TextField("Dimensions", text: $appState.currentItemDimensions)
+            TextField("Notes", text: $appState.currentItemNotes)
           }
         }
         .navigationTitle("Details")
