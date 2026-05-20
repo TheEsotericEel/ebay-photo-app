@@ -85,6 +85,7 @@ final class SupabaseService {
     self.userDefaults = userDefaults
     self.urlSession = urlSession
     cachedSession = Self.loadSession(from: userDefaults, key: sessionStoreKey)
+    AppLog.auth.info("Session bootstrap complete hasSession=\(self.cachedSession != nil, privacy: .public)")
   }
 
   func sendOTP(email: String) async throws {
@@ -94,16 +95,23 @@ final class SupabaseService {
     }
 
     let config = try loadConfig()
+    AppLog.auth.info("OTP request started email=\(self.maskedEmail(trimmed), privacy: .public)")
     let payload: [String: Any] = [
       "email": trimmed,
       "create_user": true,
     ]
-    _ = try await performAuthJSONRequest(
-      config: config,
-      method: "POST",
-      path: "/auth/v1/otp",
-      body: payload
-    )
+    do {
+      _ = try await performAuthJSONRequest(
+        config: config,
+        method: "POST",
+        path: "/auth/v1/otp",
+        body: payload
+      )
+      AppLog.auth.info("OTP request succeeded")
+    } catch {
+      AppLog.auth.error("OTP request failed error=\(error.localizedDescription, privacy: .public)")
+      throw error
+    }
   }
 
   func verifyOTP(email: String, code: String) async throws {
@@ -117,32 +125,40 @@ final class SupabaseService {
     }
 
     let config = try loadConfig()
+    AppLog.auth.info("OTP verify started email=\(self.maskedEmail(trimmedEmail), privacy: .public)")
     let payload: [String: Any] = [
       "email": trimmedEmail,
       "token": trimmedCode,
       "type": AuthGrantType.emailOTP.rawValue,
     ]
 
-    let data = try await performAuthJSONRequest(
-      config: config,
-      method: "POST",
-      path: "/auth/v1/verify",
-      body: payload
-    )
+    do {
+      let data = try await performAuthJSONRequest(
+        config: config,
+        method: "POST",
+        path: "/auth/v1/verify",
+        body: payload
+      )
 
-    let response = try decode(AuthVerifyResponse.self, from: data)
-    let session = Session(
-      accessToken: response.access_token,
-      refreshToken: response.refresh_token,
-      userId: response.user?.id,
-      expiresAt: response.expires_at
-    )
-    saveSession(session)
+      let response = try decode(AuthVerifyResponse.self, from: data)
+      let session = Session(
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token,
+        userId: response.user?.id,
+        expiresAt: response.expires_at
+      )
+      saveSession(session)
+      AppLog.auth.info("OTP verify succeeded userIdPresent=\(response.user?.id != nil, privacy: .public)")
+    } catch {
+      AppLog.auth.error("OTP verify failed error=\(error.localizedDescription, privacy: .public)")
+      throw error
+    }
   }
 
   func signOut() {
     cachedSession = nil
     userDefaults.removeObject(forKey: sessionStoreKey)
+    AppLog.auth.info("Session cleared via sign out")
   }
 
   func uploadCurrentBatch() async throws {
@@ -155,16 +171,26 @@ final class SupabaseService {
       throw AppServiceError.invalidRequest("Item packet must include at least one photo.")
     }
 
+    AppLog.upload.info("Upload packet start store=\(packet.store.shortCode, privacy: .public) batch=\(packet.batch.name, privacy: .public) item=\(packet.item.sequence, privacy: .public) photos=\(packet.photos.count, privacy: .public)")
+
     let config = try loadConfig()
     let session = try requireSession()
     var batchIdForFailure: String?
     var preUploadedPhotoIdForFailure: String?
     var successfulPhotoUploadCount = 0
+    var currentStage = "initialize"
 
     do {
+      currentStage = "resolve_store"
+      AppLog.upload.info("Store resolve/create start shortCode=\(packet.store.shortCode, privacy: .public)")
       let storeId = try await resolveOrCreateStore(config: config, session: session, store: packet.store)
+      AppLog.upload.info("Store resolve/create success storeId=\(storeId, privacy: .public)")
+      currentStage = "resolve_batch"
+      AppLog.upload.info("Batch resolve/create start batch=\(packet.batch.name, privacy: .public)")
       let batchId = try await resolveOrCreateBatch(config: config, session: session, storeId: storeId, batch: packet.batch)
+      AppLog.upload.info("Batch resolve/create success batchId=\(batchId, privacy: .public)")
       batchIdForFailure = batchId
+      currentStage = "upsert_item"
       let itemId = try await upsertItem(
         config: config,
         session: session,
@@ -172,6 +198,7 @@ final class SupabaseService {
         batchId: batchId,
         item: packet.item
       )
+      AppLog.upload.info("Item upsert success itemId=\(itemId, privacy: .public)")
 
       var photoIdByLocalPhotoId: [String: String] = [:]
       var listingStorageKeys: [String] = []
@@ -181,6 +208,8 @@ final class SupabaseService {
         let remotePhotoId = UUID().uuidString.lowercased()
         photoIdByLocalPhotoId[photo.localPhotoId] = remotePhotoId
 
+        currentStage = "upsert_photo_row_\(photo.orderIndex)"
+        AppLog.upload.debug("Photo row upsert start order=\(photo.orderIndex, privacy: .public) photoId=\(remotePhotoId, privacy: .public)")
         try await upsertPhotoPreUpload(
           config: config,
           session: session,
@@ -192,6 +221,7 @@ final class SupabaseService {
           capturedAtISO8601: photo.capturedAtISO8601
         )
         preUploadedPhotoIdForFailure = remotePhotoId
+        AppLog.upload.debug("Photo row upsert success order=\(photo.orderIndex, privacy: .public) photoId=\(remotePhotoId, privacy: .public)")
 
         let listingKey = storagePath(
           storeId: storeId,
@@ -208,6 +238,8 @@ final class SupabaseService {
           variant: "thumbnail"
         )
 
+        currentStage = "upload_listing_\(photo.orderIndex)"
+        AppLog.upload.debug("Storage upload start variant=listing order=\(photo.orderIndex, privacy: .public) bytes=\(photo.listing.bytes.count, privacy: .public)")
         try await uploadVariantToStorage(
           config: config,
           session: session,
@@ -215,7 +247,10 @@ final class SupabaseService {
           bytes: photo.listing.bytes,
           mimeType: photo.listing.mimeType
         )
+        AppLog.upload.debug("Storage upload success variant=listing key=\(listingKey, privacy: .public)")
 
+        currentStage = "upload_thumbnail_\(photo.orderIndex)"
+        AppLog.upload.debug("Storage upload start variant=thumbnail order=\(photo.orderIndex, privacy: .public) bytes=\(photo.thumbnail.bytes.count, privacy: .public)")
         try await uploadVariantToStorage(
           config: config,
           session: session,
@@ -223,7 +258,9 @@ final class SupabaseService {
           bytes: photo.thumbnail.bytes,
           mimeType: photo.thumbnail.mimeType
         )
+        AppLog.upload.debug("Storage upload success variant=thumbnail key=\(thumbnailKey, privacy: .public)")
 
+        currentStage = "upsert_variant_listing_\(photo.orderIndex)"
         try await upsertPhotoVariant(
           config: config,
           session: session,
@@ -232,7 +269,9 @@ final class SupabaseService {
           storageKey: listingKey,
           payload: photo.listing
         )
+        AppLog.upload.debug("Variant upsert success variant=listing photoId=\(remotePhotoId, privacy: .public)")
 
+        currentStage = "upsert_variant_thumbnail_\(photo.orderIndex)"
         try await upsertPhotoVariant(
           config: config,
           session: session,
@@ -241,12 +280,15 @@ final class SupabaseService {
           storageKey: thumbnailKey,
           payload: photo.thumbnail
         )
+        AppLog.upload.debug("Variant upsert success variant=thumbnail photoId=\(remotePhotoId, privacy: .public)")
 
+        currentStage = "finalize_photo_\(photo.orderIndex)"
         try await finalizePhotoUpload(
           config: config,
           session: session,
           photoId: remotePhotoId
         )
+        AppLog.upload.debug("Photo finalize success order=\(photo.orderIndex, privacy: .public) photoId=\(remotePhotoId, privacy: .public)")
 
         successfulPhotoUploadCount += 1
         preUploadedPhotoIdForFailure = nil
@@ -264,15 +306,19 @@ final class SupabaseService {
           itemId: itemId,
           mainPhotoId: firstPhotoId
         )
+        AppLog.upload.info("Main photo updated mainPhotoId=\(firstPhotoId, privacy: .public)")
       }
 
+      currentStage = "finalize_batch"
       try await updateBatchCountsAndStatus(
         config: config,
         session: session,
         batchId: batchId,
         uploadStatus: "uploaded"
       )
+      AppLog.upload.info("Batch finalize success status=uploaded")
 
+      currentStage = "complete"
       return NativeUploadItemPacketV1Result(
         storeId: storeId,
         batchId: batchId,
@@ -282,23 +328,36 @@ final class SupabaseService {
         thumbnailStorageKeys: thumbnailStorageKeys
       )
     } catch {
+      AppLog.upload.error("Upload failed stage=\(currentStage, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
       if let preUploadedPhotoIdForFailure {
-        try? await markPhotoFailed(
-          config: config,
-          session: session,
-          photoId: preUploadedPhotoIdForFailure,
-          errorMessage: error.localizedDescription
-        )
+        AppLog.upload.info("Failure patch start photoId=\(preUploadedPhotoIdForFailure, privacy: .public)")
+        do {
+          try await markPhotoFailed(
+            config: config,
+            session: session,
+            photoId: preUploadedPhotoIdForFailure,
+            errorMessage: error.localizedDescription
+          )
+          AppLog.upload.info("Failure patch success photoId=\(preUploadedPhotoIdForFailure, privacy: .public)")
+        } catch {
+          AppLog.upload.error("Failure patch failed photoId=\(preUploadedPhotoIdForFailure, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+        }
       }
 
       if let batchIdForFailure {
         let batchStatus = successfulPhotoUploadCount > 0 ? "partial" : "failed"
-        try? await updateBatchCountsAndStatus(
-          config: config,
-          session: session,
-          batchId: batchIdForFailure,
-          uploadStatus: batchStatus
-        )
+        AppLog.upload.info("Batch failure finalize start status=\(batchStatus, privacy: .public) batchId=\(batchIdForFailure, privacy: .public)")
+        do {
+          try await updateBatchCountsAndStatus(
+            config: config,
+            session: session,
+            batchId: batchIdForFailure,
+            uploadStatus: batchStatus
+          )
+          AppLog.upload.info("Batch failure finalize success status=\(batchStatus, privacy: .public) batchId=\(batchIdForFailure, privacy: .public)")
+        } catch {
+          AppLog.upload.error("Batch failure finalize failed batchId=\(batchIdForFailure, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+        }
       }
       throw error
     }
@@ -748,30 +807,37 @@ final class SupabaseService {
     if let cachedSession {
       return cachedSession
     }
+    AppLog.auth.error("No Supabase session available for authenticated request")
     throw AppServiceError.notConfigured("No Supabase session. Sign in first.")
   }
 
   private func loadConfig() throws -> Config {
+    AppLog.config.debug("Config load started")
     guard let info = Bundle.main.infoDictionary else {
+      AppLog.config.error("Config load failed: missing info dictionary")
       throw AppServiceError.notConfigured("Missing app runtime configuration. Check Info.plist/build settings.")
     }
 
     let rawURL = (info["SUPABASE_URL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !rawURL.isEmpty else {
+      AppLog.config.error("Config load failed: SUPABASE_URL missing")
       throw AppServiceError.notConfigured("Missing SUPABASE_URL in Info.plist/build settings.")
     }
     guard let baseURL = URL(string: rawURL), let scheme = baseURL.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
+      AppLog.config.error("Config load failed: SUPABASE_URL invalid")
       throw AppServiceError.notConfigured("Invalid SUPABASE_URL value. Expected a full http(s) URL.")
     }
 
     let anonKey = (info["SUPABASE_ANON_KEY"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !anonKey.isEmpty else {
+      AppLog.config.error("Config load failed: SUPABASE_ANON_KEY missing")
       throw AppServiceError.notConfigured("Missing SUPABASE_ANON_KEY in Info.plist/build settings.")
     }
 
     let bucket = (info["SUPABASE_STORAGE_BUCKET"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
     // Intentional V1 default from BACKEND_CONTRACT_V1.
     let resolvedBucket = (bucket?.isEmpty == false) ? bucket! : defaultStorageBucket
+    AppLog.config.info("Config load succeeded urlPresent=true anonKeyPresent=true bucket=\(resolvedBucket, privacy: .public)")
     return Config(
       baseURL: baseURL,
       anonKey: anonKey,
@@ -796,6 +862,15 @@ final class SupabaseService {
       return nil
     }
     return session
+  }
+
+  private func maskedEmail(_ email: String) -> String {
+    let parts = email.split(separator: "@", maxSplits: 1).map(String.init)
+    guard parts.count == 2 else { return "***" }
+    let local = parts[0]
+    let domain = parts[1]
+    guard let first = local.first else { return "***@\(domain)" }
+    return "\(first)***@\(domain)"
   }
 
   private func storagePath(storeId: String, batchId: String, itemId: String, photoId: String, variant: String) -> String {

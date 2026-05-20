@@ -35,6 +35,9 @@ final class AppState: ObservableObject {
       // explicitly via DEVELOPMENT_AUTH_BYPASS in debug runtime config.
       isAuthenticated = true
       statusMessage = "Development auth bypass enabled."
+      AppLog.auth.notice("Development auth bypass enabled")
+    } else {
+      AppLog.auth.notice("Development auth bypass disabled")
     }
   }
 

@@ -27,6 +27,35 @@ npm test
 npm run build
 ```
 
+## iOS native logs
+
+The native iOS app emits structured unified logs with subsystem/category:
+
+- subsystem: app bundle id (for example `com.joesprojects.ebayphotoapp`)
+- categories: `config`, `auth`, `upload`, `camera`
+
+To stream simulator logs into a Cursor-readable file:
+
+```bash
+./scripts/ios-tail-sim-logs.sh com.joesprojects.ebayphotoapp
+```
+
+This writes and tails:
+
+- `logs/ios-live.log`
+
+To copy recent logs to clipboard:
+
+```bash
+./scripts/ios-copy-last-logs.sh
+```
+
+### Physical iPhone logging
+
+- Run from Xcode and use the debug console for live logs.
+- Or open macOS Console, select the connected iPhone, and filter by subsystem/category.
+- If your local Xcode supports `xcrun devicectl` log streaming, verify the command locally before relying on it.
+
 ## Supabase
 
 The repo includes a linked Supabase project and migrations in `supabase/`.

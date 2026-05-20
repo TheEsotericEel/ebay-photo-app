@@ -28,14 +28,16 @@ private struct CaptureTimer {
     self.start = now
     self.last = now
     let ts = String(format: "%.3f", now.timeIntervalSince1970.truncatingRemainder(dividingBy: 1000))
-    print("[CAP] \(label) START ts=\(ts)")
+    let labelCopy = self.label
+    AppLog.camera.debug("[CAP] \(labelCopy, privacy: .public) START ts=\(ts, privacy: .public)")
   }
 
   mutating func mark(_ event: String) {
     let now = Date()
     let sinceStart = Int(now.timeIntervalSince(start) * 1000)
     let sinceLast  = Int(now.timeIntervalSince(last)  * 1000)
-    print("[CAP] \(label) +\(sinceStart)ms (+\(sinceLast)ms) \(event)")
+    let labelCopy = label
+    AppLog.camera.debug("[CAP] \(labelCopy, privacy: .public) +\(sinceStart, privacy: .public)ms (+\(sinceLast, privacy: .public)ms) \(event, privacy: .public)")
     last = now
   }
 }
@@ -280,9 +282,11 @@ final class CameraService: NSObject, ObservableObject {
   }
 
   func start(lensState: CameraLensState, zoom: Double) {
+    AppLog.camera.info("Camera start requested mode=\(lensState.switchingMode.rawValue, privacy: .public) lens=\(lensState.preferredLens.rawValue, privacy: .public) zoom=\(zoom, privacy: .public)")
     requestCameraAccess { [weak self] granted in
       guard let self else { return }
       guard granted else {
+        AppLog.camera.error("Camera access denied")
         self.applyPermissionDeniedState()
         return
       }
@@ -304,6 +308,7 @@ final class CameraService: NSObject, ObservableObject {
   }
 
   func stop() {
+    AppLog.camera.info("Camera stop requested")
     sessionQueue.sync {
       captureDelegate = nil
       captureContinuation = nil
@@ -360,6 +365,7 @@ final class CameraService: NSObject, ObservableObject {
   }
 
   func capturePhoto(aspectMode: PreviewAspectMode) async throws -> CapturedPhoto {
+    AppLog.camera.info("Capture started aspect=\(aspectMode.rawValue, privacy: .public)")
     guard canCapture, !captureInFlight else {
       throw NSError(domain: "CameraService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Capture is already in progress."])
     }
@@ -380,7 +386,7 @@ final class CameraService: NSObject, ObservableObject {
       if let preferredPhotoDimensions, photoOutput.connection(with: .video) != nil {
         settings.maxPhotoDimensions = preferredPhotoDimensions
       } else if preferredPhotoDimensions != nil {
-        print("Skipping capture maxPhotoDimensions: photo output is not connected to a video source.")
+        AppLog.camera.debug("Skipping capture maxPhotoDimensions: photo output is not connected to a video source.")
       }
       var timer = CaptureTimer("capturePhoto")
 
@@ -388,7 +394,7 @@ final class CameraService: NSObject, ObservableObject {
       let desiredPriority = AVCapturePhotoOutput.QualityPrioritization.balanced
       settings.photoQualityPrioritization =
         desiredPriority.rawValue <= maxPriority.rawValue ? desiredPriority : maxPriority
-      print("[CAP] quality=\(settings.photoQualityPrioritization.rawValue) maxAllowed=\(maxPriority.rawValue) preferredDimensions=\(String(describing: settings.maxPhotoDimensions))")
+      AppLog.camera.debug("[CAP] quality=\(settings.photoQualityPrioritization.rawValue, privacy: .public) maxAllowed=\(maxPriority.rawValue, privacy: .public) preferredDimensions=\(String(describing: settings.maxPhotoDimensions), privacy: .public)")
 
       let delegate = PhotoCaptureDelegate { [weak self] result in
         timer.mark("delegate fired (hardware→app)")
@@ -437,8 +443,10 @@ final class CameraService: NSObject, ObservableObject {
             self.captureContinuation = nil
             timer.mark("continuation resumed — capture complete")
             self.canCapture = true
+            AppLog.camera.info("Capture completed aspect=\(aspectMode.rawValue, privacy: .public) bytes=\(deliverableData.count, privacy: .public)")
           }
         case .failure(let error):
+          AppLog.camera.error("Capture failed error=\(error.localizedDescription, privacy: .public)")
           Task { @MainActor in
             self.captureInFlight = false
             self.captureDelegate = nil
@@ -705,7 +713,7 @@ final class CameraService: NSObject, ObservableObject {
       Int64($0.width) * Int64($0.height) < Int64($1.width) * Int64($1.height)
     }
     if let d = chosen {
-      print("[CAP] selected capture dimensions \(d.width)×\(d.height) from \(candidates.count) candidates")
+      AppLog.camera.debug("[CAP] selected capture dimensions \(d.width, privacy: .public)x\(d.height, privacy: .public) from \(candidates.count, privacy: .public) candidates")
     }
     return chosen
   }
@@ -713,18 +721,18 @@ final class CameraService: NSObject, ObservableObject {
   private func applyPreferredPhotoDimensions(for device: AVCaptureDevice?) {
     guard let device else {
       preferredPhotoDimensions = nil
-      print("Skipping maxPhotoDimensions: no active device is available.")
+      AppLog.camera.debug("Skipping maxPhotoDimensions: no active device is available.")
       return
     }
     guard photoOutput.connection(with: .video) != nil else {
       preferredPhotoDimensions = nil
-      print("Skipping maxPhotoDimensions: photo output is not connected to a video source.")
+      AppLog.camera.debug("Skipping maxPhotoDimensions: photo output is not connected to a video source.")
       return
     }
 
     guard let dimensions = preferredMaxPhotoDimensions(for: device) else {
       preferredPhotoDimensions = nil
-      print("Skipping maxPhotoDimensions: no supported photo dimensions were reported by the active camera format.")
+      AppLog.camera.debug("Skipping maxPhotoDimensions: no supported photo dimensions were reported by the active camera format.")
       return
     }
 

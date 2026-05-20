@@ -21,7 +21,7 @@ enum PhotoFraming {
     // 1. Hardware-accelerated decode (0ms from uncompressed CGImage)
     let ciImage = CIImage(cgImage: cgImage)
     let t1 = Date()
-    print("[CAP-IMG] CIImage(cgImage:) took \(msSince(t0))ms")
+    AppLog.camera.debug("[CAP-IMG] CIImage(cgImage:) took \(msSince(t0), privacy: .public)ms")
 
     // 2. Square crop math
     let extent = ciImage.extent
@@ -32,7 +32,7 @@ enum PhotoFraming {
     
     let croppedCI = ciImage.cropped(to: cropRect)
     let t2 = Date()
-    print("[CAP-IMG] CIImage crop math took \(msSince(t1))ms")
+    AppLog.camera.debug("[CAP-IMG] CIImage crop math took \(msSince(t1), privacy: .public)ms")
 
     // 3. Hardware-accelerated JPEG encode
     let colorSpace = ciImage.colorSpace ?? CGColorSpaceCreateDeviceRGB()
@@ -43,7 +43,7 @@ enum PhotoFraming {
     ) else { return nil }
     
     let t3 = Date()
-    print("[CAP-IMG] CIContext.jpegRepresentation took \(msSince(t2))ms")
+    AppLog.camera.debug("[CAP-IMG] CIContext.jpegRepresentation took \(msSince(t2), privacy: .public)ms")
 
     // 4. Hardware-accelerated thumbnail
     let scale = thumbnailMaxDimension / side
@@ -54,8 +54,7 @@ enum PhotoFraming {
       options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: PhotoFraming.thumbnailJPEGQuality]
     )
     
-    let t4 = Date()
-    print("[CAP-IMG] thumbnail generation took \(msSince(t3))ms")
+    AppLog.camera.debug("[CAP-IMG] thumbnail generation took \(msSince(t3), privacy: .public)ms")
 
     return (jpeg: jpegData, thumbnail: thumbData)
   }
