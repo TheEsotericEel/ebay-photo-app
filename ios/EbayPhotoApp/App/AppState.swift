@@ -4,7 +4,10 @@ import Foundation
 @MainActor
 final class AppState: ObservableObject {
   #if DEBUG
-  static let usesDevelopmentAuthBypass = true
+  static let usesDevelopmentAuthBypass: Bool = {
+    guard let info = Bundle.main.infoDictionary else { return false }
+    return parseConfigBool(info["DEVELOPMENT_AUTH_BYPASS"])
+  }()
   #else
   static let usesDevelopmentAuthBypass = false
   #endif
@@ -28,10 +31,24 @@ final class AppState: ObservableObject {
 
   init() {
     if Self.usesDevelopmentAuthBypass {
-      // Development-only shortcut so we can iterate on camera and item flow
-      // before wiring the real Supabase auth path.
+      // Development-only shortcut. Keep disabled by default and only enable
+      // explicitly via DEVELOPMENT_AUTH_BYPASS in debug runtime config.
       isAuthenticated = true
       statusMessage = "Development auth bypass enabled."
+    }
+  }
+
+  private static func parseConfigBool(_ rawValue: Any?) -> Bool {
+    switch rawValue {
+    case let value as Bool:
+      return value
+    case let number as NSNumber:
+      return number.boolValue
+    case let text as String:
+      let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      return ["1", "true", "yes", "y", "on"].contains(normalized)
+    default:
+      return false
     }
   }
 

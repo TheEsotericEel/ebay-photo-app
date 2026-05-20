@@ -40,7 +40,12 @@ struct RootView: View {
               if shouldBypassAuth {
                 appState.statusMessage = "Development auth bypass stays enabled."
               } else {
+                supabase.signOut()
                 appState.isAuthenticated = false
+                appState.authCode = ""
+                appState.authError = ""
+                appState.uploadMessage = ""
+                appState.statusMessage = "Signed out."
               }
             }
           )

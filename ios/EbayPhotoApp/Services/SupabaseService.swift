@@ -140,6 +140,11 @@ final class SupabaseService {
     saveSession(session)
   }
 
+  func signOut() {
+    cachedSession = nil
+    userDefaults.removeObject(forKey: sessionStoreKey)
+  }
+
   func uploadCurrentBatch() async throws {
     throw AppServiceError.notConfigured("Native upload requires a packet. Use uploadItemPacket(_:) for V1.")
   }
