@@ -819,11 +819,20 @@ final class SupabaseService {
     }
 
     let rawURL = (info["SUPABASE_URL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    guard !rawURL.isEmpty else {
+    let normalizedURL = rawURL
+      .replacingOccurrences(of: "\\/", with: "/")
+      .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+
+    guard !normalizedURL.isEmpty else {
       AppLog.config.error("Config load failed: SUPABASE_URL missing")
       throw AppServiceError.notConfigured("Missing SUPABASE_URL in Info.plist/build settings.")
     }
-    guard let baseURL = URL(string: rawURL), let scheme = baseURL.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
+    guard
+      let baseURL = URL(string: normalizedURL),
+      let scheme = baseURL.scheme?.lowercased(),
+      (scheme == "https" || scheme == "http"),
+      baseURL.host?.isEmpty == false
+    else {
       AppLog.config.error("Config load failed: SUPABASE_URL invalid")
       throw AppServiceError.notConfigured("Invalid SUPABASE_URL value. Expected a full http(s) URL.")
     }
