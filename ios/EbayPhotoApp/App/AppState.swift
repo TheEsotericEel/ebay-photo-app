@@ -14,6 +14,7 @@ final class AppState: ObservableObject {
 
   @Published var authEmail = ""
   @Published var authCode = ""
+  @Published var authPassword = ""
   @Published var authError = ""
   @Published var statusMessage = "Ready"
   @Published var uploadMessage = ""

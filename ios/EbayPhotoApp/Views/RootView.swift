@@ -73,6 +73,10 @@ struct RootView: View {
             get: { appState.authCode },
             set: { appState.authCode = $0 }
           ),
+          password: Binding(
+            get: { appState.authPassword },
+            set: { appState.authPassword = $0 }
+          ),
           statusMessage: appState.statusMessage,
           errorMessage: appState.authError,
           onSendCode: {
@@ -93,6 +97,41 @@ struct RootView: View {
                 appState.isAuthenticated = true
                 appState.authError = ""
                 appState.statusMessage = "Signed in."
+              } catch {
+                appState.authError = error.localizedDescription
+              }
+            }
+          },
+          onSignInWithPassword: {
+            Task {
+              do {
+                try await supabase.signInWithPassword(
+                  email: appState.authEmail,
+                  password: appState.authPassword
+                )
+                appState.isAuthenticated = true
+                appState.authError = ""
+                appState.statusMessage = "Signed in with password."
+              } catch {
+                appState.authError = error.localizedDescription
+              }
+            }
+          },
+          onCreatePasswordAccount: {
+            Task {
+              do {
+                let signedIn = try await supabase.signUpWithEmailPassword(
+                  email: appState.authEmail,
+                  password: appState.authPassword
+                )
+                if signedIn {
+                  appState.isAuthenticated = true
+                  appState.authError = ""
+                  appState.statusMessage = "Account created and signed in."
+                } else {
+                  appState.authError = ""
+                  appState.statusMessage = "Account created. Check email to confirm, then sign in."
+                }
               } catch {
                 appState.authError = error.localizedDescription
               }
@@ -268,10 +307,13 @@ struct RootView: View {
 private struct AuthView: View {
   @Binding var email: String
   @Binding var code: String
+  @Binding var password: String
   let statusMessage: String
   let errorMessage: String
   let onSendCode: () -> Void
   let onSignIn: () -> Void
+  let onSignInWithPassword: () -> Void
+  let onCreatePasswordAccount: () -> Void
 
   var body: some View {
     NavigationStack {
@@ -287,7 +329,11 @@ private struct AuthView: View {
           TextField("Code", text: $code)
             .keyboardType(.numberPad)
 
-          Button("Sign In", action: onSignIn)
+          SecureField("Password", text: $password)
+
+          Button("Sign In with OTP Code", action: onSignIn)
+          Button("Sign In with Password", action: onSignInWithPassword)
+          Button("Create Password Account", action: onCreatePasswordAccount)
         }
 
         Section("Status") {

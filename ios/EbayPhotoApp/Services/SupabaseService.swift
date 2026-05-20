@@ -46,6 +46,13 @@ final class SupabaseService {
     let user: AuthUser?
   }
 
+  private struct AuthSignUpResponse: Decodable {
+    let access_token: String?
+    let refresh_token: String?
+    let expires_at: TimeInterval?
+    let user: AuthUser?
+  }
+
   private struct AuthUser: Decodable {
     let id: String?
   }
@@ -151,6 +158,87 @@ final class SupabaseService {
       AppLog.auth.info("OTP verify succeeded userIdPresent=\(response.user?.id != nil, privacy: .public)")
     } catch {
       AppLog.auth.error("OTP verify failed error=\(error.localizedDescription, privacy: .public)")
+      throw error
+    }
+  }
+
+  func signInWithPassword(email: String, password: String) async throws {
+    let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedEmail.isEmpty else {
+      throw AppServiceError.notConfigured("Enter an email address first.")
+    }
+    guard !trimmedPassword.isEmpty else {
+      throw AppServiceError.notConfigured("Enter your password first.")
+    }
+
+    let config = try loadConfig()
+    AppLog.auth.info("Password sign-in started email=\(self.maskedEmail(trimmedEmail), privacy: .public)")
+    let payload: [String: Any] = [
+      "email": trimmedEmail,
+      "password": trimmedPassword,
+    ]
+    do {
+      let data = try await performAuthJSONRequest(
+        config: config,
+        method: "POST",
+        path: "/auth/v1/token?grant_type=password",
+        body: payload
+      )
+      let response = try decode(AuthVerifyResponse.self, from: data)
+      let session = Session(
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token,
+        userId: response.user?.id,
+        expiresAt: response.expires_at
+      )
+      saveSession(session)
+      AppLog.auth.info("Password sign-in succeeded userIdPresent=\(response.user?.id != nil, privacy: .public)")
+    } catch {
+      AppLog.auth.error("Password sign-in failed error=\(error.localizedDescription, privacy: .public)")
+      throw error
+    }
+  }
+
+  func signUpWithEmailPassword(email: String, password: String) async throws -> Bool {
+    let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedEmail.isEmpty else {
+      throw AppServiceError.notConfigured("Enter an email address first.")
+    }
+    guard !trimmedPassword.isEmpty else {
+      throw AppServiceError.notConfigured("Enter a password first.")
+    }
+
+    let config = try loadConfig()
+    AppLog.auth.info("Password account creation started email=\(self.maskedEmail(trimmedEmail), privacy: .public)")
+    let payload: [String: Any] = [
+      "email": trimmedEmail,
+      "password": trimmedPassword,
+    ]
+    do {
+      let data = try await performAuthJSONRequest(
+        config: config,
+        method: "POST",
+        path: "/auth/v1/signup",
+        body: payload
+      )
+      let response = try decode(AuthSignUpResponse.self, from: data)
+      if let accessToken = response.access_token {
+        let session = Session(
+          accessToken: accessToken,
+          refreshToken: response.refresh_token,
+          userId: response.user?.id,
+          expiresAt: response.expires_at
+        )
+        saveSession(session)
+        AppLog.auth.info("Password account creation succeeded with active session")
+        return true
+      }
+      AppLog.auth.notice("Password account created; email confirmation may be required")
+      return false
+    } catch {
+      AppLog.auth.error("Password account creation failed error=\(error.localizedDescription, privacy: .public)")
       throw error
     }
   }
