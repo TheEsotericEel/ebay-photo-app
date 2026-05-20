@@ -56,6 +56,8 @@ To copy recent logs to clipboard:
 - Or open macOS Console, select the connected iPhone, and filter by subsystem/category.
 - If your local Xcode supports `xcrun devicectl` log streaming, verify the command locally before relying on it.
 
+See `docs/IOS_SIMULATOR_TESTING.md` for simulator-vs-device testing guidance and fixture upload flow.
+
 ## Supabase
 
 The repo includes a linked Supabase project and migrations in `supabase/`.

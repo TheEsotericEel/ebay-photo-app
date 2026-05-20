@@ -36,6 +36,19 @@ struct RootView: View {
                 }
               }
             },
+            onUploadFixture: {
+              Task {
+                do {
+                  let packet = try makeDebugFixturePacket()
+                  let result = try await supabase.uploadItemPacket(packet)
+                  appState.uploadMessage = "Fixture uploaded (\(result.photoIdByLocalPhotoId.count) photo(s))."
+                  appState.statusMessage = "Debug fixture upload completed."
+                } catch {
+                  appState.uploadMessage = error.localizedDescription
+                  appState.statusMessage = "Debug fixture upload failed."
+                }
+              }
+            },
             onSignOut: {
               if shouldBypassAuth {
                 appState.statusMessage = "Development auth bypass stays enabled."
@@ -163,6 +176,93 @@ struct RootView: View {
     let value = Int((image.size.height * image.scale).rounded())
     return value > 0 ? value : nil
   }
+
+  private func makeDebugFixturePacket() throws -> NativeUploadItemPacketV1 {
+    let formatter = ISO8601DateFormatter()
+    let now = Date()
+
+    let photos: [NativeUploadItemPacketV1.Photo] = try (0 ..< 2).map { index in
+      let image = makeFixtureImage(order: index)
+      guard let listingData = image.jpegData(compressionQuality: 0.88) else {
+        throw AppServiceError.invalidRequest("Failed to generate fixture listing image \(index + 1).")
+      }
+      guard let thumbnailData = image.ebp_thumbnailData() else {
+        throw AppServiceError.invalidRequest("Failed to generate fixture thumbnail \(index + 1).")
+      }
+      guard let thumbnailImage = UIImage(data: thumbnailData) else {
+        throw AppServiceError.invalidRequest("Failed to decode fixture thumbnail \(index + 1).")
+      }
+
+      return NativeUploadItemPacketV1.Photo(
+        localPhotoId: UUID().uuidString,
+        orderIndex: index,
+        capturedAtISO8601: formatter.string(from: now.addingTimeInterval(TimeInterval(index))),
+        listing: .init(
+          bytes: listingData,
+          mimeType: "image/jpeg",
+          width: pixelWidth(from: image),
+          height: pixelHeight(from: image)
+        ),
+        thumbnail: .init(
+          bytes: thumbnailData,
+          mimeType: "image/jpeg",
+          width: pixelWidth(from: thumbnailImage),
+          height: pixelHeight(from: thumbnailImage)
+        )
+      )
+    }
+
+    return NativeUploadItemPacketV1(
+      store: .init(
+        shortCode: shortCode(from: appState.activeStore),
+        name: appState.activeStore
+      ),
+      batch: .init(
+        name: appState.activeBatch,
+        status: "active"
+      ),
+      item: .init(
+        sequence: appState.currentItemNumber,
+        status: "new",
+        sku: "fixture-\(appState.currentItemNumber)",
+        notes: "Debug fixture upload generated in app.",
+        weight: nil,
+        dimensions: nil,
+        listedAtISO8601: nil
+      ),
+      photos: photos
+    )
+  }
+
+  private func makeFixtureImage(order: Int) -> UIImage {
+    let size = CGSize(width: 1600, height: 1600)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { context in
+      let background: UIColor = order == 0 ? .systemTeal : .systemOrange
+      background.setFill()
+      context.fill(CGRect(origin: .zero, size: size))
+
+      UIColor.white.withAlphaComponent(0.25).setFill()
+      context.fill(CGRect(x: 0, y: size.height * 0.55, width: size.width, height: size.height * 0.45))
+
+      let title = "DEBUG FIXTURE \(order + 1)"
+      let subtitle = "eBay Photo App Simulator Upload"
+      let titleAttrs: [NSAttributedString.Key: Any] = [
+        .font: UIFont.boldSystemFont(ofSize: 92),
+        .foregroundColor: UIColor.white,
+      ]
+      let subtitleAttrs: [NSAttributedString.Key: Any] = [
+        .font: UIFont.systemFont(ofSize: 44, weight: .medium),
+        .foregroundColor: UIColor.white.withAlphaComponent(0.95),
+      ]
+
+      let titleSize = title.size(withAttributes: titleAttrs)
+      let subtitleSize = subtitle.size(withAttributes: subtitleAttrs)
+      let centerX = (size.width - titleSize.width) / 2
+      title.draw(at: CGPoint(x: centerX, y: 640), withAttributes: titleAttrs)
+      subtitle.draw(at: CGPoint(x: (size.width - subtitleSize.width) / 2, y: 760), withAttributes: subtitleAttrs)
+    }
+  }
 }
 
 private struct AuthView: View {
@@ -213,6 +313,7 @@ private extension String {
 private struct CaptureHomeView: View {
   let onOpenCamera: () -> Void
   let onUploadBatch: () -> Void
+  let onUploadFixture: () -> Void
   let onSignOut: () -> Void
   @EnvironmentObject private var appState: AppState
 
@@ -229,6 +330,9 @@ private struct CaptureHomeView: View {
         Section("Actions") {
           Button("Open Camera", action: onOpenCamera)
           Button("Upload Batch", action: onUploadBatch)
+          #if DEBUG
+          Button("Upload Debug Fixture", action: onUploadFixture)
+          #endif
           Button("Sign Out", role: .destructive, action: onSignOut)
         }
 
