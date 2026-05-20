@@ -50,6 +50,8 @@
 		4A8F1D4E2C2F4D5D8B90000B /* Combine.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Combine.framework; path = System/Library/Frameworks/Combine.framework; sourceTree = SDKROOT; };
 		4A8F1D4E2C2F4D5D8B90000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B90000D /* EbayPhotoApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EbayPhotoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4A8F1D4E2C2F4D5D8B900018 /* RuntimeConfig.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = RuntimeConfig.xcconfig; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900019 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -80,6 +82,7 @@
 			isa = PBXGroup;
 			children = (
 				4A8F1D4B2C2F4D5D8B900003 /* App */,
+				4A8F1D4B2C2F4D5D8B900008 /* Config */,
 				4A8F1D4B2C2F4D5D8B900004 /* Models */,
 				4A8F1D4B2C2F4D5D8B900005 /* Resources */,
 				4A8F1D4B2C2F4D5D8B900006 /* Services */,
@@ -95,6 +98,15 @@
 				4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		4A8F1D4B2C2F4D5D8B900008 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				4A8F1D4E2C2F4D5D8B900018 /* RuntimeConfig.xcconfig */,
+				4A8F1D4E2C2F4D5D8B900019 /* Secrets.xcconfig.example */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		4A8F1D4B2C2F4D5D8B900004 /* Models */ = {
@@ -249,6 +261,7 @@
 /* Begin XCBuildConfiguration section */
 		4A8F1D532C2F4D5D8B900001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4A8F1D4E2C2F4D5D8B900018 /* RuntimeConfig.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
@@ -278,6 +291,7 @@
 		};
 		4A8F1D542C2F4D5D8B900001 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4A8F1D4E2C2F4D5D8B900018 /* RuntimeConfig.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
@@ -306,6 +320,7 @@
 		};
 		4A8F1D552C2F4D5D8B900001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4A8F1D4E2C2F4D5D8B900018 /* RuntimeConfig.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CODE_SIGN_STYLE = Automatic;
@@ -328,6 +343,7 @@
 		};
 		4A8F1D562C2F4D5D8B900001 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4A8F1D4E2C2F4D5D8B900018 /* RuntimeConfig.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CODE_SIGN_STYLE = Automatic;

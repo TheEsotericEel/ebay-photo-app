@@ -1,0 +1,8 @@
+// Shared iOS runtime config.
+// Secrets are loaded from a local untracked override file.
+SUPABASE_URL =
+SUPABASE_ANON_KEY =
+SUPABASE_STORAGE_BUCKET = photo-assets
+DEVELOPMENT_AUTH_BYPASS = NO
+
+#include? "Secrets.xcconfig"
