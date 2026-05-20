@@ -1,13 +1,19 @@
 import UIKit
 
 enum PhotoFraming {
+  // Configurable quality targets for eBay product photos.
+  // 0.88 offers a modest quality bump over 0.82 with minimal speed/size impact.
+  static let deliverableJPEGQuality: CGFloat = 0.88
+  static let thumbnailJPEGQuality: CGFloat = 0.8
+  static let defaultThumbnailMaxDimension: CGFloat = 160
+
   // Shared hardware-accelerated context
   private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
   static func squareDeliverableAndThumbnail(
     from cgImage: CGImage,
-    compressionQuality: CGFloat = 0.82,
-    thumbnailMaxDimension: CGFloat = 160
+    compressionQuality: CGFloat = deliverableJPEGQuality,
+    thumbnailMaxDimension: CGFloat = defaultThumbnailMaxDimension
   ) -> (jpeg: Data, thumbnail: Data?)? {
     let t0 = Date()
     func msSince(_ d: Date) -> Int { Int(Date().timeIntervalSince(d) * 1000) }
@@ -45,7 +51,7 @@ enum PhotoFraming {
     let thumbData = ciContext.jpegRepresentation(
       of: scaledCI,
       colorSpace: colorSpace,
-      options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.8]
+      options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: PhotoFraming.thumbnailJPEGQuality]
     )
     
     let t4 = Date()
@@ -56,8 +62,8 @@ enum PhotoFraming {
 
   static func nativeDeliverableAndThumbnail(
     from cgImage: CGImage,
-    compressionQuality: CGFloat = 0.82,
-    thumbnailMaxDimension: CGFloat = 160
+    compressionQuality: CGFloat = deliverableJPEGQuality,
+    thumbnailMaxDimension: CGFloat = defaultThumbnailMaxDimension
   ) -> (jpeg: Data, thumbnail: Data?)? {
     let ciImage = CIImage(cgImage: cgImage)
     let colorSpace = ciImage.colorSpace ?? CGColorSpaceCreateDeviceRGB()
@@ -74,7 +80,7 @@ enum PhotoFraming {
     let thumbData = ciContext.jpegRepresentation(
       of: scaledCI,
       colorSpace: colorSpace,
-      options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.8]
+      options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: PhotoFraming.thumbnailJPEGQuality]
     )
 
     return (jpeg: jpegData, thumbnail: thumbData)
@@ -93,7 +99,7 @@ extension UIImage {
     return renderer.image { _ in draw(in: CGRect(origin: .zero, size: size)) }
   }
 
-  func ebp_squareCroppedJPEGData(compressionQuality: CGFloat = 0.82) -> Data? {
+  func ebp_squareCroppedJPEGData(compressionQuality: CGFloat = PhotoFraming.deliverableJPEGQuality) -> Data? {
     guard let cgImage = cgImage else { return nil }
     let pw = cgImage.width
     let ph = cgImage.height
@@ -105,7 +111,7 @@ extension UIImage {
     return square.jpegData(compressionQuality: compressionQuality)
   }
 
-  func ebp_thumbnailData(maxDimension: CGFloat = 160) -> Data? {
+  func ebp_thumbnailData(maxDimension: CGFloat = PhotoFraming.defaultThumbnailMaxDimension) -> Data? {
     let largestSide = max(size.width, size.height)
     guard largestSide > 0 else { return nil }
     let scale = min(maxDimension / largestSide, 1)
@@ -114,6 +120,6 @@ extension UIImage {
     let thumbnail = renderer.image { _ in
       draw(in: CGRect(origin: .zero, size: targetSize))
     }
-    return thumbnail.jpegData(compressionQuality: 0.8)
+    return thumbnail.jpegData(compressionQuality: PhotoFraming.thumbnailJPEGQuality)
   }
 }
