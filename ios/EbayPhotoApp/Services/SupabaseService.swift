@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 enum AppServiceError: LocalizedError {
@@ -20,7 +21,7 @@ enum AppServiceError: LocalizedError {
   }
 }
 
-final class SupabaseService {
+final class SupabaseService: ObservableObject {
   private struct Config {
     let baseURL: URL
     let anonKey: String
@@ -84,6 +85,10 @@ final class SupabaseService {
   private let userDefaults: UserDefaults
   private let urlSession: URLSession
   private var cachedSession: Session?
+
+  var hasPersistedSession: Bool {
+    cachedSession != nil
+  }
 
   init(
     userDefaults: UserDefaults = .standard,

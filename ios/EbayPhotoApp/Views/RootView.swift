@@ -3,12 +3,13 @@ import UIKit
 
 struct RootView: View {
   @EnvironmentObject private var appState: AppState
+  @EnvironmentObject private var supabase: SupabaseService
   @StateObject private var cameraService = CameraService()
   @StateObject private var cameraPreferences = CameraPreferencesStore()
   @State private var showingCamera = false
   @State private var showingDetails = false
+  @State private var didRestoreSession = false
 
-  private let supabase = SupabaseService()
   private var shouldBypassAuth: Bool { AppState.usesDevelopmentAuthBypass }
 
   var body: some View {
@@ -139,6 +140,14 @@ struct RootView: View {
           }
         )
       }
+    }
+    .onAppear {
+      guard !didRestoreSession else { return }
+      didRestoreSession = true
+      guard !shouldBypassAuth, supabase.hasPersistedSession else { return }
+      guard !appState.isAuthenticated else { return }
+      appState.isAuthenticated = true
+      appState.statusMessage = "Session restored."
     }
   }
 
