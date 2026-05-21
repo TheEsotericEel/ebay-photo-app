@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { IndexedDbItemPacketStore, type ItemPacket, type ListingStatus } from '../adapters/itemPacket'
 import { IndexedDbPhotoStore, type StoredPhoto } from '../adapters/localPhotoStore'
-import { importRemoteBatchToLocal } from '../adapters/remoteImport'
+import {
+  importRemoteBatchToLocal,
+  syncRemoteWorkspaceToLocal,
+  type RemoteWorkspaceSyncSummary,
+} from '../adapters/remoteImport'
 import { calculateRetentionWindow, type RemoteRetentionMode } from '../adapters/retention'
 import { IndexedDbWorkflowStore, type BatchRecord, type StoreRecord } from '../adapters/workflowStore'
 import { supabase } from '../lib/supabase'
@@ -162,6 +166,37 @@ function formatImportStatusMessage(importedItems: number, errors: string[]): Imp
   }
 }
 
+function pluralize(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`
+}
+
+function formatWorkspaceSyncMessage(summary: RemoteWorkspaceSyncSummary): ImportStatus {
+  if (summary.errors.length > 0) {
+    return {
+      phase: 'error',
+      message: `Workspace sync failed: ${summary.errors[0]}`,
+    }
+  }
+
+  const parts: string[] = []
+  if (summary.importedStores > 0) parts.push(pluralize(summary.importedStores, 'store'))
+  if (summary.importedBatches > 0) parts.push(pluralize(summary.importedBatches, 'batch'))
+  if (summary.importedItems > 0) parts.push(pluralize(summary.importedItems, 'item'))
+  if (summary.importedPhotos > 0) parts.push(pluralize(summary.importedPhotos, 'photo'))
+
+  if (parts.length === 0) {
+    return {
+      phase: 'no-new',
+      message: 'Workspace already in sync',
+    }
+  }
+
+  return {
+    phase: 'success',
+    message: `Synced ${parts.join(' · ')}`,
+  }
+}
+
 export function DesktopListerPrototype() {
   const { session, loading: authLoading, error: authError, signInWithPassword, signOut, configured: supabaseReady } = useSupabaseSession()
   const [email, setEmail] = useState('')
@@ -185,6 +220,7 @@ export function DesktopListerPrototype() {
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null)
   const photoUrlsRef = useRef<Record<string, string>>({})
   const importInFlightRef = useRef(false)
+  const workspaceBootstrapAttemptedRef = useRef(false)
 
   const photoById = useMemo(() => buildPhotoById(photos), [photos])
 
@@ -280,6 +316,35 @@ export function DesktopListerPrototype() {
     }
   }, [loadDesktopData, session])
 
+  const runWorkspaceSync = useCallback(async () => {
+    if (!supabase || !session || importInFlightRef.current) {
+      return
+    }
+
+    importInFlightRef.current = true
+    setImportingRemote(true)
+    setImportStatus({ phase: 'checking', message: 'Syncing workspace from Supabase…' })
+    setActionError(null)
+
+    try {
+      const summary = await syncRemoteWorkspaceToLocal({
+        client: supabase,
+        workflowStore,
+        itemStore: itemPacketStore,
+        photoStore,
+      })
+
+      await loadDesktopData({ silent: true })
+      setImportStatus(formatWorkspaceSyncMessage(summary))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setImportStatus({ phase: 'error', message: `Workspace sync failed: ${message}` })
+    } finally {
+      importInFlightRef.current = false
+      setImportingRemote(false)
+    }
+  }, [loadDesktopData, photoStore, session, supabase, workflowStore])
+
   useEffect(() => {
     if (!session || !selectedStoreId || !supabase) {
       return
@@ -298,6 +363,24 @@ export function DesktopListerPrototype() {
 
     return () => window.clearInterval(intervalId)
   }, [selectedStoreId, session, runRemoteImport])
+
+  useEffect(() => {
+    if (!session || !supabase || workspaceBootstrapAttemptedRef.current) {
+      return
+    }
+    if (stores.length > 0 || dataLoading) {
+      return
+    }
+
+    workspaceBootstrapAttemptedRef.current = true
+    void runWorkspaceSync()
+  }, [dataLoading, runWorkspaceSync, session, stores.length, supabase])
+
+  useEffect(() => {
+    if (!session) {
+      workspaceBootstrapAttemptedRef.current = false
+    }
+  }, [session])
 
   const storeViews = useMemo<DesktopStoreView[]>(() => {
     return stores.map((store) => {
@@ -323,6 +406,13 @@ export function DesktopListerPrototype() {
     () => storeViews.find((store) => store.id === selectedStoreId) ?? null,
     [storeViews, selectedStoreId],
   )
+
+  useEffect(() => {
+    if (selectedStoreId || storeViews.length === 0) {
+      return
+    }
+    setSelectedStoreId(storeViews[0].id)
+  }, [selectedStoreId, storeViews])
 
   const storeItemViews = useMemo(() => {
     if (!selectedStoreId) {
@@ -484,9 +574,19 @@ export function DesktopListerPrototype() {
               {dataLoading ? 'Loading local stores and items...' : 'Pick a store to review item bundles.'}
             </p>
           </div>
-          <button type="button" style={styles.secondaryButton} onClick={() => signOut()}>
-            Sign out
-          </button>
+          <div style={styles.headerActions}>
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={() => void runWorkspaceSync()}
+              disabled={importingRemote}
+            >
+              {importingRemote ? 'Syncing…' : 'Sync Workspace'}
+            </button>
+            <button type="button" style={styles.secondaryButton} onClick={() => signOut()}>
+              Sign out
+            </button>
+          </div>
         </header>
 
         {dataError ? <p style={styles.errorText}>{dataError}</p> : null}
@@ -498,9 +598,16 @@ export function DesktopListerPrototype() {
           <div style={styles.emptyState}>
             <p style={styles.emptyTitle}>No stores yet</p>
             <p style={styles.subtleText}>
-              Import items in the legacy workspace, then return here to list them.
+              Sync with Supabase to pull in iOS uploads, store records, and batches.
             </p>
-            <a href="/?legacy=1" style={styles.footerLink}>Open legacy workspace</a>
+            <button
+              type="button"
+              style={styles.primaryButton}
+              onClick={() => void runWorkspaceSync()}
+              disabled={importingRemote}
+            >
+              {importingRemote ? 'Syncing…' : 'Sync Workspace'}
+            </button>
           </div>
         ) : (
           <section style={storeViews.length === 2 ? styles.storeGridTwo : styles.storeGrid}>
@@ -564,6 +671,14 @@ export function DesktopListerPrototype() {
           <button
             type="button"
             style={styles.secondaryButton}
+            onClick={() => void runWorkspaceSync()}
+            disabled={importingRemote}
+          >
+            {importingRemote ? 'Syncing…' : 'Sync Workspace'}
+          </button>
+          <button
+            type="button"
+            style={styles.secondaryButton}
             onClick={() => void runRemoteImport(selectedStore.id)}
             disabled={importingRemote}
           >
@@ -590,7 +705,7 @@ export function DesktopListerPrototype() {
               ? 'Checking Supabase for new uploads…'
               : selectedStore.counts.done > 0
                 ? `${selectedStore.counts.done} completed item${selectedStore.counts.done === 1 ? '' : 's'} are hidden from this queue.`
-                : 'New iOS uploads should appear here automatically after refresh.'}
+                : 'New iOS uploads should appear here automatically after refresh or a workspace sync.'}
           </p>
         </div>
       ) : (

@@ -128,6 +128,10 @@ export class IndexedDbWorkflowStore {
     return store
   }
 
+  async upsertStore(store: StoreRecord): Promise<void> {
+    await this.tx(STORE_STORE_NAME, 'readwrite', (dbStore) => dbStore.put(store))
+  }
+
   async updateStore(storeId: string, patch: Partial<StoreRecord>): Promise<void> {
     const store = await this.getStore(storeId)
     if (!store) {
@@ -204,6 +208,10 @@ export class IndexedDbWorkflowStore {
     }
     await this.tx(BATCH_STORE_NAME, 'readwrite', (dbStore) => dbStore.put(batch))
     return batch
+  }
+
+  async upsertBatch(batch: BatchRecord): Promise<void> {
+    await this.tx(BATCH_STORE_NAME, 'readwrite', (dbStore) => dbStore.put(batch))
   }
 
   async updateBatchStatus(batchId: string, status: BatchStatus): Promise<void> {
