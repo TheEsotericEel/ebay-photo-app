@@ -91,6 +91,12 @@ export interface RemoteWorkspaceSyncSummary {
   errors: string[]
 }
 
+export interface RemoteWorkspacePushSummary {
+  pushedStores: number
+  pushedBatches: number
+  errors: string[]
+}
+
 export interface RemoteImportOptions {
   client: SupabaseClient
   store: StoreRecord
@@ -107,6 +113,11 @@ export interface RemoteWorkspaceSyncOptions {
   workflowStore: IndexedDbWorkflowStore
   itemStore: IndexedDbItemPacketStore
   photoStore: IndexedDbPhotoStore
+}
+
+export interface RemoteWorkspacePushOptions {
+  client: SupabaseClient
+  workflowStore: IndexedDbWorkflowStore
 }
 
 function mapListingStatus(status: string | null | undefined): ListingStatus {
@@ -577,6 +588,253 @@ async function resolveLocalBatchForRemote(
     },
     created: true,
   }
+}
+
+async function persistLocalStoreLink(
+  workflowStore: IndexedDbWorkflowStore,
+  store: StoreRecord,
+  remoteId: string,
+): Promise<StoreRecord> {
+  const linked: StoreRecord = {
+    ...store,
+    remoteId,
+    updatedAt: new Date().toISOString(),
+  }
+  await workflowStore.upsertStore(linked)
+  return linked
+}
+
+async function persistLocalBatchLink(
+  workflowStore: IndexedDbWorkflowStore,
+  batch: BatchRecord,
+  remoteId: string,
+  remoteRetentionMode?: BatchRecord['remoteRetentionMode'] | null,
+): Promise<BatchRecord> {
+  const linked: BatchRecord = {
+    ...batch,
+    remoteId,
+    remoteRetentionMode: remoteRetentionMode || batch.remoteRetentionMode,
+    updatedAt: new Date().toISOString(),
+  }
+  await workflowStore.upsertBatch(linked)
+  return linked
+}
+
+async function resolveRemoteStoreForLocal(
+  client: SupabaseClient,
+  workflowStore: IndexedDbWorkflowStore,
+  store: StoreRecord,
+): Promise<{ remoteId: string; store: StoreRecord; created: boolean }> {
+  const remoteId = store.remoteId
+  if (remoteId) {
+    const { data, error } = await client
+      .from('stores')
+      .update({
+        name: store.name,
+        short_code: store.shortCode,
+      })
+      .eq('id', remoteId)
+      .select('id')
+      .maybeSingle()
+
+    if (error) {
+      throw error
+    }
+    if (data?.id) {
+      return {
+        remoteId: data.id as string,
+        store: await persistLocalStoreLink(workflowStore, store, data.id as string),
+        created: false,
+      }
+    }
+  }
+
+  const { data: existing, error: existingError } = await client
+    .from('stores')
+    .select('id')
+    .eq('short_code', store.shortCode)
+    .maybeSingle()
+
+  if (existingError) {
+    throw existingError
+  }
+
+  if (existing?.id) {
+    const { data, error } = await client
+      .from('stores')
+      .update({
+        name: store.name,
+        short_code: store.shortCode,
+      })
+      .eq('id', existing.id as string)
+      .select('id')
+      .maybeSingle()
+
+    if (error) {
+      throw error
+    }
+    if (data?.id) {
+      return {
+        remoteId: data.id as string,
+        store: await persistLocalStoreLink(workflowStore, store, data.id as string),
+        created: false,
+      }
+    }
+  }
+
+  const createdId = globalThis.crypto?.randomUUID?.() || `store-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const { data, error } = await client
+    .from('stores')
+    .insert({
+      id: createdId,
+      name: store.name,
+      short_code: store.shortCode,
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return {
+    remoteId: data.id as string,
+    store: await persistLocalStoreLink(workflowStore, store, data.id as string),
+    created: true,
+  }
+}
+
+async function resolveRemoteBatchForLocal(
+  client: SupabaseClient,
+  workflowStore: IndexedDbWorkflowStore,
+  storeRemoteId: string,
+  batch: BatchRecord,
+): Promise<{ remoteId: string; batch: BatchRecord; created: boolean }> {
+  const remoteId = batch.remoteId
+  if (remoteId) {
+    const { data, error } = await client
+      .from('batches')
+      .update({
+        store_id: storeRemoteId,
+        name: batch.name,
+        status: batch.status,
+        remote_retention_mode: batch.remoteRetentionMode || 'delete_7d_after_listed',
+      })
+      .eq('id', remoteId)
+      .select('id')
+      .maybeSingle()
+
+    if (error) {
+      throw error
+    }
+    if (data?.id) {
+      return {
+        remoteId: data.id as string,
+        batch: await persistLocalBatchLink(workflowStore, batch, data.id as string, batch.remoteRetentionMode),
+        created: false,
+      }
+    }
+  }
+
+  const { data: existing, error: existingError } = await client
+    .from('batches')
+    .select('id')
+    .eq('store_id', storeRemoteId)
+    .eq('name', batch.name)
+    .maybeSingle()
+
+  if (existingError) {
+    throw existingError
+  }
+
+  if (existing?.id) {
+    const { data, error } = await client
+      .from('batches')
+      .update({
+        store_id: storeRemoteId,
+        name: batch.name,
+        status: batch.status,
+        remote_retention_mode: batch.remoteRetentionMode || 'delete_7d_after_listed',
+      })
+      .eq('id', existing.id as string)
+      .select('id')
+      .maybeSingle()
+
+    if (error) {
+      throw error
+    }
+    if (data?.id) {
+      return {
+        remoteId: data.id as string,
+        batch: await persistLocalBatchLink(workflowStore, batch, data.id as string, batch.remoteRetentionMode),
+        created: false,
+      }
+    }
+  }
+
+  const createdId = globalThis.crypto?.randomUUID?.() || `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const { data, error } = await client
+    .from('batches')
+    .insert({
+      id: createdId,
+      store_id: storeRemoteId,
+      name: batch.name,
+      status: batch.status,
+      upload_status: batch.uploadStatus || 'local',
+      remote_retention_mode: batch.remoteRetentionMode || 'delete_7d_after_listed',
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return {
+    remoteId: data.id as string,
+    batch: await persistLocalBatchLink(workflowStore, batch, data.id as string, batch.remoteRetentionMode),
+    created: true,
+  }
+}
+
+export async function syncLocalWorkspaceToRemote(
+  options: RemoteWorkspacePushOptions,
+): Promise<RemoteWorkspacePushSummary> {
+  const summary: RemoteWorkspacePushSummary = {
+    pushedStores: 0,
+    pushedBatches: 0,
+    errors: [],
+  }
+
+  const { client, workflowStore } = options
+  const localStores = await workflowStore.getAllStores()
+
+  for (const store of localStores) {
+    try {
+      const remoteStore = await resolveRemoteStoreForLocal(client, workflowStore, store)
+      if (remoteStore.created) {
+        summary.pushedStores += 1
+      }
+
+      const localBatches = await workflowStore.getBatches(store.id)
+      for (const batch of localBatches) {
+        const remoteBatch = await resolveRemoteBatchForLocal(
+          client,
+          workflowStore,
+          remoteStore.remoteId,
+          batch,
+        )
+        if (remoteBatch.created) {
+          summary.pushedBatches += 1
+        }
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      summary.errors.push(`Workspace push failed for ${store.shortCode}: ${msg}`)
+    }
+  }
+
+  return summary
 }
 
 export async function syncRemoteWorkspaceToLocal(

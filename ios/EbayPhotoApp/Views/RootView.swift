@@ -34,6 +34,8 @@ struct RootView: View {
                 do {
                   let packet = try makeUploadPacket()
                   let result = try await supabase.uploadItemPacket(packet)
+                  appState.captureStoreRemoteId = result.storeId
+                  appState.captureBatchRemoteId = result.batchId
                   appState.uploadMessage = "Uploaded item \(appState.currentItemNumber) (\(result.photoIdByLocalPhotoId.count) photo(s))."
                 } catch {
                   appState.uploadMessage = error.localizedDescription
@@ -55,6 +57,8 @@ struct RootView: View {
                     try DebugFixtureBuilder.makePacket(fixtureInput)
                   }.value
                   let result = try await supabase.uploadItemPacket(packet)
+                  appState.captureStoreRemoteId = result.storeId
+                  appState.captureBatchRemoteId = result.batchId
                   appState.uploadMessage = "Fixture uploaded (\(result.photoIdByLocalPhotoId.count) photo(s))."
                   appState.statusMessage = "Debug fixture upload completed."
                 } catch {
@@ -174,6 +178,10 @@ struct RootView: View {
         }
       }
     }
+    .task(id: appState.isAuthenticated) {
+      guard appState.isAuthenticated, !shouldBypassAuth else { return }
+      await pollWorkspaceSnapshotLoop()
+    }
     #if DEBUG
     .onAppear {
       if ProcessInfo.processInfo.arguments.contains("-open-input-lab") {
@@ -252,6 +260,25 @@ struct RootView: View {
     if let cgImage = image.cgImage { return cgImage.height }
     let value = Int((image.size.height * image.scale).rounded())
     return value > 0 ? value : nil
+  }
+
+  private func pollWorkspaceSnapshotLoop() async {
+    while !Task.isCancelled && appState.isAuthenticated {
+      do {
+        let snapshot = try await supabase.fetchWorkspaceSnapshot()
+        await MainActor.run {
+          appState.mergeRemoteWorkspaceSnapshot(snapshot)
+        }
+      } catch {
+        AppLog.auth.error("Workspace sync failed error=\(error.localizedDescription, privacy: .public)")
+      }
+
+      do {
+        try await Task.sleep(nanoseconds: 30 * 1_000_000_000)
+      } catch {
+        return
+      }
+    }
   }
 
 }

@@ -3,7 +3,9 @@ import { IndexedDbItemPacketStore, type ItemPacket, type ListingStatus } from '.
 import { IndexedDbPhotoStore, type StoredPhoto } from '../adapters/localPhotoStore'
 import {
   importRemoteBatchToLocal,
+  syncLocalWorkspaceToRemote,
   syncRemoteWorkspaceToLocal,
+  type RemoteWorkspacePushSummary,
   type RemoteWorkspaceSyncSummary,
 } from '../adapters/remoteImport'
 import { calculateRetentionWindow, type RemoteRetentionMode } from '../adapters/retention'
@@ -32,6 +34,7 @@ type DesktopItemView = {
 }
 
 const IMPORT_POLL_MS = 45_000
+const WORKSPACE_SYNC_POLL_MS = 45_000
 
 const workflowStore = new IndexedDbWorkflowStore()
 const itemPacketStore = new IndexedDbItemPacketStore()
@@ -166,23 +169,30 @@ function formatImportStatusMessage(importedItems: number, errors: string[]): Imp
   }
 }
 
-function pluralize(count: number, singular: string): string {
-  return `${count} ${singular}${count === 1 ? '' : 's'}`
-}
-
-function formatWorkspaceSyncMessage(summary: RemoteWorkspaceSyncSummary): ImportStatus {
-  if (summary.errors.length > 0) {
+function formatWorkspaceSyncSummaryMessage(
+  pushSummary: RemoteWorkspacePushSummary,
+  pullSummary: RemoteWorkspaceSyncSummary,
+): ImportStatus {
+  if (pushSummary.errors.length > 0) {
     return {
       phase: 'error',
-      message: `Workspace sync failed: ${summary.errors[0]}`,
+      message: `Workspace push failed: ${pushSummary.errors[0]}`,
+    }
+  }
+  if (pullSummary.errors.length > 0) {
+    return {
+      phase: 'error',
+      message: `Workspace sync failed: ${pullSummary.errors[0]}`,
     }
   }
 
   const parts: string[] = []
-  if (summary.importedStores > 0) parts.push(pluralize(summary.importedStores, 'store'))
-  if (summary.importedBatches > 0) parts.push(pluralize(summary.importedBatches, 'batch'))
-  if (summary.importedItems > 0) parts.push(pluralize(summary.importedItems, 'item'))
-  if (summary.importedPhotos > 0) parts.push(pluralize(summary.importedPhotos, 'photo'))
+  if (pushSummary.pushedStores > 0) parts.push(`${pushSummary.pushedStores} store${pushSummary.pushedStores === 1 ? '' : 's'} pushed`)
+  if (pushSummary.pushedBatches > 0) parts.push(`${pushSummary.pushedBatches} batch${pushSummary.pushedBatches === 1 ? '' : 'es'} pushed`)
+  if (pullSummary.importedStores > 0) parts.push(`${pullSummary.importedStores} store${pullSummary.importedStores === 1 ? '' : 's'} pulled`)
+  if (pullSummary.importedBatches > 0) parts.push(`${pullSummary.importedBatches} batch${pullSummary.importedBatches === 1 ? '' : 'es'} pulled`)
+  if (pullSummary.importedItems > 0) parts.push(`${pullSummary.importedItems} item${pullSummary.importedItems === 1 ? '' : 's'} pulled`)
+  if (pullSummary.importedPhotos > 0) parts.push(`${pullSummary.importedPhotos} photo${pullSummary.importedPhotos === 1 ? '' : 's'} pulled`)
 
   if (parts.length === 0) {
     return {
@@ -327,6 +337,10 @@ export function DesktopListerPrototype() {
     setActionError(null)
 
     try {
+      const pushSummary = await syncLocalWorkspaceToRemote({
+        client: supabase,
+        workflowStore,
+      })
       const summary = await syncRemoteWorkspaceToLocal({
         client: supabase,
         workflowStore,
@@ -335,7 +349,7 @@ export function DesktopListerPrototype() {
       })
 
       await loadDesktopData({ silent: true })
-      setImportStatus(formatWorkspaceSyncMessage(summary))
+      setImportStatus(formatWorkspaceSyncSummaryMessage(pushSummary, summary))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setImportStatus({ phase: 'error', message: `Workspace sync failed: ${message}` })
@@ -363,6 +377,18 @@ export function DesktopListerPrototype() {
 
     return () => window.clearInterval(intervalId)
   }, [selectedStoreId, session, runRemoteImport])
+
+  useEffect(() => {
+    if (!session || !supabase) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      void runWorkspaceSync()
+    }, WORKSPACE_SYNC_POLL_MS)
+
+    return () => window.clearInterval(intervalId)
+  }, [session, runWorkspaceSync, supabase])
 
   useEffect(() => {
     if (!session || !supabase || workspaceBootstrapAttemptedRef.current) {

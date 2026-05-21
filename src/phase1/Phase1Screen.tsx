@@ -14,7 +14,7 @@ import { attachOrderedPhotosToItem, getItemReadiness, sortItems } from '../adapt
 import { getBatchUploadStateSummary, getCleanupReport } from '../adapters/uploadState'
 import { calculateRetentionWindow, getRetentionModeLabel, RemoteRetentionMode } from '../adapters/retention'
 import { deleteEligibleRemotePhotos, getRemoteCleanupReport, RemoteCleanupProgress } from '../adapters/remoteCleanup'
-import { importRemoteBatchToLocal, RemoteImportSummary } from '../adapters/remoteImport'
+import { importRemoteBatchToLocal, syncLocalWorkspaceToRemote, RemoteImportSummary } from '../adapters/remoteImport'
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
 import { CameraCapabilities, CameraDeviceInfo, CameraTestConstraintSet, CaptureDiagnostics } from '../adapters/camera'
@@ -2306,11 +2306,19 @@ export function WorkspaceScreen() {
     const shortCode = window.prompt('Short code', name.trim().slice(0, 3).toUpperCase()) || name.trim().slice(0, 3).toUpperCase()
     const store = await workflowStore.createStore(name.trim(), shortCode.trim() || 'NEW')
     const batch = await workflowStore.ensureDefaultBatch(store.id)
+    if (supabaseReady && session && supabase) {
+      void syncLocalWorkspaceToRemote({
+        client: supabase,
+        workflowStore,
+      }).catch((error) => {
+        console.error('Workspace push failed after store creation', error)
+      })
+    }
     await loadData()
     setSelectedStoreId(store.id)
     setSelectedBatchId(batch.id)
     setStatusMsg(`Created ${store.name}`)
-  }, [loadData])
+  }, [loadData, session, supabase, supabaseReady])
 
   const handleCreateBatch = useCallback(async () => {
     if (!selectedStoreId) return
@@ -2318,9 +2326,17 @@ export function WorkspaceScreen() {
     if (!name?.trim()) return
     const batch = await workflowStore.createBatch(selectedStoreId, name.trim())
     setSelectedBatchId(batch.id)
+    if (supabaseReady && session && supabase) {
+      void syncLocalWorkspaceToRemote({
+        client: supabase,
+        workflowStore,
+      }).catch((error) => {
+        console.error('Workspace push failed after batch creation', error)
+      })
+    }
     await reloadBatches(selectedStoreId)
     setStatusMsg(`Created ${batch.name}`)
-  }, [reloadBatches, selectedStoreId])
+  }, [reloadBatches, selectedStoreId, session, supabase, supabaseReady])
 
   const handleNextItem = useCallback(async () => {
     if (!currentItem || currentItem.photoIds.length === 0) return

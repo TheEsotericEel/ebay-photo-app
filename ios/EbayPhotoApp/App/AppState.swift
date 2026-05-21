@@ -6,6 +6,8 @@ private struct PersistedCaptureContext: Codable {
   var captureStoreShortCode: String
   var captureBatchName: String
   var currentItemNumber: Int
+  var captureStoreRemoteId: String?
+  var captureBatchRemoteId: String?
 }
 
 @MainActor
@@ -36,7 +38,15 @@ final class AppState: ObservableObject {
     didSet { persistCaptureContextIfNeeded() }
   }
 
+  @Published var captureStoreRemoteId: String? {
+    didSet { persistCaptureContextIfNeeded() }
+  }
+
   @Published var captureBatchName: String {
+    didSet { persistCaptureContextIfNeeded() }
+  }
+
+  @Published var captureBatchRemoteId: String? {
     didSet { persistCaptureContextIfNeeded() }
   }
 
@@ -49,6 +59,7 @@ final class AppState: ObservableObject {
   @Published var currentItemDimensions = ""
   @Published var currentItemNotes = ""
   @Published var capturedPhotos: [CapturedPhoto] = []
+  @Published var remoteWorkspaceStores: [SupabaseService.WorkspaceStoreSummary] = []
 
   private let userDefaults: UserDefaults
   private let captureContextStorageKey = "ebp.capture.context.v1"
@@ -64,7 +75,9 @@ final class AppState: ObservableObject {
     isApplyingPersistedCaptureContext = true
     captureStoreName = loaded.captureStoreName
     captureStoreShortCode = loaded.captureStoreShortCode
+    captureStoreRemoteId = loaded.captureStoreRemoteId
     captureBatchName = loaded.captureBatchName
+    captureBatchRemoteId = loaded.captureBatchRemoteId
     currentItemNumber = loaded.currentItemNumber
     isApplyingPersistedCaptureContext = false
 
@@ -91,6 +104,50 @@ final class AppState: ObservableObject {
     )
     captureBatchName = Self.normalizeBatchName(batchName)
     currentItemNumber = Self.normalizeItemNumber(itemNumber)
+    isApplyingPersistedCaptureContext = false
+    saveCaptureContext()
+  }
+
+  func applyRemoteWorkspaceContext(
+    storeId: String,
+    batchId: String,
+    storeName: String,
+    storeShortCode: String,
+    batchName: String
+  ) {
+    isApplyingPersistedCaptureContext = true
+    captureStoreRemoteId = storeId
+    captureBatchRemoteId = batchId
+    captureStoreName = Self.normalizeStoreName(storeName)
+    captureStoreShortCode = Self.normalizeShortCode(
+      storeShortCode,
+      fallbackStoreName: captureStoreName
+    )
+    captureBatchName = Self.normalizeBatchName(batchName)
+    isApplyingPersistedCaptureContext = false
+    saveCaptureContext()
+  }
+
+  func mergeRemoteWorkspaceSnapshot(_ snapshot: SupabaseService.WorkspaceSnapshot) {
+    remoteWorkspaceStores = snapshot.stores
+
+    guard let matchingStore = resolveMatchingRemoteStore(from: snapshot) else {
+      return
+    }
+
+    isApplyingPersistedCaptureContext = true
+    captureStoreRemoteId = matchingStore.id
+    captureStoreName = Self.normalizeStoreName(matchingStore.name)
+    captureStoreShortCode = Self.normalizeShortCode(
+      matchingStore.shortCode,
+      fallbackStoreName: matchingStore.name
+    )
+
+    if let matchingBatch = resolveMatchingRemoteBatch(in: matchingStore) {
+      captureBatchRemoteId = matchingBatch.id
+      captureBatchName = Self.normalizeBatchName(matchingBatch.name)
+    }
+
     isApplyingPersistedCaptureContext = false
     saveCaptureContext()
   }
@@ -148,12 +205,46 @@ final class AppState: ObservableObject {
     saveCaptureContext()
   }
 
+  private func resolveMatchingRemoteStore(
+    from snapshot: SupabaseService.WorkspaceSnapshot
+  ) -> SupabaseService.WorkspaceStoreSummary? {
+    if let captureStoreRemoteId, let store = snapshot.stores.first(where: { $0.id == captureStoreRemoteId }) {
+      return store
+    }
+
+    let normalizedShortCode = Self.normalizeShortCode(
+      captureStoreShortCode,
+      fallbackStoreName: captureStoreName
+    )
+    if let store = snapshot.stores.first(where: { $0.shortCode == normalizedShortCode }) {
+      return store
+    }
+
+    return snapshot.stores.first(where: {
+      Self.normalizeStoreName($0.name) == Self.normalizeStoreName(captureStoreName)
+    })
+  }
+
+  private func resolveMatchingRemoteBatch(
+    in store: SupabaseService.WorkspaceStoreSummary
+  ) -> SupabaseService.WorkspaceBatchSummary? {
+    if let captureBatchRemoteId, let batch = store.batches.first(where: { $0.id == captureBatchRemoteId }) {
+      return batch
+    }
+
+    return store.batches.first(where: {
+      Self.normalizeBatchName($0.name) == Self.normalizeBatchName(captureBatchName)
+    }) ?? store.batches.first
+  }
+
   private func saveCaptureContext() {
     let payload = PersistedCaptureContext(
       captureStoreName: captureStoreName,
       captureStoreShortCode: captureStoreShortCode,
       captureBatchName: captureBatchName,
-      currentItemNumber: currentItemNumber
+      currentItemNumber: currentItemNumber,
+      captureStoreRemoteId: captureStoreRemoteId,
+      captureBatchRemoteId: captureBatchRemoteId
     )
     if let data = try? JSONEncoder().encode(payload) {
       userDefaults.set(data, forKey: captureContextStorageKey)
@@ -179,7 +270,9 @@ final class AppState: ObservableObject {
         fallbackStoreName: storeName
       ),
       captureBatchName: normalizeBatchName(payload.captureBatchName),
-      currentItemNumber: normalizeItemNumber(payload.currentItemNumber)
+      currentItemNumber: normalizeItemNumber(payload.currentItemNumber),
+      captureStoreRemoteId: payload.captureStoreRemoteId,
+      captureBatchRemoteId: payload.captureBatchRemoteId
     )
   }
 
@@ -189,7 +282,9 @@ final class AppState: ObservableObject {
       captureStoreName: storeName,
       captureStoreShortCode: "DEF",
       captureBatchName: "Current Batch",
-      currentItemNumber: 1
+      currentItemNumber: 1,
+      captureStoreRemoteId: nil,
+      captureBatchRemoteId: nil
     )
   }
 

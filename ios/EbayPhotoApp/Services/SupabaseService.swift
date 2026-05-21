@@ -66,6 +66,22 @@ final class SupabaseService: ObservableObject {
     let id: String
   }
 
+  private struct WorkspaceStoreRow: Decodable {
+    let id: String
+    let name: String
+    let short_code: String
+    let updated_at: String?
+  }
+
+  private struct WorkspaceBatchRow: Decodable {
+    let id: String
+    let store_id: String
+    let name: String
+    let status: String
+    let remote_retention_mode: String?
+    let updated_at: String?
+  }
+
   private struct ItemRow: Decodable {
     let id: String
   }
@@ -78,6 +94,35 @@ final class SupabaseService: ObservableObject {
     let item_count: Int
     let photo_count: Int
     let upload_status: String
+  }
+
+  struct WorkspaceBatchSummary: Identifiable {
+    let id: String
+    let storeId: String
+    let name: String
+    let status: String
+    let remoteRetentionMode: String?
+    let updatedAt: String
+  }
+
+  struct WorkspaceStoreSummary: Identifiable {
+    let id: String
+    let name: String
+    let shortCode: String
+    let updatedAt: String
+    let batches: [WorkspaceBatchSummary]
+  }
+
+  struct WorkspaceSnapshot {
+    let stores: [WorkspaceStoreSummary]
+  }
+
+  struct WorkspaceSyncResult {
+    let storeId: String
+    let batchId: String
+    let storeName: String
+    let storeShortCode: String
+    let batchName: String
   }
 
   private let sessionStoreKey = "ebp.supabase.session.v1"
@@ -259,6 +304,86 @@ final class SupabaseService: ObservableObject {
     guard let session = cachedSession else { return }
     guard sessionIsExpired(session) else { return }
     try await refreshSession()
+  }
+
+  func fetchWorkspaceSnapshot() async throws -> WorkspaceSnapshot {
+    let config = try loadConfig()
+    let session = try await requireValidSession()
+
+    let storesData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: "/rest/v1/stores?select=id,name,short_code,updated_at&order=updated_at.desc",
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let storeRows = try decode([WorkspaceStoreRow].self, from: storesData)
+
+    let batchesData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: "/rest/v1/batches?select=id,store_id,name,status,remote_retention_mode,updated_at&order=updated_at.desc",
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let batchRows = try decode([WorkspaceBatchRow].self, from: batchesData)
+
+    let batchesByStoreId = Dictionary(grouping: batchRows, by: { $0.store_id })
+    let stores = storeRows.map { storeRow in
+      let batches = (batchesByStoreId[storeRow.id] ?? []).map { batchRow in
+        WorkspaceBatchSummary(
+          id: batchRow.id,
+          storeId: batchRow.store_id,
+          name: batchRow.name,
+          status: batchRow.status,
+          remoteRetentionMode: batchRow.remote_retention_mode,
+          updatedAt: batchRow.updated_at ?? ""
+        )
+      }
+      return WorkspaceStoreSummary(
+        id: storeRow.id,
+        name: storeRow.name,
+        shortCode: storeRow.short_code,
+        updatedAt: storeRow.updated_at ?? "",
+        batches: batches
+      )
+    }
+
+    return WorkspaceSnapshot(stores: stores)
+  }
+
+  func syncCaptureContextToRemote(
+    storeName: String,
+    storeShortCode: String,
+    batchName: String,
+    storeRemoteId: String?,
+    batchRemoteId: String?
+  ) async throws -> WorkspaceSyncResult {
+    let config = try loadConfig()
+    let session = try await requireValidSession()
+    let storeId = try await upsertWorkspaceStore(
+      config: config,
+      session: session,
+      storeName: storeName,
+      storeShortCode: storeShortCode,
+      remoteStoreId: storeRemoteId
+    )
+    let batchId = try await upsertWorkspaceBatch(
+      config: config,
+      session: session,
+      storeId: storeId,
+      batchName: batchName,
+      batchRemoteId: batchRemoteId
+    )
+    return WorkspaceSyncResult(
+      storeId: storeId,
+      batchId: batchId,
+      storeName: storeName,
+      storeShortCode: storeShortCode,
+      batchName: batchName
+    )
   }
 
   func refreshSession() async throws {
@@ -501,6 +626,177 @@ final class SupabaseService: ObservableObject {
   }
 
   // MARK: - Internal REST operations
+
+  private func upsertWorkspaceStore(
+    config: Config,
+    session: Session,
+    storeName: String,
+    storeShortCode: String,
+    remoteStoreId: String?
+  ) async throws -> String {
+    if let remoteStoreId {
+      let body: [String: Any] = [
+        "name": storeName,
+        "short_code": storeShortCode,
+      ]
+      let data = try await performAuthedRequest(
+        config: config,
+        session: session,
+        method: "PATCH",
+        pathWithQuery: "/rest/v1/stores?id=eq.\(urlEncoded(remoteStoreId))",
+        body: body,
+        additionalHeaders: [
+          "Prefer": "return=representation",
+        ]
+      )
+      let rows = try decode([StoreRow].self, from: data)
+      if let id = rows.first?.id {
+        return id
+      }
+    }
+
+    let escapedShortCode = urlEncoded(storeShortCode)
+    let existingData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: "/rest/v1/stores?short_code=eq.\(escapedShortCode)&select=id&limit=1",
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let existingRows = try decode([StoreRow].self, from: existingData)
+    if let id = existingRows.first?.id {
+      let body: [String: Any] = [
+        "name": storeName,
+        "short_code": storeShortCode,
+      ]
+      let data = try await performAuthedRequest(
+        config: config,
+        session: session,
+        method: "PATCH",
+        pathWithQuery: "/rest/v1/stores?id=eq.\(urlEncoded(id))",
+        body: body,
+        additionalHeaders: [
+          "Prefer": "return=representation",
+        ]
+      )
+      let rows = try decode([StoreRow].self, from: data)
+      if let patchedId = rows.first?.id {
+        return patchedId
+      }
+      return id
+    }
+
+    let body: [[String: String]] = [[
+      "name": storeName,
+      "short_code": storeShortCode,
+    ]]
+    let createData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "POST",
+      pathWithQuery: "/rest/v1/stores",
+      body: body,
+      additionalHeaders: [
+        "Prefer": "return=representation",
+      ]
+    )
+    let createdRows = try decode([StoreRow].self, from: createData)
+    guard let createdId = createdRows.first?.id else {
+      throw AppServiceError.server("Store upsert returned no id.")
+    }
+    return createdId
+  }
+
+  private func upsertWorkspaceBatch(
+    config: Config,
+    session: Session,
+    storeId: String,
+    batchName: String,
+    batchRemoteId: String?
+  ) async throws -> String {
+    if let batchRemoteId {
+      let body: [String: Any] = [
+        "store_id": storeId,
+        "name": batchName,
+        "status": "active",
+        "upload_status": "local",
+        "remote_retention_mode": "delete_7d_after_listed",
+      ]
+      let data = try await performAuthedRequest(
+        config: config,
+        session: session,
+        method: "PATCH",
+        pathWithQuery: "/rest/v1/batches?id=eq.\(urlEncoded(batchRemoteId))",
+        body: body,
+        additionalHeaders: [
+          "Prefer": "return=representation",
+        ]
+      )
+      let rows = try decode([BatchRow].self, from: data)
+      if let id = rows.first?.id {
+        return id
+      }
+    }
+
+    let queryPath = "/rest/v1/batches?store_id=eq.\(urlEncoded(storeId))&name=eq.\(urlEncoded(batchName))&select=id&limit=1"
+    let existingData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: queryPath,
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let existingRows = try decode([BatchRow].self, from: existingData)
+    if let id = existingRows.first?.id {
+      let body: [String: Any] = [
+        "store_id": storeId,
+        "name": batchName,
+        "status": "active",
+        "upload_status": "local",
+        "remote_retention_mode": "delete_7d_after_listed",
+      ]
+      let data = try await performAuthedRequest(
+        config: config,
+        session: session,
+        method: "PATCH",
+        pathWithQuery: "/rest/v1/batches?id=eq.\(urlEncoded(id))",
+        body: body,
+        additionalHeaders: [
+          "Prefer": "return=representation",
+        ]
+      )
+      let rows = try decode([BatchRow].self, from: data)
+      if let patchedId = rows.first?.id {
+        return patchedId
+      }
+      return id
+    }
+
+    let body: [[String: Any]] = [[
+      "store_id": storeId,
+      "name": batchName,
+      "status": "active",
+      "upload_status": "local",
+      "remote_retention_mode": "delete_7d_after_listed",
+    ]]
+    let createData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "POST",
+      pathWithQuery: "/rest/v1/batches",
+      body: body,
+      additionalHeaders: [
+        "Prefer": "return=representation",
+      ]
+    )
+    let createdRows = try decode([BatchRow].self, from: createData)
+    guard let createdId = createdRows.first?.id else {
+      throw AppServiceError.server("Batch upsert returned no id.")
+    }
+    return createdId
+  }
 
   private func resolveOrCreateStore(
     config: Config,
