@@ -8,6 +8,7 @@ struct RootView: View {
   @StateObject private var cameraPreferences = CameraPreferencesStore()
   @State private var showingCamera = false
   @State private var showingDetails = false
+  @State private var showingTextInputLab = false
   @State private var didRestoreSession = false
 
   private var shouldBypassAuth: Bool { AppState.usesDevelopmentAuthBypass }
@@ -27,6 +28,8 @@ struct RootView: View {
           CaptureHomeView(
             onOpenCamera: { showingCamera = true },
             onUploadBatch: {
+              appState.statusMessage = "Uploading batch…"
+              appState.uploadMessage = ""
               Task {
                 do {
                   let packet = try makeUploadPacket()
@@ -38,9 +41,19 @@ struct RootView: View {
               }
             },
             onUploadFixture: {
+              appState.statusMessage = "Uploading debug fixture…"
+              appState.uploadMessage = ""
+              let fixtureInput = DebugFixtureBuilder.Input(
+                captureStoreName: appState.captureStoreName,
+                captureStoreShortCode: appState.captureStoreShortCode,
+                captureBatchName: appState.captureBatchName,
+                currentItemNumber: appState.currentItemNumber
+              )
               Task {
                 do {
-                  let packet = try makeDebugFixturePacket()
+                  let packet = try await Task.detached(priority: .userInitiated) {
+                    try DebugFixtureBuilder.makePacket(fixtureInput)
+                  }.value
                   let result = try await supabase.uploadItemPacket(packet)
                   appState.uploadMessage = "Fixture uploaded (\(result.photoIdByLocalPhotoId.count) photo(s))."
                   appState.statusMessage = "Debug fixture upload completed."
@@ -61,7 +74,8 @@ struct RootView: View {
                 appState.uploadMessage = ""
                 appState.statusMessage = "Signed out."
               }
-            }
+            },
+            onOpenInputLab: { showingTextInputLab = true }
           )
         }
       } else {
@@ -137,7 +151,8 @@ struct RootView: View {
                 appState.authError = error.localizedDescription
               }
             }
-          }
+          },
+          onOpenInputLab: { showingTextInputLab = true }
         )
       }
     }
@@ -148,6 +163,26 @@ struct RootView: View {
       guard !appState.isAuthenticated else { return }
       appState.isAuthenticated = true
       appState.statusMessage = "Session restored."
+      Task {
+        do {
+          try await supabase.refreshSessionIfNeeded()
+        } catch {
+          supabase.signOut()
+          appState.isAuthenticated = false
+          appState.statusMessage = "Session expired. Sign in again."
+          appState.uploadMessage = error.localizedDescription
+        }
+      }
+    }
+    #if DEBUG
+    .onAppear {
+      if ProcessInfo.processInfo.arguments.contains("-open-input-lab") {
+        showingTextInputLab = true
+      }
+    }
+    #endif
+    .fullScreenCover(isPresented: $showingTextInputLab) {
+      TextInputLabView()
     }
   }
 
@@ -219,13 +254,24 @@ struct RootView: View {
     return value > 0 ? value : nil
   }
 
-  private func makeDebugFixturePacket() throws -> NativeUploadItemPacketV1 {
+}
+
+#if DEBUG
+private enum DebugFixtureBuilder {
+  struct Input: Sendable {
+    let captureStoreName: String
+    let captureStoreShortCode: String
+    let captureBatchName: String
+    let currentItemNumber: Int
+  }
+
+  static func makePacket(_ input: Input) throws -> NativeUploadItemPacketV1 {
     let formatter = ISO8601DateFormatter()
     let now = Date()
 
     let photos: [NativeUploadItemPacketV1.Photo] = try (0 ..< 2).map { index in
       let image = makeFixtureImage(order: index)
-      guard let listingData = image.jpegData(compressionQuality: 0.88) else {
+      guard let listingData = image.jpegData(compressionQuality: 0.82) else {
         throw AppServiceError.invalidRequest("Failed to generate fixture listing image \(index + 1).")
       }
       guard let thumbnailData = image.ebp_thumbnailData() else {
@@ -255,18 +301,12 @@ struct RootView: View {
     }
 
     return NativeUploadItemPacketV1(
-      store: .init(
-        shortCode: appState.captureStoreShortCode,
-        name: appState.captureStoreName
-      ),
-      batch: .init(
-        name: appState.captureBatchName,
-        status: "active"
-      ),
+      store: .init(shortCode: input.captureStoreShortCode, name: input.captureStoreName),
+      batch: .init(name: input.captureBatchName, status: "active"),
       item: .init(
-        sequence: appState.currentItemNumber,
+        sequence: input.currentItemNumber,
         status: "new",
-        sku: "fixture-\(appState.currentItemNumber)",
+        sku: "fixture-\(input.currentItemNumber)",
         notes: "Debug fixture upload generated in app.",
         weight: nil,
         dimensions: nil,
@@ -276,8 +316,9 @@ struct RootView: View {
     )
   }
 
-  private func makeFixtureImage(order: Int) -> UIImage {
-    let size = CGSize(width: 1600, height: 1600)
+  private static func makeFixtureImage(order: Int) -> UIImage {
+    // Smaller than camera deliverables — debug upload only; keeps UI responsive off main actor.
+    let size = CGSize(width: 640, height: 640)
     let renderer = UIGraphicsImageRenderer(size: size)
     return renderer.image { context in
       let background: UIColor = order == 0 ? .systemTeal : .systemOrange
@@ -288,24 +329,37 @@ struct RootView: View {
       context.fill(CGRect(x: 0, y: size.height * 0.55, width: size.width, height: size.height * 0.45))
 
       let title = "DEBUG FIXTURE \(order + 1)"
-      let subtitle = "eBay Photo App Simulator Upload"
+      let subtitle = "eBay Photo App"
       let titleAttrs: [NSAttributedString.Key: Any] = [
-        .font: UIFont.boldSystemFont(ofSize: 92),
+        .font: UIFont.boldSystemFont(ofSize: 36),
         .foregroundColor: UIColor.white,
       ]
       let subtitleAttrs: [NSAttributedString.Key: Any] = [
-        .font: UIFont.systemFont(ofSize: 44, weight: .medium),
+        .font: UIFont.systemFont(ofSize: 18, weight: .medium),
         .foregroundColor: UIColor.white.withAlphaComponent(0.95),
       ]
 
       let titleSize = title.size(withAttributes: titleAttrs)
       let subtitleSize = subtitle.size(withAttributes: subtitleAttrs)
       let centerX = (size.width - titleSize.width) / 2
-      title.draw(at: CGPoint(x: centerX, y: 640), withAttributes: titleAttrs)
-      subtitle.draw(at: CGPoint(x: (size.width - subtitleSize.width) / 2, y: 760), withAttributes: subtitleAttrs)
+      title.draw(at: CGPoint(x: centerX, y: 260), withAttributes: titleAttrs)
+      subtitle.draw(at: CGPoint(x: (size.width - subtitleSize.width) / 2, y: 310), withAttributes: subtitleAttrs)
     }
   }
+
+  private static func pixelWidth(from image: UIImage) -> Int? {
+    if let cgImage = image.cgImage { return cgImage.width }
+    let value = Int((image.size.width * image.scale).rounded())
+    return value > 0 ? value : nil
+  }
+
+  private static func pixelHeight(from image: UIImage) -> Int? {
+    if let cgImage = image.cgImage { return cgImage.height }
+    let value = Int((image.size.height * image.scale).rounded())
+    return value > 0 ? value : nil
+  }
 }
+#endif
 
 private struct AuthView: View {
   @Binding var email: String
@@ -317,6 +371,7 @@ private struct AuthView: View {
   let onSignIn: () -> Void
   let onSignInWithPassword: () -> Void
   let onCreatePasswordAccount: () -> Void
+  let onOpenInputLab: (() -> Void)?
 
   var body: some View {
     NavigationStack {
@@ -369,10 +424,16 @@ private struct AuthView: View {
                 .foregroundStyle(.red)
             }
           }
+
+          #if DEBUG
+          if let onOpenInputLab {
+            Button("Open Text Input Lab", action: onOpenInputLab)
+              .buttonStyle(.bordered)
+          }
+          #endif
         }
         .padding()
       }
-      .scrollDismissesKeyboard(.interactively)
       .navigationTitle("Ebay Photo App")
     }
   }
@@ -390,6 +451,7 @@ private struct CaptureHomeView: View {
   let onUploadBatch: () -> Void
   let onUploadFixture: () -> Void
   let onSignOut: () -> Void
+  let onOpenInputLab: (() -> Void)?
   @EnvironmentObject private var appState: AppState
 
   var body: some View {
@@ -408,6 +470,9 @@ private struct CaptureHomeView: View {
           Button("Upload Batch", action: onUploadBatch)
           #if DEBUG
           Button("Upload Debug Fixture", action: onUploadFixture)
+          if let onOpenInputLab {
+            Button("Open Text Input Lab", action: onOpenInputLab)
+          }
           #endif
           Button("Sign Out", role: .destructive, action: onSignOut)
         }

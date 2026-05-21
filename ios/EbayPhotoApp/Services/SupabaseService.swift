@@ -254,6 +254,50 @@ final class SupabaseService: ObservableObject {
     AppLog.auth.info("Session cleared via sign out")
   }
 
+  /// Refreshes the access token when expired or close to expiry. No-op if still valid.
+  func refreshSessionIfNeeded() async throws {
+    guard let session = cachedSession else { return }
+    guard sessionIsExpired(session) else { return }
+    try await refreshSession()
+  }
+
+  func refreshSession() async throws {
+    guard let existing = cachedSession else {
+      throw AppServiceError.notConfigured("No Supabase session. Sign in first.")
+    }
+    guard let refreshToken = existing.refreshToken, !refreshToken.isEmpty else {
+      signOut()
+      throw AppServiceError.notConfigured("Session expired. Sign in again.")
+    }
+
+    let config = try loadConfig()
+    AppLog.auth.info("Session refresh started")
+    let payload: [String: Any] = ["refresh_token": refreshToken]
+    do {
+      let data = try await performAuthJSONRequest(
+        config: config,
+        method: "POST",
+        path: "/auth/v1/token?grant_type=refresh_token",
+        body: payload
+      )
+      let response = try decode(AuthVerifyResponse.self, from: data)
+      let session = Session(
+        accessToken: response.access_token,
+        refreshToken: response.refresh_token ?? refreshToken,
+        userId: response.user?.id ?? existing.userId,
+        expiresAt: response.expires_at
+      )
+      saveSession(session)
+      AppLog.auth.info("Session refresh succeeded")
+    } catch {
+      AppLog.auth.error("Session refresh failed error=\(error.localizedDescription, privacy: .public)")
+      if isExpiredSessionHTTPError(error) {
+        signOut()
+      }
+      throw error
+    }
+  }
+
   func uploadCurrentBatch() async throws {
     throw AppServiceError.notConfigured("Native upload requires a packet. Use uploadItemPacket(_:) for V1.")
   }
@@ -267,7 +311,7 @@ final class SupabaseService: ObservableObject {
     AppLog.upload.info("Upload packet start store=\(packet.store.shortCode, privacy: .public) batch=\(packet.batch.name, privacy: .public) item=\(packet.item.sequence, privacy: .public) photos=\(packet.photos.count, privacy: .public)")
 
     let config = try loadConfig()
-    let session = try requireSession()
+    let session = try await requireValidSession()
     var batchIdForFailure: String?
     var preUploadedPhotoIdForFailure: String?
     var successfulPhotoUploadCount = 0
@@ -775,18 +819,31 @@ final class SupabaseService: ObservableObject {
       .map { urlEncoded(String($0)) }
       .joined(separator: "/")
 
-    guard let endpoint = URL(string: "/storage/v1/object/\(config.bucket)/\(escapedKey)", relativeTo: config.baseURL) else {
-      throw AppServiceError.notConfigured("Invalid Supabase storage URL.")
+    func makeRequest(for session: Session) throws -> URLRequest {
+      guard let endpoint = URL(string: "/storage/v1/object/\(config.bucket)/\(escapedKey)", relativeTo: config.baseURL) else {
+        throw AppServiceError.notConfigured("Invalid Supabase storage URL.")
+      }
+      var request = URLRequest(url: endpoint)
+      request.httpMethod = "POST"
+      request.httpBody = bytes
+      request.setValue("application/json", forHTTPHeaderField: "Accept")
+      request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+      request.setValue("true", forHTTPHeaderField: "x-upsert")
+      request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+      request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+      return request
     }
-    var request = URLRequest(url: endpoint)
-    request.httpMethod = "POST"
-    request.httpBody = bytes
-    request.setValue("application/json", forHTTPHeaderField: "Accept")
-    request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
-    request.setValue("true", forHTTPHeaderField: "x-upsert")
-    request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
-    request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
 
+    do {
+      try await uploadVariantToStorageOnce(request: try makeRequest(for: session))
+    } catch {
+      guard isExpiredSessionHTTPError(error) else { throw error }
+      try await refreshSession()
+      try await uploadVariantToStorageOnce(request: try makeRequest(for: try requireSession()))
+    }
+  }
+
+  private func uploadVariantToStorageOnce(request: URLRequest) async throws {
     let (data, response): (Data, URLResponse)
     do {
       (data, response) = try await urlSession.data(for: request)
@@ -827,6 +884,38 @@ final class SupabaseService: ObservableObject {
   }
 
   private func performAuthedRequest(
+    config: Config,
+    session: Session,
+    method: String,
+    pathWithQuery: String,
+    body: Any?,
+    additionalHeaders: [String: String]
+  ) async throws -> Data {
+    do {
+      return try await performAuthedRequestOnce(
+        config: config,
+        session: session,
+        method: method,
+        pathWithQuery: pathWithQuery,
+        body: body,
+        additionalHeaders: additionalHeaders
+      )
+    } catch {
+      guard isExpiredSessionHTTPError(error) else { throw error }
+      try await refreshSession()
+      let refreshed = try requireSession()
+      return try await performAuthedRequestOnce(
+        config: config,
+        session: refreshed,
+        method: method,
+        pathWithQuery: pathWithQuery,
+        body: body,
+        additionalHeaders: additionalHeaders
+      )
+    }
+  }
+
+  private func performAuthedRequestOnce(
     config: Config,
     session: Session,
     method: String,
@@ -945,6 +1034,28 @@ final class SupabaseService: ObservableObject {
     }
     AppLog.auth.error("No Supabase session available for authenticated request")
     throw AppServiceError.notConfigured("No Supabase session. Sign in first.")
+  }
+
+  private func requireValidSession() async throws -> Session {
+    guard cachedSession != nil else {
+      AppLog.auth.error("No Supabase session available for authenticated request")
+      throw AppServiceError.notConfigured("No Supabase session. Sign in first.")
+    }
+    try await refreshSessionIfNeeded()
+    return try requireSession()
+  }
+
+  private func sessionIsExpired(_ session: Session, leeway: TimeInterval = 90) -> Bool {
+    guard let expiresAt = session.expiresAt else { return false }
+    return Date().timeIntervalSince1970 >= (expiresAt - leeway)
+  }
+
+  private func isExpiredSessionHTTPError(_ error: Error) -> Bool {
+    guard case AppServiceError.server(let message) = error else { return false }
+    let lower = message.lowercased()
+    return lower.contains("jwt expired")
+      || lower.contains("token is expired")
+      || (lower.contains("401") && lower.contains("expired"))
   }
 
   private func loadConfig() throws -> Config {

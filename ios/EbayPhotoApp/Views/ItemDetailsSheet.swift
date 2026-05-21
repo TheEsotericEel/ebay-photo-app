@@ -20,7 +20,6 @@ struct ItemDetailsSheet: View {
         }
         .padding()
       }
-      .scrollDismissesKeyboard(.interactively)
       .navigationTitle("Details")
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {

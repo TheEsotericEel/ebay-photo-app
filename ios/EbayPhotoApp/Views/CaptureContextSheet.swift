@@ -33,7 +33,6 @@ struct CaptureContextSheet: View {
         }
         .padding()
       }
-      .scrollDismissesKeyboard(.interactively)
       .navigationTitle("Capture Context")
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
