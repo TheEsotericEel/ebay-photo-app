@@ -1,10 +1,9 @@
 # eBay Photo App — Updated Project Spec
 
-**Status:** source-of-truth product spec for the iOS migration direction  
-**Current direction:** native iOS capture app + web desktop management app + shared Supabase backend  
-**Repo audit basis:** `TheEsotericEel/ebay-photo-app`, `main`, after merge commit `676f06dc5e78ee3c9fbbde2f9481bda9e62510b5`  
-**Primary goal:** replace the Telegram-based photo handoff workflow with a fast, item-aware capture and desktop listing queue.  
-**Primary non-goal:** this is not an eBay automation platform, AI listing writer, pricing tool, permanent inventory system, or SaaS-first product.
+**Status:** source-of-truth product spec for the current iPhone migration direction  
+**Current direction:** native iPhone capture app + web desktop management app + shared Supabase backend  
+**Primary goal:** replace the Telegram-based photo handoff workflow with a fast, item-aware capture flow and desktop listing queue  
+**Primary non-goal:** this is not an eBay automation platform, AI listing writer, pricing tool, permanent inventory system, or SaaS-first product
 
 ---
 
@@ -12,14 +11,20 @@
 
 A native iPhone capture app and web desktop management app for eBay listing workflows.
 
-The system captures item photos into clearly separated item packets, optionally attaches lightweight metadata, uploads those packets to temporary remote storage, and gives the desktop lister a clean queue for manual eBay listing and checkoff.
+The system should:
+
+- capture item photos into item packets
+- optionally attach lightweight per-item metadata
+- keep work in a local iPhone queue until the user deliberately submits it
+- upload submitted work to temporary remote storage
+- give the desktop lister a clean queue for manual eBay listing and checkoff
 
 The product should feel like:
 
 ```txt
 Take photos fast on iPhone.
 Group them correctly by item.
-Upload them safely.
+Keep work local until I decide to submit it.
 Open desktop queue.
 List manually on eBay.
 Mark item listed.
@@ -30,7 +35,7 @@ Delete photos after they are no longer needed.
 
 ## 2. Architecture Decision
 
-The production mobile capture path is native iOS.
+The production mobile capture path is native iPhone.
 
 The production desktop management path is web.
 
@@ -49,21 +54,7 @@ It is not the primary production capture path.
 
 ## 3. Users and Roles
 
----
-
-## 3.1 Implementation Defaults
-
-The migration assumptions that were previously open are now locked:
-
-- Auth defaults to Supabase email OTP code entry for MVP.
-- Native iOS local state uses Application Support files plus SQLite metadata.
-- New uploads use owner-scoped storage paths.
-- `original` and `listing` photo variants are required for MVP.
-- `thumbnail` is strongly recommended and should be generated when feasible.
-- The browser/PWA camera remains fallback and diagnostic only.
-- The first native slice is iPhone-only and portrait-first.
-
-### 3.2 Photographer
+### 3.1 Photographer
 
 The person using the iPhone to capture item photos.
 
@@ -73,12 +64,13 @@ Needs:
 
 - open camera quickly
 - capture multiple photos per item
-- move to next item with almost no friction
-- optionally enter SKU, weight, dimensions, and notes
-- upload the batch
-- clear local phone files only after upload is verified
+- move to the next item with almost no friction
+- optionally enter lightweight item metadata
+- review/edit queued items before submit
+- submit work deliberately
+- clear local phone files only after upload is safely confirmed
 
-### 3.3 Lister
+### 3.2 Lister
 
 The person using desktop web to manually create eBay listings.
 
@@ -95,57 +87,112 @@ Needs:
 
 ---
 
-## 4. Current Repo State Considered
+## 4. Implementation Defaults
 
-The current repo already includes:
+The migration assumptions that were previously open are now locked:
 
-- React + Vite + TypeScript web app.
-- Supabase JS dependency.
-- Supabase client config gated by environment variables.
-- Phase 1 `WorkspaceScreen` that owns mobile and desktop shell state.
-- Browser camera adapter and camera lab/test tooling.
-- IndexedDB stores for local stores, batches, items, and photos.
-- Store/batch/item packet concepts.
-- Listing status: `new`, `listed`, `hold`, `needs_retake`.
-- Upload status and remote status concepts.
-- Photo variants: original, listing, thumbnail.
-- Supabase upload path for batch sync.
-- Remote cleanup and retention concepts.
-
-Known issues that must influence migration:
-
-- Remote cleanup must use `photo.remoteId` for Supabase rows, not local `photo.id`.
-- Local cleanup must preserve metadata rather than deleting whole records.
-- Retention modes are broader than their implemented timestamp semantics.
-- The desktop queue currently depends heavily on local IndexedDB state and must become remote-data-ready.
+- Auth defaults to Supabase email OTP code entry for MVP.
+- Native iPhone local state uses Application Support files plus SQLite metadata.
+- New uploads use owner-scoped storage paths.
+- `original` and `listing` photo variants are required for MVP.
+- `thumbnail` is strongly recommended and should be generated when feasible.
+- The browser/PWA camera remains fallback and diagnostic only.
+- The first native slice is iPhone-only and portrait-first.
+- Manual submit/upload is the MVP default.
 
 ---
 
-## 5. Product Workflow
+## 5. Mobile Product Role
 
-### 5.1 Capture Workflow
+The iPhone app is a capture + lightweight queue tool.
+
+It is not:
+
+- the final listing workspace
+- a full mobile desktop-equivalent dashboard
+- a form-heavy inventory system
+
+It should be built around:
+
+- stores
+- local capture workflows / queues
+- item packets
+- photos
+- optional item-level metadata
+- submit/upload state
+- desktop handoff
+
+### 5.1 Core Mobile Rules
+
+- The iPhone app should use a real local multi-item queue.
+- The camera should remain central during capture.
+- `Next` is the official item boundary.
+- The camera screen edits the currently active item packet.
+- Store is an item-level property, so one local queue may contain items for multiple stores.
+- Photos remain app-local until upload and retention decisions are made.
+- Photos should not be saved to the iPhone Camera Roll by default.
+- Submit is a deliberate action in MVP.
+
+### 5.2 Deferred Mobile Details
+
+These remain intentionally deferred:
+
+- exact camera screen layout
+- exact queue preview UI
+- exact store-switch UI
+- exact metadata fields
+- SKU automation behavior
+- exact `Done` behavior
+- exact photo cleanup timing
+- exact upload confirmation standard
+- exact backend batch mapping
+- whether reorder / move-between-items is MVP or later
+
+---
+
+## 6. Desktop Product Role
+
+The desktop web app owns:
+
+- review queue
+- item detail
+- listing workflow
+- status updates
+- retention visibility
+- cleanup controls
+- store/batch management
+
+This document intentionally does not expand the desktop workflow beyond what is needed to define the mobile handoff.
+
+---
+
+## 7. Product Workflow
+
+### 7.1 Mobile Capture Workflow
 
 ```txt
-Open iOS app
+Open iPhone app
 → sign in if needed
-→ choose active store/batch or use defaults
+→ choose or confirm capture context
 → open native camera
-→ capture photo(s) for current item
+→ capture photo(s) for current item packet
 → optionally edit details
-→ tap Next Item
+→ tap Next
+→ current item packet is saved into local queue
 → repeat
-→ tap Done or Upload Batch
-→ app uploads to Supabase
-→ local files remain until upload is verified
-→ local files become safe to clear
+→ review/edit queue if needed
+→ tap Submit
+→ app submits eligible unsubmitted item packets
+→ local files remain until upload is safely confirmed
+→ local files become safe to clean up later
 ```
 
-### 5.2 Desktop Listing Workflow
+### 7.2 Desktop Listing Workflow
 
 ```txt
 Open desktop web app
 → sign in with same account
-→ choose store/batch
+→ choose store/batch or current remote scope
 → view unlisted item queue
 → open item detail
 → view photos and metadata
@@ -157,17 +204,18 @@ Open desktop web app
 
 ---
 
-## 6. System Responsibilities
+## 8. System Responsibilities
 
-### 6.1 Native iOS App
+### 8.1 Native iPhone App
 
 Owns:
 
 - native camera capture
 - iPhone-local temporary files
 - fast item grouping
+- local queue persistence
 - item metadata capture
-- upload queue
+- submit/upload queue
 - upload verification state
 - local safe-to-clear state
 
@@ -179,7 +227,7 @@ Does not own:
 - team admin
 - permanent photo archiving
 
-### 6.2 Web Desktop App
+### 8.2 Web Desktop App
 
 Owns:
 
@@ -191,13 +239,7 @@ Owns:
 - cleanup controls
 - store/batch management
 
-Does not own:
-
-- production iPhone camera reliability
-- local iPhone file storage
-- native camera/lens control
-
-### 6.3 Supabase Backend
+### 8.3 Supabase Backend
 
 Owns:
 
@@ -211,35 +253,36 @@ Owns:
 
 ---
 
-## 7. MVP Scope
+## 9. MVP Scope
 
-### 7.1 iOS MVP
+### 9.1 iPhone MVP
 
 Must include:
 
 - same-account sign-in
-- store/batch selection or defaults
+- multi-store support
 - native camera preview
 - capture photo
-- add captured photo to current item
-- next item
-- done session
-- optional metadata: SKU, weight, dimensions, notes
-- foreground upload to Supabase
+- add captured photo to current item packet
+- `Next`
+- local queue persistence
+- optional metadata support
+- review/edit before submit
+- foreground submit/upload to Supabase
 - retry failed uploads
-- local file retention until verification
-- local cleanup after verification
+- local file retention until safety is confirmed
+- local cleanup option after confirmation
 
 Can defer:
 
 - background upload
 - barcode scanning
 - automatic SKU increment
-- multi-batch advanced management
 - native photo editor
 - App Store polish
+- exact queue presentation details
 
-### 7.2 Web MVP
+### 9.2 Web MVP
 
 Must include:
 
@@ -252,21 +295,12 @@ Must include:
 - manual remote cleanup action
 - clear distinction between local, remote, uploaded, verified, deleted
 
-Can defer:
-
-- real-time subscriptions
-- multi-user permissions
-- bulk edit workflows
-- advanced dashboards
-- eBay API sync
-
-### 7.3 Backend MVP
+### 9.3 Backend MVP
 
 Must include:
 
 - user-owned tables
 - private storage bucket
-- storage paths that can be tied to owner/user identity
 - item/photo status transitions
 - upload attempt tracking
 - remote ID contract
@@ -275,163 +309,16 @@ Must include:
 
 ---
 
-## 8. Canonical MVP Retention Policy
-
-Use one retention policy first:
-
-> Remote photos become eligible for manual deletion 7 days after the item is marked listed.
-
-Do not implement multiple automatic deletion policies until the simple listed-item policy is proven.
-
-Manual deletion should remain the first cleanup mechanism.
-
----
-
-## 9. Photo Storage Philosophy
+## 10. Photo Storage Philosophy
 
 Photos are temporary handoff assets, not permanent records.
 
 The system only needs photos long enough to:
 
 1. capture them safely
-2. upload them successfully
+2. keep them safe locally until submit/upload succeeds
 3. make them available to the lister
 4. allow the lister to complete the manual eBay listing
 5. confirm they are no longer needed
 
 Metadata and status should remain longer than image files.
-
----
-
-## 10. Data Model Summary
-
-Canonical domain objects:
-
-- `Store`
-- `Batch`
-- `Item`
-- `Photo`
-- `PhotoVariant`
-- `UploadJob` or upload-attempt state
-
-Canonical status concepts:
-
-- item capture status
-- listing status
-- photo local status
-- photo upload status
-- photo remote status
-- retention status
-
-Detailed field definitions live in `BACKEND_CONTRACT.md`.
-
----
-
-## 11. Local vs Remote Source of Truth
-
-### Native iOS local state
-
-Temporary and operational.
-
-Used for:
-
-- camera session
-- local files
-- upload retries
-- safe-to-clear tracking
-
-### Supabase remote state
-
-Shared source of truth.
-
-Used for:
-
-- desktop queue
-- item listing status
-- remote upload status
-- retention and cleanup state
-
-### Web local IndexedDB
-
-During migration, web IndexedDB may remain for legacy/capture fallback. Long-term desktop management must read remote Supabase data for items captured on iOS.
-
----
-
-## 12. Acceptance Criteria for First Real Native Slice
-
-The first native slice is accepted when this loop works:
-
-```txt
-iPhone native app signs in
-→ captures 3 items with multiple photos
-→ uploads them to Supabase
-→ desktop web app shows the same store/batch/items/photos
-→ lister marks one item listed
-→ retention date appears
-→ local iPhone files can be marked safe-to-clear
-→ remote cleanup is blocked until retention expires
-```
-
----
-
-## 13. Non-Goals
-
-Out of scope until the core handoff loop is proven:
-
-- eBay API listing creation
-- eBay status sync
-- pricing research
-- AI listing generation
-- public SaaS onboarding
-- subscriptions/billing
-- team accounts
-- separate photographer/lister permissions
-- permanent photo archive
-- full inventory management
-- accounting/bookkeeping
-- native Mac app
-- native iPad custom UI
-- complex offline conflict resolution
-
----
-
-## 14. Future Expansion Boundaries
-
-Future expansion is allowed only after MVP proof.
-
-Potential later features:
-
-- barcode/ISBN scan
-- SKU auto-increment
-- batch templates
-- retake requests from desktop to phone
-- limited team mode
-- scheduled cleanup automation
-- lightweight eBay API status sync
-
-These must not affect the MVP architecture unless they are cheap seams, not full implementations.
-
----
-
-## 15. Required Documentation Set
-
-This spec is supported by:
-
-- `ARCHITECTURE_DECISION_IOS.md`
-- `BACKEND_CONTRACT.md`
-- `IOS_CAPTURE_APP_SPEC.md`
-- `WEB_DESKTOP_APP_SPEC.md`
-- `MIGRATION_PLAN.md`
-
-Future code agents must read these before changing architecture.
-
----
-
-## 16. References
-
-- Apple AVFoundation: https://developer.apple.com/documentation/avfoundation
-- Apple `AVCapturePhotoOutput`: https://developer.apple.com/documentation/avfoundation/avcapturephotooutput
-- Supabase Swift reference: https://supabase.com/docs/reference/swift/introduction
-- Supabase native mobile deep linking: https://supabase.com/docs/guides/auth/native-mobile-deep-linking
-- Supabase Row Level Security: https://supabase.com/docs/guides/database/postgres/row-level-security
-- Supabase Storage access control: https://supabase.com/docs/guides/storage/security/access-control

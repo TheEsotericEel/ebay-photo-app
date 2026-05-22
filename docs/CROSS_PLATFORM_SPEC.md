@@ -33,7 +33,7 @@ The product will evolve into a **multi-platform application** with:
 |----------|-------------|----------------|--------|
 | **Shared Backend** | Data persistence, auth, storage, cleanup logic | API contracts for all platforms | Implemented (Supabase) |
 | **Webapp** | Desktop listing queue, admin surface | Mobile browser capture (fallback) | Partially implemented (Phase 1) |
-| **Native iOS App** | iOS capture surface, queue management | Desktop queue access (future) | Not started |
+| **Native iOS App** | iPhone capture surface, lightweight local queue, submit/handoff | None | In progress |
 | **Current PWA** | Historical reference, fallback path | None | Implemented (Phase 0-1) |
 
 ### 1.4 Working Assumptions
@@ -56,7 +56,7 @@ The product will evolve into a **multi-platform application** with:
 - Supabase Auth (magic-link login, single shared account)
 - Private storage bucket (photo-assets, 50MB limit, JPEG/PNG)
 - Retention/cleanup logic (delete after listing/completion window)
-- Upload/sync logic (batch sync, retry/resume, verification)
+- Upload/sync logic (manual submit/upload, retry/resume, verification)
 - RLS policies (authenticated users can manage all data)
 
 **Excluded**:
@@ -90,11 +90,12 @@ The product will evolve into a **multi-platform application** with:
 **Included**:
 - AVFoundation camera capture (rear camera, zoom, torch, focus)
 - SwiftUI capture surface (live preview, metadata overlay)
-- Core Data local storage (photos, items, batches)
+- local storage for photos and item-packet queue state
 - Supabase iOS SDK integration (auth, data, storage)
-- SwiftUI queue surface (store/batch/item views)
-- Upload/sync (batch sync, retry/resume, progress)
-- Basic offline support (local queue survives app close)
+- local multi-item capture queue
+- manual submit/upload of eligible unsubmitted item packets
+- during-session review/edit/retake capability before submit
+- basic offline support (local queue survives app close)
 
 **Excluded**:
 - Advanced camera controls (manual exposure, white balance)
@@ -243,7 +244,7 @@ The webapp is currently a PWA with:
 - `localPhotoStore.ts`: IndexedDbPhotoStore
 - `itemPacket.ts`: IndexedDbItemPacketStore
 - `workflowStore.ts`: IndexedDbWorkflowStore
-- `supabaseUpload.ts`: Batch sync to Supabase
+- `supabaseUpload.ts`: sync to Supabase
 - `remoteCleanup.ts`: Remote photo deletion
 - `retention.ts`: Retention window calculations
 
@@ -310,17 +311,44 @@ The webapp is currently a PWA with:
 - Language: Swift (assumption)
 - UI Framework: SwiftUI (assumption)
 - Camera: AVFoundation (AVCaptureDevice, AVCaptureSession, AVCapturePhotoOutput) (assumption)
-- Local Storage: Core Data or SQLite (assumption: Core Data preferred for native feel)
+- Local Storage: SQLite plus local filesystem storage (assumption)
 - Backend: Supabase iOS SDK (assumption)
 - Deployment: App Store / TestFlight (assumption)
 
 **Architecture Pattern** (assumption: MVVM):
-- Model: Core Data entities, Supabase data models
-- View: SwiftUI views (capture surface, queue surface)
+- Model: local queue entities plus Supabase data models
+- View: SwiftUI views for capture, queue review, and submit status
 - ViewModel: Business logic, camera coordination, sync coordination
-- Repository: Data access layer (Core Data + Supabase)
 
-### 6.2 iOS Camera Implementation
+### 6.2 Current iPhone Workflow Direction
+
+The current iPhone workflow should align to these product rules:
+
+- The iPhone app is a capture + lightweight queue tool.
+- It is not the final listing workspace.
+- It should use a real local multi-item capture queue.
+- The camera screen edits the currently active item packet.
+- `Next` is the official item boundary.
+- `Submit` is the explicit MVP handoff/upload action.
+- Store is an item-level property, so one queue may contain items from multiple stores.
+- Photos remain app-local until upload and retention decisions are made.
+- Photos should not be saved to the iPhone Camera Roll by default.
+
+### 6.3 Intentionally Deferred Mobile Details
+
+The following remain intentionally deferred and should stay unlocked in planning and implementation:
+
+- exact camera screen layout
+- exact queue review UI
+- exact store-switch UI
+- exact metadata fields
+- exact `Done` behavior
+- exact photo cleanup timing
+- exact upload confirmation standard
+- exact backend batch mapping
+- whether reorder or move-between-items is MVP or later
+
+### 6.4 iOS Camera Implementation
 
 **AVFoundation Setup** (assumption):
 - `AVCaptureSession`: Manages camera input/output
@@ -347,19 +375,18 @@ The webapp is currently a PWA with:
 - RAW capture
 - ProRes video
 
-### 6.3 iOS Local Storage
+### 6.5 iOS Local Storage
 
-**Core Data Model** (assumption):
-- Store entity (matches Supabase stores table)
-- Batch entity (matches Supabase batches table)
-- Item entity (matches Supabase items table)
-- Photo entity (matches Supabase photos table)
-- PhotoVariant entity (matches Supabase photo_variants table)
-- UploadJob entity (matches Supabase upload_jobs table)
+**Local Queue Model** (assumption):
+- Capture workflow / queue entity
+- Item packet entity
+- Photo entity
+- Submit/upload state
+- Remote linkage fields for stores, batches, items, and photos once they exist
 
-**Sync Strategy** (assumption: batch sync, not real-time):
-- Local Core Data is source of truth for pending data
-- Batch sync to Supabase on user action or app foreground
+**Sync Strategy** (assumption: deliberate submit plus light polling, not real-time):
+- Local queue storage is source of truth for pending data
+- Submit/upload to Supabase on explicit user action
 - Retry failed uploads on app foreground
 - Pull remote changes on app foreground
 
@@ -374,28 +401,26 @@ The webapp is currently a PWA with:
 - Conflict resolution
 - Offline-first mode
 
-### 6.4 iOS UI Structure
+### 6.6 iOS UI Structure
 
 **Capture Surface** (SwiftUI):
 - Live camera preview (AVCaptureVideoPreviewLayer wrapped in UIViewRepresentable)
-- Metadata overlay (item number, photo count, notes/SKU/weight)
+- Metadata overlay (item position, photo count, lightweight metadata)
 - Capture button
-- Done/Next button
+- `Next` action
 - Camera controls (zoom, torch, camera switch)
 - Diagnostics panel (optional)
 
-**Queue Surface** (SwiftUI):
-- Store selector
-- Batch list with status
-- Unlisted queue prioritized
+**Queue Review Surface** (SwiftUI):
 - Item cards with thumbnails
-- Item detail view
+- Item detail/review view
 - Ordered photo grid
-- Status controls (listed, hold, needs retake, new)
-- Upload progress
-- Photo availability state
+- lightweight metadata preview
+- delete bad photos
+- retake/add photos for a specific item
+- submit state visibility
 
-### 6.5 iOS Auth Integration
+### 6.7 iOS Auth Integration
 
 **Supabase Auth iOS SDK** (assumption):
 - Magic-link login (email input, open mail app, deep link back to app)
@@ -407,7 +432,7 @@ The webapp is currently a PWA with:
 - Custom token exchange via REST API
 - OAuth providers (Google, Apple)
 
-### 6.6 iOS Network Layer
+### 6.8 iOS Network Layer
 
 **Supabase iOS SDK** (assumption):
 - Direct Supabase client usage
@@ -419,7 +444,7 @@ The webapp is currently a PWA with:
 - Custom REST endpoints if needed for rate limiting or custom logic
 - Alamofire or URLSession for HTTP requests
 
-### 6.7 iOS Deployment
+### 6.9 iOS Deployment
 
 **App Store** (assumption):
 - App Store Connect account
@@ -439,14 +464,14 @@ The webapp is currently a PWA with:
 
 **Current (Webapp)**:
 - Foreground upload only (while app is open)
-- Batch sync on user action
+- legacy sync on user action
 - Retry on app reopen
 - Progress visible to user
 - User instructed to keep app open during upload
 
 **iOS App (assumption)**:
 - Foreground upload only (MVP)
-- Batch sync on user action or app foreground
+- Submit/upload on explicit user action
 - Retry on app foreground
 - Progress visible to user
 - Background sync (deferred)
@@ -455,14 +480,14 @@ The webapp is currently a PWA with:
 
 **Current (Webapp)**:
 - No real-time sync
-- Manual batch sync
+- Manual sync
 - Desktop queue reads from Supabase directly
 - Local IndexedDB is for pending photos only
 
 **iOS App (assumption)**:
 - No real-time sync (MVP)
-- Batch sync on user action or app foreground
-- Core Data is source of truth for pending data
+- Submit/upload on user action
+- Local queue storage is source of truth for pending data
 - Supabase is source of truth for uploaded data
 - Pull remote changes on app foreground
 
@@ -480,7 +505,7 @@ The webapp is currently a PWA with:
 - No conflict resolution
 
 **iOS App (MVP)**:
-- Core Data for local pending data
+- local queue storage for pending data
 - No upload while offline
 - Upload resumes when network available
 - No conflict resolution (last write wins)
@@ -695,7 +720,7 @@ The webapp is currently a PWA with:
 
 **Sync Conflicts**
 - Risk: Real-time sync between iOS and webapp may cause conflicts
-- Mitigation: Start with batch sync, defer real-time sync, implement conflict resolution later
+- Mitigation: Start with deliberate submit plus lightweight polling, defer real-time sync, implement conflict resolution later
 
 **Auth Complexity**
 - Risk: Supabase Auth iOS SDK may have different behavior than web SDK

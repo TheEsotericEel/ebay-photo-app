@@ -1,5 +1,7 @@
 # eBay Photo Handoff Camera App — Official Project Specification
 
+> Historical note: this document captures the earlier PWA-first product definition. For the current native iPhone workflow direction, use the newer docs under `docs/`, especially the cross-platform, backend-contract, and iOS-specific migration docs.
+
 **Status:** Source-of-truth planning document  
 **Intended location:** Repository documentation, e.g. `docs/PROJECT_SPEC.md`  
 **Audience:** AI IDE, developer, reviewer, future maintainer  

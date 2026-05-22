@@ -1,6 +1,6 @@
 # Native iOS Scaffold
 
-This folder is the first native iOS build starting point for the eBay Photo App migration.
+This folder contains the native iPhone app for the eBay Photo App workflow.
 
 ## What is here
 
@@ -10,6 +10,21 @@ This folder is the first native iOS build starting point for the eBay Photo App 
 - Supabase service stub
 - Camera preview wrapper
 - Native Info.plist template
+
+## Current product role
+
+The iPhone app is a capture + lightweight queue tool.
+
+It is intended to:
+
+- capture photos quickly
+- keep the camera central during capture
+- build a local multi-item queue
+- keep each item packet associated with a store
+- preserve local photos until upload is safely confirmed
+- hand work off to desktop through an explicit submit/upload step
+
+It is not intended to become the final listing workspace.
 
 ## What you need on your Mac
 
@@ -22,9 +37,13 @@ You will need:
 If Xcode is not installed yet, install it from the Mac App Store before opening this folder.
 If Xcode says no destinations are available, install the iOS 26.5 Simulator runtime from `Xcode > Settings > Components`.
 
-## What I built here
+## Working mobile workflow direction
 
-The source files under `ios/EbayPhotoApp/` are ready to drop into a new Xcode iOS app target.
+- The camera screen edits the currently active item packet.
+- `Next` is the item boundary and should save the current item into the local queue, then start the next item.
+- The queue may contain items from multiple stores.
+- `Submit` is a deliberate action and should send only eligible unsubmitted items.
+- Exact `Done` behavior, queue review UI, and backend batch mapping are still intentionally deferred.
 
 ## Your next steps
 

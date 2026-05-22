@@ -1,17 +1,17 @@
 # eBay Photo App
 
-PWA-first eBay photo app for mobile capture and desktop management.
+Cross-platform eBay photo workflow with a native iPhone capture app, a desktop listing site, and a shared Supabase backend.
 
 ## Current state
 
-- Phase 0 camera spike is implemented
-- The app is split into a mobile capture surface and a desktop management shell with fixed Capture, Queue, and Tools panels
-- Supabase project is linked and seeded
-- The workspace includes Supabase session bootstrap and a batch upload path for one shared account
-- The workspace includes a desktop store/batch/item queue with item detail and manual checkoff for the same shared account
-- The workspace shows photo retention dates and supports remote cleanup for listed items
-- The desktop shell now uses a compact workspace status strip plus lifecycle chips instead of repeating upload/cleanup summaries in multiple panels
-- The mobile shell now uses the same compact status language on the home and camera screens without adding scroll
+- The repo contains both the desktop site and the native iPhone app.
+- The desktop site is the listing and workspace management surface.
+- The iPhone app is being aligned to a capture-first, lightweight local queue workflow.
+- Supabase is linked and seeded for shared auth, remote records, and storage.
+- The workspace includes desktop store/batch/item queue functionality, item detail, and manual checkoff for one shared account.
+- The workspace shows photo retention dates and supports remote cleanup for listed items.
+- The desktop shell uses a compact workspace status strip plus lifecycle chips instead of repeating upload/cleanup summaries in multiple panels.
+- The mobile shell is moving toward a local multi-item capture queue that hands work off to desktop through explicit submit/upload.
 
 ## Local development
 
@@ -66,11 +66,21 @@ See:
 - [`docs/SUPABASE_SETUP.md`](/Users/joe/Projects/ebay-photo-app/docs/SUPABASE_SETUP.md)
 - [`.env.example`](/Users/joe/Projects/ebay-photo-app/.env.example)
 
-The app uses Supabase Auth magic-link login and syncs captured item packets into the remote `stores`, `batches`, `items`, `photos`, and `photo_variants` tables.
+The app uses Supabase Auth and syncs item/photo handoff data into the remote `stores`, `batches`, `items`, `photos`, and `photo_variants` tables.
 The same account is intended for both phone capture and desktop management.
-On mobile, the app opens on a capture home screen with a single `Open Camera` action.
-The camera mounts only after the user chooses to open it, and the browser remembers an accepted camera permission so later visits can resume faster.
-On desktop, the app opens to a queue-first management layout and can scroll naturally where needed.
-The app also remembers the last desktop tab and the selected store/batch in the browser.
-The mobile capture flow keeps the live preview visible while SKU, weight, and dimensions are edited in an overlay.
-`Next` advances to the next item in the same capture session, while `Done` ends capture for now without adding the final submit step yet.
+
+### Current mobile direction
+
+- `mobile` means the native iPhone app.
+- The iPhone app is a capture + lightweight queue tool, not the final listing workspace.
+- The iPhone app should keep a real local multi-item capture queue.
+- `Next` is the official item boundary.
+- `Submit` is the deliberate MVP handoff/upload action.
+- Store assignment is an item-level property, so one local queue may contain items for multiple stores.
+- Photos stay app-local until upload/retention decisions are made and should not be saved to the iPhone Camera Roll by default.
+
+### Current desktop direction
+
+- `desktop` means the site / desktop app / PC web app.
+- The desktop site remains the review, listing, status, and cleanup surface.
+- Backend `batches` still exist as shared remote records, but the exact mapping between the iPhone local queue and backend batches remains intentionally deferred.

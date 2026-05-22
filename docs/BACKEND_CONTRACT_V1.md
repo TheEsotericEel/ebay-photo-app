@@ -1,4 +1,4 @@
-# Backend Contract V1: Native iOS Upload + Desktop Import
+# Backend Contract V1: Native iOS Submit + Desktop Import
 
 Last updated: 05/20/2026
 
@@ -14,7 +14,7 @@ This is a contract/spec document only. It does not change code or schema.
 
 ## Core decisions
 
-- Native iOS is the primary capture/uploader.
+- Native iOS is the primary capture/submit client.
 - Desktop web remains local IndexedDB-driven for queue/listing/checkoff.
 - Desktop should **import remote rows into local IndexedDB** (bridge), not rewrite queue UI to remote-first in V1.
 - Required image variants for MVP: **`listing` + `thumbnail`**.
@@ -28,12 +28,18 @@ This is a contract/spec document only. It does not change code or schema.
 - Native should write **`uploaded`** status unless it performs true verification.
 - Retention fields stay `null` until item is listed.
 
+Important terminology note:
+
+- On the iPhone app, the user-facing concept is a local capture workflow / queue made of item packets.
+- The exact mapping from that local queue to backend `batches` remains intentionally deferred.
+- This document only defines the minimum remote shape once an item packet is submitted.
+
 ---
 
-## 1) NativeUploadItemPacketV1 shape
+## 1) NativeSubmitItemPacketV1 shape
 
 ```ts
-type NativeUploadItemPacketV1 = {
+type NativeSubmitItemPacketV1 = {
   store: {
     shortCode: string
     name: string
@@ -75,12 +81,13 @@ Notes:
 
 - `photos` must be in stable item order (`orderIndex` ascending).
 - `listedAt` is optional in V1; normal capture flow should leave item as `new`.
+- Each item packet may belong to a different store than the previous item in the same local mobile queue.
 
 ---
 
 ## 2) Required table inserts/updates
 
-For one item packet upload:
+For one submitted item packet:
 
 1. Resolve/create `stores` by `short_code`.
 2. Resolve/create `batches` by `(store_id, name)`.
@@ -248,5 +255,4 @@ Defer in V1:
 
 ## V1 success definition
 
-V1 is successful when a native-captured item packet uploads to Supabase and appears in desktop queue/checkoff after import, with correct ordering, thumbnail/listing variants, and compatible statuses/cleanup fields.
-
+V1 is successful when a native-captured item packet is submitted to Supabase and appears in desktop queue/checkoff after import, with correct ordering, thumbnail/listing variants, and compatible statuses/cleanup fields.

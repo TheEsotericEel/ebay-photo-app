@@ -2,25 +2,24 @@
 
 **Project:** eBay Photo App  
 **Status:** Accepted planning decision  
-**Date:** 2026-05-19  
-**Decision owner:** Joe / The Esoteric Eel  
-**Repo audit basis:** `TheEsotericEel/ebay-photo-app`, `main`, merge commit `676f06dc5e78ee3c9fbbde2f9481bda9e62510b5`  
+**Date:** 2026-05-21  
+**Decision owner:** Joe / The Esoteric Eel
 
 ---
 
 ## 1. Decision
 
-The project will move from a PWA-first camera workflow to a split-client architecture:
+The project will use a split-client architecture:
 
-> **Native iOS app for reliable item/photo capture + web app for desktop listing management + shared Supabase backend.**
+> **Native iPhone app for reliable capture and local queue workflow + web app for desktop listing management + shared Supabase backend.**
 
-The current React/Vite app remains valuable, but its long-term production role becomes the desktop management queue. Browser/PWA capture can remain as a fallback, diagnostic tool, or development path, but it is no longer the primary production iPhone capture strategy.
+The current React/Vite app remains valuable, but its long-term production role is the desktop management queue. Browser/PWA capture can remain as a fallback, diagnostic tool, or development path, but it is no longer the primary production iPhone capture strategy.
 
 ---
 
 ## 2. Reason for the Decision
 
-The product depends on fast, repeated, reliable iPhone photo capture. The current PWA/Safari camera path has shown enough inconsistency that continuing to tune browser camera behavior risks wasting time on the weakest layer of the workflow.
+The product depends on fast, repeated, reliable iPhone photo capture. The browser camera path has shown enough inconsistency that continuing to tune Safari/PWA behavior is the wrong leverage point.
 
 The repo already contains substantial useful work outside the camera problem:
 
@@ -34,20 +33,18 @@ The repo already contains substantial useful work outside the camera problem:
 - desktop/mobile shell split
 - queue-oriented management concepts
 
-The failure point is not the whole application. The failure point is relying on mobile browser camera APIs for the core capture experience.
-
-A native iOS capture app directly addresses that risk while preserving the existing web/Supabase work.
+The right move is to replace the unreliable mobile camera surface while preserving the desktop management experience and shared backend model.
 
 ---
 
 ## 3. System Shape After the Decision
 
 ```txt
-Native iOS Capture App
+Native iPhone Capture App
   - fast native camera workflow
-  - local temporary file storage
+  - local multi-item queue
   - item packet creation
-  - foreground upload to Supabase
+  - foreground submit/upload to Supabase
   - local safe-to-clear state
 
 Web Desktop Management App
@@ -67,61 +64,32 @@ Shared Supabase Backend
 
 ---
 
-## 4. Why Not a Full Rewrite
+## 4. Mobile-Specific Product Interpretation
 
-A full rewrite would increase scope without fixing the real problem proportionally.
+The iPhone app is a capture + lightweight queue tool.
 
-The web app already provides a useful management surface. Rebuilding that in Swift would add work that does not improve the capture bottleneck. The right migration is to replace the unreliable mobile camera surface while preserving the desktop management experience and shared backend model.
+That means:
 
----
+- the camera remains central during capture
+- the local queue is real and durable
+- `Next` is the item boundary
+- `Submit` is the deliberate MVP handoff action
+- the queue may contain items for multiple stores
+- the exact backend mapping from local queue to remote `batches` remains deferred
 
-## 5. Why Not Capacitor-Only
-
-A Capacitor wrapper around the current web app would reduce deployment friction, but it would still rely heavily on webview behavior unless the camera layer is replaced with a native camera plugin or custom native camera screen.
-
-The project can still use Capacitor as an intermediate bridge if desired, but the strategic decision is native capture, not webview capture.
-
-Recommended default:
-
-- Do not start with a plain wrapper as the final plan.
-- Use either a focused native Swift app or a native camera surface that writes to the same Supabase contract.
-- Prefer pure Swift/SwiftUI + AVFoundation if camera reliability is the core reason for migration.
+The iPhone app should not become the final listing workspace.
 
 ---
 
-## 6. Long-Term Direction
-
-The long-term architecture should support:
-
-- reliable iPhone capture
-- desktop listing workflow
-- one shared backend contract
-- temporary photo handoff storage
-- future expansion if useful
-
-It should not prematurely support:
-
-- team permissions
-- multiple account roles
-- eBay API integration
-- SaaS billing
-- native desktop app
-- AI listing generation
-- permanent archive/inventory system
-
-The architecture should be durable at the seams without overbuilding the product.
-
----
-
-## 7. Scope Boundaries
+## 5. Scope Boundaries
 
 ### In Scope Now
 
-- Native iOS capture client.
+- Native iPhone capture client.
 - Existing web app as desktop management client.
 - Supabase as source of truth for shared state.
 - One shared account for MVP.
-- Foreground/manual upload first.
+- Foreground/manual submit/upload first.
 - Manual remote cleanup first.
 - Temporary remote photo retention.
 
@@ -139,23 +107,15 @@ The architecture should be durable at the seams without overbuilding the product
 
 ---
 
-## 8. Required Pre-Migration Fixes
+## 6. Required Pre-Migration Fixes
 
-Before native iOS starts writing production data, the existing lifecycle contract must be corrected.
+Before native iPhone starts writing production data, the lifecycle contract must be safe.
 
-### 8.1 Remote Cleanup ID Mapping
+### 6.1 Remote Cleanup ID Mapping
 
-Current upload flow creates and uses a remote photo ID. Local `photo.id` and remote `photo.remoteId` can differ. Cleanup must use the remote ID for Supabase `photos` and `photo_variants`, while using local ID only for local IndexedDB updates.
+Cleanup must use the remote photo ID for Supabase `photos` and `photo_variants`, while using local ID only for local state updates.
 
-Required invariant:
-
-```txt
-Supabase photos.id == StoredPhoto.remoteId
-Supabase photo_variants.photo_id == StoredPhoto.remoteId
-Local IndexedDB photo key == StoredPhoto.id
-```
-
-### 8.2 Local Cleanup Must Preserve Metadata
+### 6.2 Local Cleanup Must Preserve Metadata
 
 Local cleanup must not delete entire photo records if those records are still needed for desktop visibility, upload state, remote cleanup, or auditability.
 
@@ -169,67 +129,19 @@ preserve upload/remote status
 set localStatus = cleared
 ```
 
-### 8.3 Retention Policy Must Be Simplified
+### 6.3 Retention Policy Must Stay Simple
 
-The MVP retention policy should be exactly:
+The MVP retention policy should remain:
 
 > Remote photos become eligible for manual deletion 7 days after the item is marked listed.
 
-Other retention modes can remain deferred until their timestamp basis is implemented.
-
 ---
 
-## 9. Consequences
-
-### Positive
-
-- Native iOS can use stable platform camera APIs.
-- Existing web work is preserved.
-- Supabase remains the shared integration point.
-- Migration can happen in slices.
-- Desktop management does not need to wait for native polish.
-
-### Negative / Cost
-
-- A second client must be maintained.
-- Shared backend contract must be stricter.
-- Auth/deep-link handling must be implemented for native iOS.
-- Image variant generation must be implemented outside the current browser canvas pipeline.
-- The web app must become remote-data-ready for items captured from iOS.
-
----
-
-## 10. Accepted Implementation Strategy
+## 7. Accepted Implementation Strategy
 
 1. Freeze this decision in the repo.
 2. Fix lifecycle bugs in the current web/Supabase implementation.
 3. Define and enforce the backend contract.
 4. Convert the web app toward remote desktop management.
-5. Build the smallest useful native iOS capture app.
-6. Prove the full loop: native capture -> Supabase -> desktop queue -> listing status -> retention/cleanup.
-
----
-
-## 12. Implementation Decisions Now Locked
-
-The remaining gap decisions have been resolved in `IMPLEMENTATION_DECISIONS.md`:
-
-- Supabase email OTP is the default auth flow for MVP.
-- Native iOS local state uses Application Support files plus SQLite metadata.
-- New uploads use owner-scoped storage paths.
-- `original` and `listing` variants are required; `thumbnail` is best-effort.
-- Browser/PWA camera remains fallback/diagnostic only.
-
-These defaults are part of the accepted migration shape and should not be reopened unless the product direction changes.
-
----
-
-## 13. References
-
-- Apple AVFoundation documentation: https://developer.apple.com/documentation/avfoundation
-- Apple `AVCapturePhotoOutput`: https://developer.apple.com/documentation/avfoundation/avcapturephotooutput
-- Apple `NSCameraUsageDescription`: https://developer.apple.com/documentation/bundleresources/information-property-list/nscamerausagedescription
-- Supabase Swift reference: https://supabase.com/docs/reference/swift/introduction
-- Supabase native mobile deep linking: https://supabase.com/docs/guides/auth/native-mobile-deep-linking
-- Supabase Row Level Security: https://supabase.com/docs/guides/database/postgres/row-level-security
-- Supabase Storage access control: https://supabase.com/docs/guides/storage/security/access-control
+5. Build the smallest useful native iPhone capture app.
+6. Prove the full loop: native capture -> local queue -> submit/upload -> Supabase -> desktop queue -> listing status -> retention/cleanup.

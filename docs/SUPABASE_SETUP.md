@@ -38,9 +38,15 @@ VITE_SUPABASE_ANON_KEY=your_anon_key
 
 - The workspace uses Supabase Auth magic-link login.
 - The same account is used on the phone and desktop for now.
-- Sign in with an email address in the app, then use `Sync Batch` to push the current store/batch/items/photos into Supabase.
+- On mobile, sign in with an email address in the app, then use the deliberate submit/upload action to push eligible unsubmitted item packets into Supabase.
+- On desktop, Supabase acts as the shared remote workspace backend for stores, batches, items, and photos.
 - The app writes uploaded assets into the private `photo-assets` bucket and records photo variants in `public.photo_variants`.
 - Listed items now surface photo retention dates and can trigger remote cleanup once their retention window has expired.
+
+Terminology note:
+
+- Backend `batches` are still part of the shared remote schema.
+- The exact mapping between the iPhone local queue/workflow and backend batches is intentionally deferred.
 
 ## Notes
 

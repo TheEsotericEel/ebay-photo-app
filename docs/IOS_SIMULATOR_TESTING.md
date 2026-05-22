@@ -48,6 +48,12 @@ Behavior:
 - calls the same `SupabaseService.uploadItemPacket(_:)` path as normal capture uploads
 - requires a real authenticated session unless development auth bypass is explicitly enabled
 
+This is only a simulator test path. It does not change the intended mobile product model:
+
+- the iPhone app should still be treated as a local multi-item queue
+- `Submit` is still the intended deliberate handoff action
+- exact batch mapping remains deferred
+
 This lets you validate auth + upload + storage + DB behavior in simulator without relying on physical camera capture.
 
 ## Auth rate limits (`429 over_email_send_rate_limit`)

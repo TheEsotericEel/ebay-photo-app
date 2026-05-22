@@ -1,27 +1,27 @@
 # First Native Build Handoff
 
-**Status:** implementation handoff for the first native iOS build  
-**Date:** 2026-05-19  
+**Status:** implementation handoff for the current native iOS build direction  
+**Date:** 2026-05-21  
 **Purpose:** provide one compact starting point for building the first useful native iOS capture client from the migration docs.
 
 ## 1. Product Goal
 
-Build the smallest native iPhone app that proves the end-to-end handoff:
+Build the smallest native iPhone app that proves this end-to-end handoff:
 
 ```txt
 iPhone native capture
-→ local persistence
-→ Supabase upload
+→ local queue persistence
+→ explicit submit/upload to Supabase
 → desktop web visibility
 → manual listing
 → retention / cleanup state
 ```
 
-The native app is the production capture client. The web app becomes the desktop queue and review client.
+The native app is the production capture client. The web app remains the desktop queue and review client.
 
 ## 2. Locked Decisions
 
-These assumptions are fixed for the first native build:
+These assumptions are fixed for the current native build direction:
 
 - Auth uses Supabase email OTP code entry.
 - Native local files live in Application Support.
@@ -31,7 +31,11 @@ These assumptions are fixed for the first native build:
 - `thumbnail` is best-effort and may be missing.
 - Browser/PWA capture remains fallback and diagnostic only.
 - The build is iPhone-only and portrait-first.
-- The first slice uses one account, one active store, and one active batch at a time.
+- The iPhone app uses a real local multi-item queue.
+- `Next` is the official item boundary.
+- Submit/upload is deliberate in MVP.
+- Store is an item-level property, so one local queue may contain items for multiple stores.
+- Exact `Done` behavior and exact backend batch mapping remain deferred.
 
 ## 3. Non-Goals
 
@@ -46,22 +50,24 @@ Do not build these in the first native slice:
 - desktop rewrite in Swift
 - advanced editing or pro camera controls
 - full offline conflict resolution
+- final desktop workflow expansion
 
 ## 4. Native App Responsibilities
 
 The native iOS app owns:
 
 - sign in
-- active store / batch selection
+- capture context editing
 - live camera preview
 - lens switching
 - capture
-- item grouping
+- item packet creation
+- local multi-item queue
 - optional item metadata
 - local file persistence
-- upload queue
-- upload retry
-- local cleanup after upload verification
+- submit/upload queue
+- submit/upload retry
+- local cleanup after upload safety is confirmed
 - reporting upload / cleanup state to Supabase
 
 The native app does not own:
@@ -69,6 +75,7 @@ The native app does not own:
 - desktop queue browsing
 - manual eBay listing creation
 - remote cleanup policy decisions
+- final listing workspace behavior
 - browser fallback capture
 
 ## 5. Web Desktop Responsibilities
@@ -84,6 +91,8 @@ The web app owns:
 - manual remote cleanup
 - fallback browser capture only as a secondary path
 
+Desktop-specific behavior should not be expanded here unless it directly affects the mobile handoff.
+
 ## 6. Shared Backend Contract
 
 The shared backend contract is defined in `BACKEND_CONTRACT.md`. The essential rules are:
@@ -94,7 +103,7 @@ The shared backend contract is defined in `BACKEND_CONTRACT.md`. The essential r
 - local cleanup preserves metadata and remote IDs
 - storage is private
 - image access for desktop review uses signed URLs or authenticated downloads
-- retention is `delete_7d_after_listed`
+- backend `batches` remain shared remote records, but the exact mobile queue-to-batch mapping stays deferred
 
 ## 7. First Native Screen Set
 
@@ -107,11 +116,10 @@ The shared backend contract is defined in `BACKEND_CONTRACT.md`. The essential r
 
 ### 7.2 Capture Home
 
-- current store
-- current batch
-- status summary
+- current capture context summary
+- local queue/workflow status
 - open camera
-- upload batch
+- submit/upload action
 - safe-to-clear state
 
 ### 7.3 Camera Session
@@ -119,10 +127,9 @@ The shared backend contract is defined in `BACKEND_CONTRACT.md`. The essential r
 Required:
 
 - back
-- current item number
+- current item number or position
 - capture
-- next item
-- done
+- `Next`
 - details overlay
 - current photo count
 
@@ -140,20 +147,21 @@ Camera behavior:
 - stable preview
 - capture must stay fast and reliable
 
-### 7.4 Local Batch Review
+### 7.4 Local Queue Review
 
-- list items in current batch
+- inspect previous items
 - show photo counts
-- show item status
-- allow safe local file cleanup after verification
+- edit item metadata
+- delete bad photos
+- add/retake photos for a specific queued item
 
-### 7.5 Upload Status
+### 7.5 Submit Status
 
-- upload stage
+- submit/upload stage
 - per-item progress
 - per-photo progress
 - retry failed uploads
-- clear verified / safe-to-clear distinction
+- clear submitted / verified / safe-to-clear distinction
 
 ## 8. Capture Flow
 
@@ -162,14 +170,14 @@ The required loop is:
 ```txt
 open app
 → sign in
-→ choose default store/batch
+→ choose or confirm capture context
 → open camera
 → capture photo(s)
-→ next item
+→ Next
 → repeat
-→ done
-→ upload batch
-→ verify upload
+→ review queue if needed
+→ Submit
+→ verify upload safety
 → allow local cleanup
 → desktop sees the same data
 ```
@@ -178,18 +186,18 @@ Metadata must never block capture.
 
 ## 9. Local Storage Rules
 
-- photo files live locally until upload verification
+- photo files live locally until upload safety is confirmed
 - metadata must survive local cleanup
 - remote IDs must be preserved locally
 - local cleanup removes blobs/files only
-- local cleanup marks `localStatus = cleared`
+- local cleanup marks local file state accordingly
 
 Recommended local shape:
 
 ```txt
 Application Support/
-  batches/
-    {local_batch_id}/
+  capture_workflows/
+    {local_workflow_id}/
       items/
         {local_item_id}/
           photos/
@@ -201,26 +209,12 @@ Application Support/
 
 ## 10. Upload Rules
 
-Upload order:
-
-1. ensure store exists remotely
-2. ensure batch exists remotely
-3. upsert item
-4. upsert photo
-5. upload `original`
-6. upload `listing`
-7. upload `thumbnail` when available
-8. upsert variant rows
-9. mark photo verified
-10. update item aggregate state
-11. update batch aggregate state
-12. mark local files safe to clear
-
-Retry rules:
+Upload rules:
 
 - reuse remote IDs when they already exist
 - do not duplicate items or variants
-- do not clear local files before verification
+- do not clear local files before upload safety is confirmed
+- later submit actions send only new or still-unsubmitted work
 
 ## 11. Desktop Contract
 
@@ -244,29 +238,11 @@ The first native build is successful when:
 2. the user can open the native camera
 3. the user can capture at least 3 items with multiple photos
 4. the user can add optional metadata
-5. the user can upload the batch
-6. failed upload can retry
-7. the desktop web app can see the uploaded items
-8. local files are not clearable before verification
-9. local files are clearable after verification without losing metadata
-10. the app can close and reopen without losing an unuploaded batch
-
-## 13. Recommended Build Order
-
-1. confirm backend contract and schema
-2. make desktop read remote data
-3. build native auth
-4. build native camera + item session
-5. build local persistence
-6. build upload and verification
-7. prove desktop visibility
-8. then expand UI polish and secondary controls
-
-## 14. Important References
-
-- `ARCHITECTURE_DECISION_IOS.md`
-- `IMPLEMENTATION_DECISIONS.md`
-- `BACKEND_CONTRACT.md`
-- `IOS_CAPTURE_APP_SPEC.md`
-- `WEB_DESKTOP_APP_SPEC.md`
-- `MIGRATION_PLAN.md`
+5. `Next` consistently saves an item into the queue and starts the next item
+6. the user can review/edit queued items before submit
+7. the user can submit eligible unsubmitted work
+8. failed upload can retry
+9. the desktop web app can see the submitted items
+10. local files are not clearable before upload safety is confirmed
+11. local files are clearable after confirmation without losing metadata
+12. the app can close and reopen without losing an unsubmitted local queue

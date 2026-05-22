@@ -2,8 +2,8 @@
 
 **Project:** eBay Photo App  
 **Client:** native iOS capture app  
-**Status:** implementation spec for first native migration slice  
-**Primary responsibility:** reliable iPhone item/photo capture and upload to Supabase  
+**Status:** implementation spec for the current native direction  
+**Primary responsibility:** reliable iPhone item/photo capture, local queue management, and desktop handoff via explicit submit  
 
 ---
 
@@ -11,16 +11,19 @@
 
 The native iOS app exists to replace unreliable Safari/PWA camera capture with a reliable, fast, native iPhone workflow.
 
-It is not a full replacement for the web app. It is a capture client.
+It is not a full replacement for the desktop app. It is a capture + lightweight queue client.
 
-The iOS app should do the smallest set of native things that materially improve the workflow:
+The iPhone app should do the smallest set of native things that materially improve the workflow:
 
 - reliable camera preview
 - high-quality still capture
 - fast repeated item grouping
+- real local multi-item queue
 - local temporary file storage
-- foreground upload to Supabase
-- safe local cleanup after verification
+- foreground submit/upload to Supabase
+- safe local retention until upload safety conditions are met
+
+The iPhone app should not become the final listing workspace.
 
 ---
 
@@ -37,15 +40,16 @@ Recommended default:
 
 ## 2.1 Locked MVP Defaults
 
-The implementation choices for the first native slice are fixed as follows:
+The implementation choices for the current native slice are fixed as follows:
 
 - Auth uses Supabase email OTP code entry by default.
 - Local image files live in Application Support.
 - Local metadata/state lives in SQLite.
 - New uploads use the owner-scoped storage path from `BACKEND_CONTRACT.md`.
 - `original` and `listing` variants are required.
-- `thumbnail` should be generated when feasible, but missing thumbnails must not block upload.
+- `thumbnail` should be generated when feasible, but missing thumbnails must not block submit/upload.
 - Browser/PWA capture remains fallback or diagnostic only, not primary production capture.
+- Submit/upload is a deliberate user action in MVP.
 
 Do not use a webview as the main capture surface if the purpose of migration is to escape Safari/PWA camera inconsistencies.
 
@@ -60,7 +64,8 @@ Do not use a webview as the main capture surface if the purpose of migration is 
 - quick repeated capture
 - capture button always easy to reach
 - preview stable enough for product photos
-- app must retain photos locally until remote upload is verified
+- app must retain photos locally until remote upload safety is confirmed
+- camera-first flow with minimal blocking transitions
 
 ### 3.2 Desired
 
@@ -83,9 +88,51 @@ Do not use a webview as the main capture surface if the purpose of migration is 
 
 ---
 
-## 4. App Screens
+## 4. Core Domain Model
 
-### 4.1 Auth Screen
+The iPhone app should be built around this local model:
+
+### 4.1 CaptureWorkflow / Queue
+
+The local working container for capture work.
+
+- persists until submitted or deleted
+- may contain items for multiple stores
+- is the main local working object during capture
+
+### 4.2 ItemPacket
+
+Represents one item being photographed/listed.
+
+- belongs to one store
+- owns its own photos
+- owns optional metadata
+- owns its own submit/upload state
+
+### 4.3 Photo
+
+Each photo belongs to one item packet.
+
+- stored locally inside the app until upload and retention decisions are made
+- not saved to the iPhone Camera Roll by default
+
+### 4.4 SubmitState
+
+Tracks each item packet through states such as:
+
+- local
+- submitting
+- submitted
+- failed
+- safe for cleanup
+
+The camera screen should edit the currently active `ItemPacket`. The app should not treat loose ungrouped camera photos as the main data object.
+
+---
+
+## 5. App Screens
+
+### 5.1 Auth Screen
 
 Shown if no active session exists.
 
@@ -98,30 +145,30 @@ Required:
 
 MVP may use magic link if deep linking is configured reliably. If magic link flow is awkward during early TestFlight, use email OTP code entry instead.
 
-### 4.2 Capture Home
+### 5.2 Capture Home
 
-Purpose: choose context and start camera.
+Purpose: start or resume the local capture workflow.
 
 Required:
 
-- current store
-- current batch
-- status summary
+- current capture context summary
+- visible local queue/workflow status
 - `Open Camera`
-- `Upload Batch`
+- explicit submit/upload action
 - visible upload/safe-to-clear state
 
-### 4.3 Camera Session
+Exact home layout remains deferred.
+
+### 5.3 Camera Session
 
 Purpose: fastest possible item capture.
 
 Required controls:
 
 - Back
-- current item number
+- current item number or item position
 - capture button
-- next item
-- done
+- `Next`
 - details overlay or compact form
 - current photo count
 
@@ -132,61 +179,74 @@ Optional metadata:
 - dimensions
 - notes
 
-### 4.4 Local Batch Review
+`Next` is the official item boundary. Everything captured or entered since the previous boundary belongs to the current item. Tapping `Next` should save the current item packet into the local queue and immediately start a new item.
 
-Purpose: verify local captures before upload.
+### 5.4 Local Queue Review
 
-MVP can be minimal.
-
-Required:
-
-- list items in current batch
-- photo count per item
-- item status
-- delete/retake local item only if safe and intentional
-
-### 4.5 Upload Status
-
-Purpose: make foreground upload transparent.
+Purpose: review and edit the queue before final submit.
 
 Required:
 
-- current upload stage
+- inspect previous items
+- view their photos
+- edit item info
+- delete bad photos
+- retake or add photos for a specific item before submit
+
+Exact review UI remains deferred.
+
+### 5.5 Submit Status
+
+Purpose: make foreground submit/upload transparent.
+
+Required:
+
+- current submit/upload stage
 - per-item progress
 - per-photo progress
 - retry failed uploads
 - keep phone awake enough for foreground upload if possible
-- clearly distinguish uploaded from verified
+- clearly distinguish submitted from verified/safe-to-clean
 
 ---
 
-## 5. Capture Flow
+## 6. Capture Flow
 
-### 5.1 Basic Flow
+### 6.1 Basic Flow
 
 ```txt
 Open app
-→ choose active batch or default batch
+→ choose or confirm capture context
 → open camera
 → capture photo
-→ photo is added to current item
+→ photo is added to current item packet
 → capture more photos
-→ tap Next Item
-→ previous item becomes complete
-→ new draft item starts immediately
+→ tap Next
+→ previous item packet is saved into the local queue
+→ new draft item packet starts immediately
 ```
 
-### 5.2 Done Flow
+### 6.2 Review/Edit Flow
 
 ```txt
-Tap Done
-→ save current item metadata
-→ if current item has photos, mark complete
-→ return to capture home
-→ batch remains available for upload
+Capture several items
+→ open queue review
+→ inspect previous items
+→ edit metadata / delete bad photos / retake / add photos
+→ return to capture or proceed to submit
 ```
 
-### 5.3 Metadata Flow
+### 6.3 Submit Flow
+
+```txt
+Tap Submit
+→ app submits all eligible unsubmitted item packets
+→ successful packets are marked submitted
+→ failed packets remain local
+→ later Submit sends only new or still-unsubmitted work
+```
+
+### 6.4 Metadata Flow
 
 Metadata is optional. Capture should never be blocked by missing SKU, weight, dimensions, or notes.
 
@@ -194,21 +254,45 @@ Metadata can be edited:
 
 - before first photo
 - between photos
-- before `Next Item`
-- before upload
+- before `Next`
+- during queue review
+- before submit
+
+### 6.5 Intentionally Deferred
+
+These remain intentionally unlocked:
+
+- exact `Done` behavior
+- exact queue preview layout
+- exact store-switch UI
+- exact metadata fields
+- exact backend batch mapping
+- whether item reorder or move-between-items is MVP or later
 
 ---
 
-## 6. Local Storage Contract
+## 7. Multi-Store Rules
 
-The iOS app must store image files locally until remote upload is verified.
+- The app must support multiple eBay stores.
+- It must not be hardcoded to exactly two stores.
+- The user should be able to create/name stores and switch capture context.
+- Each item packet must be associated with the correct store.
+- Store is a property of each item packet, not only of the whole queue.
 
-Recommended local model:
+This means one local queue/workflow may contain items for multiple stores.
+
+---
+
+## 8. Local Storage Contract
+
+The iOS app must store image files locally until remote upload safety is confirmed.
+
+Recommended local shape:
 
 ```txt
 Application Support/
-  batches/
-    {local_batch_id}/
+  capture_workflows/
+    {local_workflow_id}/
       items/
         {local_item_id}/
           photos/
@@ -221,12 +305,13 @@ Application Support/
 Local metadata must preserve:
 
 - local ID
-- remote ID after upload
+- remote ID after submit/upload
 - file path
 - captured timestamp
 - item order
+- store assignment
 - variant paths
-- upload status
+- submit/upload status
 - remote status
 - local status
 - upload attempts
@@ -236,18 +321,18 @@ Local cleanup must delete image files but keep metadata.
 
 ---
 
-## 7. Image Variant Strategy
+## 9. Image Variant Strategy
 
-### 7.1 MVP Required Variants
+### 9.1 MVP Required Variants
 
 - `original`
 - `listing`
 
-### 7.2 Strongly Recommended Variant
+### 9.2 Strongly Recommended Variant
 
 - `thumbnail`
 
-### 7.3 Variant Rules
+### 9.3 Variant Rules
 
 - `original` should preserve the highest practical still capture quality.
 - `listing` should be suitable for manual eBay listing use.
@@ -257,49 +342,41 @@ The desktop web app must tolerate missing thumbnails during early native MVP.
 
 ---
 
-## 8. Upload Flow
+## 10. Submit / Upload Flow
 
-### 8.1 Upload Timing
+### 10.1 Upload Timing
 
-Start with manual foreground upload:
+Start with manual foreground submit/upload:
 
 ```txt
-User captures batch
-→ user taps Upload Batch
+User captures into local queue
+→ user taps Submit
 → app uploads while open
-→ app marks verified photos safe to clear
+→ app marks safely uploaded work accordingly
 ```
 
 Do not implement background upload in the first native slice.
 
-### 8.2 Upload Order
-
-Recommended order:
-
-1. ensure store exists remotely
-2. ensure batch exists remotely
-3. create/upsert item
-4. create/upsert photo row as uploading
-5. upload variants to storage
-6. create/upsert photo variant rows
-7. mark photo verified
-8. update item aggregate state
-9. update batch aggregate state
-10. mark local files safe to clear
-
-### 8.3 Retry Rules
+### 10.2 Upload Rules
 
 - Failed upload should leave local files intact.
 - Retry must reuse remote IDs when already assigned.
-- Retry must not create duplicate items for the same local item.
+- Retry must not create duplicate items for the same local item packet.
 - Retry must not create duplicate variants for the same photo/variant type.
-- `verified` photos can be skipped unless the user explicitly forces repair.
+- Successfully submitted work should not be duplicated by later submits.
+
+### 10.3 Safety Rules
+
+- Prioritize not losing photos.
+- If submit/upload fails or is incomplete, local items and photos remain in the app.
+- After upload is confirmed safe, the app should give the user a way to delete or retain local app copies.
+- Exact cleanup timing and exact confirmation standards remain deferred.
 
 ---
 
-## 9. Auth Requirements
+## 11. Auth Requirements
 
-The app must use the same Supabase account as the web desktop app.
+The app must use the same Supabase account as the desktop web app.
 
 Required:
 
@@ -313,115 +390,31 @@ Do not add multi-user roles yet.
 
 ---
 
-## 10. Supabase Contract
+## 12. Supabase Contract
 
 The iOS app must follow `BACKEND_CONTRACT.md`.
 
 Critical rules:
 
-- never use local ID as remote photo ID unless it was intentionally written to Supabase as the remote ID
-- preserve remote IDs locally
-- set `owner_id`
-- upload to private `photo-assets`
-- set `photo_variants` rows for uploaded variants
-- set `photos.remote_status = verified` only after expected variants are uploaded
-- never clear local files before verification
+- backend `batches` remain part of the shared schema
+- the exact mapping between the local queue/workflow and backend batches remains deferred
+- remote IDs must be preserved after they exist
+- submit/upload must not duplicate already-linked remote records
+- desktop must be able to consume the submitted item packets cleanly
 
 ---
 
-## 11. Local Cleanup
+## 13. Acceptance Criteria
 
-Local cleanup is separate from remote cleanup.
+The current native direction is successful when:
 
-### 11.1 Allowed
-
-After upload verification, the app may delete local image files and mark:
-
-```txt
-localStatus = cleared
-```
-
-### 11.2 Not Allowed
-
-The app must not delete metadata required to:
-
-- show upload history
-- retry failed/partial upload
-- know remote IDs
-- verify remote cleanup
-- prove an item was captured
-
----
-
-## 12. Error Handling
-
-Required visible errors:
-
-- camera permission denied
-- camera unavailable
-- capture failed
-- local file save failed
-- auth failed
-- upload failed
-- storage upload failed
-- remote table write failed
-- verification failed
-- local cleanup failed
-
-Errors should be copyable where useful.
-
----
-
-## 13. MVP Acceptance Tests
-
-The iOS app MVP passes when:
-
-1. User can sign in.
-2. User can open native camera.
-3. User can capture at least 3 items with multiple photos each.
-4. User can add optional metadata to at least one item.
-5. User can upload the batch to Supabase.
-6. Upload retry works after a forced network failure.
-7. Desktop web app can see uploaded items.
-8. Local images are not clearable before verification.
-9. Local images are clearable after verification without losing metadata.
-10. App can close/reopen without losing an unuploaded batch.
-
----
-
-## 14. First Build Slice
-
-The first slice should be intentionally ugly and narrow.
-
-Build only:
-
-- sign in or hard-gated session setup
-- one default store
-- one active batch
-- native camera
-- capture photo
-- next item
-- local persistence
-- upload original/listing variants
-- desktop visibility proof
-
-Do not build:
-
-- polished camera UI
-- settings drawer
-- advanced queue management
-- background upload
-- retake request sync
-- App Store onboarding
-
----
-
-## 15. References
-
-- Apple AVFoundation: https://developer.apple.com/documentation/avfoundation
-- Apple `AVCapturePhotoOutput`: https://developer.apple.com/documentation/avfoundation/avcapturephotooutput
-- Apple `NSCameraUsageDescription`: https://developer.apple.com/documentation/bundleresources/information-property-list/nscamerausagedescription
-- Supabase Swift reference: https://supabase.com/docs/reference/swift/introduction
-- Supabase Swift upload file: https://supabase.com/docs/reference/swift/storage-from-upload
-- Supabase Swift OTP auth: https://supabase.com/docs/reference/swift/auth-signinwithotp
-- Supabase mobile deep linking: https://supabase.com/docs/guides/auth/native-mobile-deep-linking
+1. the user can sign in
+2. the user can open the native camera
+3. the user can capture multiple items with multiple photos
+4. `Next` consistently creates the item boundary
+5. the user can review and edit prior queued items before submit
+6. the user can submit only eligible unsubmitted work
+7. failed upload can retry without duplication
+8. the desktop web app can see the submitted items
+9. local files are not cleared before upload safety is confirmed
+10. the app can close and reopen without losing an unsubmitted local queue

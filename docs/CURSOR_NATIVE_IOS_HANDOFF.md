@@ -3,7 +3,8 @@
 ## Current Direction
 - The web camera work has been superseded by a native iOS app.
 - Work is happening in the `ios/` Xcode project on `main`.
-- The app is a SwiftUI + AVFoundation camera client for fast eBay item photo capture.
+- The app is a SwiftUI + AVFoundation capture-first iPhone client for fast eBay item photo capture.
+- The app is a capture + lightweight queue tool, not the final listing workspace.
 - Rear camera only.
 - Current visible lens modes are `.5` and `1x`.
 - Debug auth bypass is intentionally enabled in native debug builds so the app launches into the camera flow during development.
@@ -39,6 +40,17 @@
 - Grid / 1:1 / horizon guide toggles.
 - Debug capability summary in the camera screen.
 
+## Product Rules To Preserve
+
+- The camera stays central during capture.
+- The app should use a real local multi-item queue.
+- The camera screen edits the currently active item packet.
+- `Next` is the official item boundary.
+- `Submit` is the deliberate MVP upload/handoff action.
+- The queue may contain items from multiple stores.
+- Photos should remain app-local until upload/retention decisions are made.
+- Exact queue review UI, exact metadata fields, exact `Done` behavior, and exact backend batch mapping remain deferred.
+
 ## Important Crash Fixes Already Made
 - Deprecated photo-resolution APIs were removed.
 - `AVCapturePhotoOutput.maxPhotoDimensions` is now used instead of:
@@ -70,6 +82,7 @@
   - single tap = set focus + exposure point
   - double tap = reset to continuous AF/AE
 - Keep undo current-item only.
+- Keep queue/domain foundations ahead of UI polish.
 
 ## What Not To Do Yet
 - Telephoto
@@ -79,4 +92,3 @@
 - Animated Apple Camera zoom wheel
 - Advanced settings page
 - Generic camera picker
-

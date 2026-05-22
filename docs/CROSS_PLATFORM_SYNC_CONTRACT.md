@@ -8,6 +8,13 @@ This document is the shared reference for future sync decisions. It is intention
 - `mobile` means the iOS app, phone app, or capture app
 - `desktop` means the site, desktop app, or PC web app
 
+This contract is intentionally high-level. It should not be used to prematurely lock:
+
+- exact mobile queue UI
+- exact desktop workflow UI
+- exact backend batch mapping for the mobile local queue
+- exact `Done` semantics on mobile
+
 ## 1. Sync Model
 
 The system should use layered sync, not per-item timer polling.
@@ -18,13 +25,13 @@ The system should use layered sync, not per-item timer polling.
 - No workspace data is mutated here.
 
 ### Tier 1: Workspace metadata
-- Includes `stores` and `batches`.
+- Includes `stores` and remote `batches`.
 - Handles create, rename, archive, status updates, and remote linking.
 - Sync strategy: bulk poll or delta poll.
 - Cadence: every `30-60s` while active, plus immediately after local edits.
 
 ### Tier 2: Active working set
-- Includes items for the currently selected store and active batch.
+- Includes items for the currently selected store and current remote working scope.
 - Sync strategy: scoped refresh, not global refresh.
 - Triggered when a store/batch view becomes active, when the user selects it, and on explicit refresh.
 
@@ -45,10 +52,12 @@ This is the current proposed split.
 ### Mobile owns
 - Capture context editing
 - Camera capture
-- Local capture queue
+- Local capture workflow / queue
+- Current item packet editing
 - Photo upload initiation
 - Capture-side metadata entry
 - Immediate push of capture context changes to Supabase
+- Local photo retention until upload safety conditions are met
 
 ### Desktop owns
 - Listing queue and workbench
@@ -80,10 +89,15 @@ Shared ownership means both platforms may read and write, but each field still n
 - `remoteRetentionMode`: shared, latest update wins.
 - `remoteId`: shared linkage field.
 
+Note:
+- Backend `batches` remain shared remote records.
+- The exact mapping between a mobile local queue/workflow and backend batches is still deferred.
+
 ### Item-level data
 - `sequence`: shared, but should be stable once created.
 - `sku`, `notes`, `weight`, `dimensions`: shared metadata.
 - `status` / listing state: desktop-led in the current workflow, but mobile may create the item record during upload.
+- `storeId`: shared linkage field, but mobile capture may change this per item before submit.
 - `remoteId`: shared linkage field.
 
 ### Photo-level data
@@ -157,10 +171,17 @@ Only do this when the user is looking at or editing the item.
 
 This is the practical division the code should move toward:
 
-- `mobile` is the capture authority.
+- `mobile` is the capture authority and local queue authority.
 - `desktop` is the listing and workspace authority.
 - Supabase is the shared source of truth for synced records.
 - Each platform keeps local state for speed, but remote-linked rows win over anonymous local duplicates.
+
+For the current iPhone direction:
+
+- one mobile local queue may contain items from multiple stores
+- `Next` defines the item boundary locally
+- `Submit` is the deliberate handoff action for eligible unsubmitted items
+- mobile should not silently auto-submit by default in MVP
 
 That does not mean one platform is “master” for everything.
 It means each platform should own the flow it is best at, while shared records stay reconciled through `remoteId` and `updated_at`.

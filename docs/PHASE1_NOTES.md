@@ -5,7 +5,20 @@ The current implementation is split into a mobile capture screen that opens the 
 Once the user accepts camera access, the app remembers it in the browser and can resume the camera without forcing another prompt.
 The app also remembers the last desktop tab and the selected store and batch.
 The mobile capture flow now keeps the live preview on screen while SKU, weight, and dimensions are edited in an overlay.
-`Next` advances to the next item in the same session and `Done` ends the capture session for now so the user can come back to the camera later.
+
+## Mobile direction update
+
+The current mobile product direction is now:
+
+- mobile is the iPhone app
+- the iPhone app is a capture + lightweight queue tool
+- it should use a real local multi-item queue
+- `Next` is the official item boundary
+- `Submit` is the deliberate upload/handoff action in MVP
+- store is an item-level property, so one local queue may contain items for multiple stores
+- exact `Done` behavior and exact backend batch mapping remain intentionally deferred
+
+Some Phase 1 implementation language in this repo still reflects older browser-session wording. Treat this note as the current mobile planning override until code is brought fully in line.
 
 ## Added in this repo
 
@@ -14,7 +27,7 @@ The mobile capture flow now keeps the live preview on screen while SKU, weight, 
 - mobile camera overlay for SKU, weight, and dimensions
 - desktop tabbed shell with batch drilldown, item detail, and upload tools
 - Supabase Auth magic-link bootstrap
-- batch sync into Supabase tables and private storage
+- sync into Supabase tables and private storage
 - single shared account across capture and lister devices
 - retention dates and remote cleanup for listed items
 - a compact workspace status strip for camera, auth, sync, cleanup, and workspace selection

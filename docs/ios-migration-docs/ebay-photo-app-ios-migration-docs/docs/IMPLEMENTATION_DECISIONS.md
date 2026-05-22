@@ -1,8 +1,8 @@
 # Implementation Decisions
 
 **Status:** locked implementation assumptions for the native iOS migration  
-**Date:** 2026-05-19  
-**Purpose:** resolve the remaining product/technical gaps so implementation starts with stable defaults.
+**Date:** 2026-05-21  
+**Purpose:** resolve the remaining product/technical gaps so implementation starts with stable defaults without over-locking deferred details.
 
 ## Decisions
 
@@ -14,19 +14,37 @@
 - **Photo variants:** `original` and `listing` are required for MVP. `thumbnail` is strongly recommended and should be generated when feasible, but the app must tolerate missing thumbnails.
 - **Web previews:** the desktop web app should use private Supabase storage with signed URLs or authenticated downloads. Signed URLs are preferred for queue and detail views.
 - **Browser fallback:** PWA/browser camera remains fallback and diagnostic only. It is not the primary production capture path.
-- **MVP operating shape:** iPhone only, portrait first, single account, one active store and batch at a time, manual foreground upload only.
+- **MVP operating shape:** iPhone only, portrait first, single account, manual foreground submit/upload only.
+- **Mobile queue shape:** the iPhone app uses a real local multi-item queue built around item packets.
+- **Item boundary:** `Next` is the official item boundary.
+- **Store assignment:** store is a property of each item packet, not only of the whole local queue.
+
+## Explicitly Not Locked Yet
+
+These details remain deferred and should not be invented during implementation:
+
+- exact camera screen layout
+- exact queue review UI
+- exact store-switch UI
+- exact metadata fields
+- exact `Done` behavior
+- exact photo cleanup timing
+- exact upload confirmation standard
+- exact backend batch mapping
+- whether reorder / move-between-items is MVP or later
 
 ## First Native Slice
 
 The first useful native slice should prove only this loop:
 
 1. sign in
-2. choose default store/batch
+2. confirm capture context
 3. open camera
 4. capture
-5. next item
-6. local persistence
-7. upload
-8. desktop visibility
+5. `Next`
+6. local queue persistence
+7. review/edit if needed
+8. submit/upload
+9. desktop visibility
 
 Anything beyond that stays deferred until the capture-to-desktop handoff is proven.
