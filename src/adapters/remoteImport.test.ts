@@ -11,12 +11,13 @@ const REMOTE_BATCH_ID = '22222222-2222-2222-2222-222222222222'
 const REMOTE_ITEM_ID = '21f0a8ff-b339-49b5-bbb6-e054527494c1'
 const REMOTE_PHOTO_A = 'e4e05977-530a-4117-9db3-2476973b0385'
 const REMOTE_PHOTO_B = '35b208b0-aa75-40f8-b138-2084c347a430'
+type RemoteItemStatus = 'new' | 'listed' | 'hold' | 'needs_retake'
 
 function makeThumbnailBlob(): Blob {
   return new Blob([Uint8Array.from([137, 80, 78, 71])], { type: 'image/jpeg' })
 }
 
-function createMockClient() {
+function createMockClient(itemStatus: RemoteItemStatus = 'new') {
   const thumbnailBlob = makeThumbnailBlob()
   const storeQuery = {
     select: vi.fn().mockReturnThis(),
@@ -37,13 +38,13 @@ function createMockClient() {
     order: vi.fn().mockReturnThis(),
     returns: vi.fn().mockResolvedValue({
       data: [
-        {
-          id: REMOTE_ITEM_ID,
-          sequence: 1,
-          status: 'new',
-          sku: 'SKU-IMPORT',
-          notes: 'Imported note',
-          weight: '1 lb',
+          {
+            id: REMOTE_ITEM_ID,
+            sequence: 1,
+            status: itemStatus,
+            sku: 'SKU-IMPORT',
+            notes: 'Imported note',
+            weight: '1 lb',
           dimensions: '10x10',
           listed_at: null,
           photo_retention_until: null,
@@ -147,6 +148,94 @@ function createMockClient() {
   return {
     from,
     storage: { from: storageFrom },
+  }
+}
+
+function createMockDeltaClient(itemStatus: RemoteItemStatus) {
+  const thumbnailBlob = makeThumbnailBlob()
+  const storeQuery = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: { id: REMOTE_STORE_ID }, error: null }),
+  }
+  const batchQuery = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: { id: REMOTE_BATCH_ID, remote_retention_mode: 'delete_7d_after_listed' },
+      error: null,
+    }),
+  }
+  const itemsQuery = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
+    returns: vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: REMOTE_ITEM_ID,
+          sequence: 1,
+          status: itemStatus,
+          sku: 'SKU-UPDATED',
+          notes: 'new note',
+          weight: '2 lb',
+          dimensions: '20x20',
+          listed_at: itemStatus === 'listed' ? '2026-05-21T00:00:00.000Z' : null,
+          photo_retention_until: null,
+          photos_cleaned_at: null,
+          created_at: '2026-05-20T16:54:07.394982+00:00',
+          updated_at: '2026-05-21T16:54:07.394982+00:00',
+        },
+      ],
+      error: null,
+    }),
+  }
+  const photosQuery = {
+    select: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    returns: vi.fn().mockResolvedValue({
+      data: [],
+      error: null,
+    }),
+  }
+  const variantsQuery = {
+    select: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    returns: vi.fn().mockResolvedValue({
+      data: [],
+      error: null,
+    }),
+  }
+
+  const from = vi.fn((table: string) => {
+    switch (table) {
+      case 'stores':
+        return storeQuery
+      case 'batches':
+        return batchQuery
+      case 'items':
+        return itemsQuery
+      case 'photos':
+        return photosQuery
+      case 'photo_variants':
+        return variantsQuery
+      default:
+        throw new Error(`Unexpected table ${table}`)
+    }
+  })
+
+  return {
+    from,
+    storage: {
+      from: vi.fn(() => ({
+        download: vi.fn(async () => ({
+          data: thumbnailBlob,
+          error: null,
+        })),
+      })),
+    },
   }
 }
 
@@ -388,5 +477,45 @@ describe('importRemoteBatchToLocal', () => {
     expect(syncedItem?.listingStatus).toBe('listed')
     expect(syncedItem?.note).toBe('new note')
     expect(syncedItem?.sku).toBe('SKU-UPDATED')
+  })
+
+  it.each([
+    ['hold' as const],
+    ['needs_retake' as const],
+  ])('preserves remote %s status during delta sync', async (itemStatus) => {
+    const store = {
+      ...(await workflowStore.getStore(localStoreId))!,
+      shortCode: 'DEF',
+      remoteId: REMOTE_STORE_ID,
+    }
+    const batch = {
+      ...(await workflowStore.getBatch(localBatchId))!,
+      name: 'Current Batch',
+      remoteId: REMOTE_BATCH_ID,
+      itemSyncCursor: '2026-05-19T00:00:00.000Z',
+    }
+    await workflowStore.upsertStore(store)
+    await workflowStore.upsertBatch(batch)
+
+    const localItem = await itemStore.createItem(localStoreId, localBatchId)
+    await itemStore.updateItem(localItem.id, {
+      remoteId: REMOTE_ITEM_ID,
+      status: 'complete',
+      listingStatus: 'new',
+      remoteUpdatedAt: '2026-05-19T00:00:00.000Z',
+    })
+
+    const summary = await syncRemoteBatchDeltaToLocal({
+      client: createMockDeltaClient(itemStatus) as never,
+      store,
+      batch,
+      workflowStore,
+      itemStore,
+      photoStore,
+    })
+
+    expect(summary.updatedItems).toBe(1)
+    const syncedItem = (await itemStore.getAllItems()).find((item) => item.remoteId === REMOTE_ITEM_ID)
+    expect(syncedItem?.listingStatus).toBe(itemStatus)
   })
 })
