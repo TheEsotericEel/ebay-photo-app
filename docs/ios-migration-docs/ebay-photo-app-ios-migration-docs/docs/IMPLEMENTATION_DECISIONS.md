@@ -7,6 +7,7 @@
 ## Locked Product Decisions
 
 - **Auth:** Supabase email OTP code entry is the MVP default for both iOS and web.
+- **Auth fallback:** password sign-in may be used as a development fallback for email rate-limit recovery, but it is not the primary product auth flow.
 - **Storage path contract:** V1 uses `docs/BACKEND_CONTRACT_V1.md` path:
   - `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}`
 - **Photo variants:** V1 requires `listing` + `thumbnail`; `original` upload is deferred.
@@ -16,6 +17,8 @@
 - **Mobile queue shape:** the iPhone app uses a real local multi-item queue built around item packets.
 - **Item boundary:** `Next` is the official item boundary.
 - **Store assignment:** store is a property of each item packet, not only of the whole local queue.
+- **Backend ownership:** MVP uses one shared account and shared backend records/tables. Owner-scoped records and stricter multi-user RLS are deferred.
+- **Queue/batch mapping:** backend `batches` remain part of the shared remote schema, but exact local queue/workflow mapping is intentionally deferred.
 
 ## Current Implementation Defaults (Pending Confirmation)
 

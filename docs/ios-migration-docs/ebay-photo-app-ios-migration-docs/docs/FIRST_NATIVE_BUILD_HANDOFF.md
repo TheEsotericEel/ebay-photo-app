@@ -24,6 +24,7 @@ The native app is the production capture client. The web app remains the desktop
 These assumptions are fixed for the current native build direction:
 
 - Auth uses Supabase email OTP code entry.
+- Password sign-in may be used as a development fallback for email rate-limit recovery, but it is not the primary product auth flow.
 - Native local files live in Application Support.
 - Native metadata/state lives in SQLite.
 - New uploads use the V1 storage path from `docs/BACKEND_CONTRACT_V1.md`.
@@ -95,7 +96,10 @@ Desktop-specific behavior should not be expanded here unless it directly affects
 
 ## 6. Shared Backend Contract
 
-The shared backend contract is defined in `BACKEND_CONTRACT.md`. The essential rules are:
+The current V1 shared backend contract is defined in `docs/BACKEND_CONTRACT_V1.md`.
+`BACKEND_CONTRACT.md` remains a future-safe target reference.
+
+The essential V1 rules are:
 
 - remote rows are canonical and use UUIDs
 - local IDs are client-only
@@ -104,6 +108,7 @@ The shared backend contract is defined in `BACKEND_CONTRACT.md`. The essential r
 - storage is private
 - image access for desktop review uses signed URLs or authenticated downloads
 - backend `batches` remain shared remote records, but the exact mobile queue-to-batch mapping stays deferred
+- MVP uses one shared account and shared backend records/tables; owner-scoped records/RLS hardening are deferred
 
 ## 7. First Native Screen Set
 
@@ -204,7 +209,7 @@ Application Support/
             {local_photo_id}/
               original
               listing
-              thumbnail (best-effort)
+              thumbnail
 ```
 
 ## 10. Upload Rules

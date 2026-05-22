@@ -1,6 +1,6 @@
 # Backend Contract V1: Native iOS Submit + Desktop Import
 
-Last updated: 05/20/2026
+Last updated: 05/21/2026
 
 ## Scope
 
@@ -19,9 +19,13 @@ This is a contract/spec document only. It does not change code or schema.
 - Desktop should **import remote rows into local IndexedDB** (bridge), not rewrite queue UI to remote-first in V1.
 - Required image variants for MVP: **`listing` + `thumbnail`**.
 - `original` variant is deferred.
+- Supabase email OTP code entry is the MVP auth default.
+- Password sign-in may be used as a development fallback for email rate-limit recovery, but it is not the primary product auth flow.
 - Storage bucket: **`photo-assets`**.
 - Storage path format:
   - `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}`
+- MVP uses one shared account and shared backend records/tables.
+- Owner-scoped records and stricter multi-user RLS are deferred future hardening.
 - Table graph:
   - `stores -> batches -> items -> photos -> photo_variants`
 - `upload_jobs` is deferred for V1.
@@ -246,6 +250,7 @@ Defer in V1:
 - `original` variant upload requirement
 - `upload_jobs` table integration
 - owner-scoped schema/RLS rewrite
+- multi-user ownership and stricter per-user RLS hardening
 - remote-first desktop queue refactor
 - schema changes or migration rewrites
 - eBay automation and non-upload workflow expansions

@@ -43,6 +43,7 @@ Recommended default:
 The implementation choices for the current native slice are fixed as follows:
 
 - Auth uses Supabase email OTP code entry by default.
+- Password sign-in may be used as a development fallback for email rate-limit recovery, but it is not the primary product auth flow.
 - Local image files live in Application Support.
 - Local metadata/state lives in SQLite.
 - New uploads use the V1 storage path from `docs/BACKEND_CONTRACT_V1.md`.
@@ -389,7 +390,8 @@ Do not add multi-user roles yet.
 
 ## 12. Supabase Contract
 
-The iOS app must follow `BACKEND_CONTRACT.md`.
+The iOS app must follow `docs/BACKEND_CONTRACT_V1.md` for the current V1 handoff.
+`BACKEND_CONTRACT.md` is a future-safe target reference and is not required for current V1 implementation choices.
 
 Critical rules:
 
@@ -398,6 +400,7 @@ Critical rules:
 - remote IDs must be preserved after they exist
 - submit/upload must not duplicate already-linked remote records
 - desktop must be able to consume the submitted item packets cleanly
+- MVP uses one shared account and shared backend records/tables; owner-scoped records and stricter multi-user RLS are deferred
 
 ---
 

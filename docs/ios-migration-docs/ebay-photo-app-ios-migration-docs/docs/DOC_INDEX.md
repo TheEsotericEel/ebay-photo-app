@@ -60,3 +60,11 @@ The current mobile direction is:
 - exact backend batch mapping remains deferred
 
 These docs intentionally preserve desktop guidance where it does not conflict with that mobile direction.
+
+## Canonical V1 Contract Snapshot
+
+- V1 photo variants required for submit/handoff: `listing` + `thumbnail`; `original` upload is deferred.
+- MVP auth default: Supabase email OTP code entry; password sign-in is development fallback only for rate-limit recovery.
+- V1 storage path contract: `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}`.
+- MVP ownership model: one shared account and shared backend records/tables; owner-scoped records and stricter multi-user RLS are deferred.
+- Mobile model: local capture workflow/queue with item packets; backend `batches` remain remote schema records; exact local queue-to-batch mapping is deferred.

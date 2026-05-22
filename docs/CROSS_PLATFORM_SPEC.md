@@ -427,7 +427,8 @@ The following remain intentionally deferred and should stay unlocked in planning
 ### 6.7 iOS Auth Integration
 
 **Supabase Auth iOS SDK** (assumption):
-- Magic-link login (email input, open mail app, deep link back to app)
+- Email OTP code entry (MVP default)
+- Password sign-in may exist as a development fallback for email rate-limit recovery
 - Session persistence (Keychain)
 - Session refresh (automatic)
 - Logout

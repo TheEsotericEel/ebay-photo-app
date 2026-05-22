@@ -92,7 +92,9 @@ Needs:
 Locked product-level defaults:
 
 - Auth defaults to Supabase email OTP code entry for MVP.
+- Password sign-in may exist as a development fallback for email rate-limit recovery, but it is not the primary product auth flow.
 - New uploads use the V1 path from `docs/BACKEND_CONTRACT_V1.md`.
+- V1 upload path is `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}`.
 - `listing` and `thumbnail` photo variants are required for MVP.
 - `original` upload is deferred in MVP.
 - The browser/PWA camera remains fallback and diagnostic only.
@@ -103,6 +105,7 @@ Current implementation defaults pending confirmation:
 
 - Native iPhone local state uses Application Support files plus SQLite metadata.
 - Owner-scoped schema/path migration is deferred unless explicitly scheduled as backend work.
+- Owner-scoped records and stricter multi-user RLS are deferred future hardening for the current single-account MVP.
 
 ---
 
