@@ -218,40 +218,39 @@ function deriveItemStatuses(itemPhotos: RemotePhotoRow[]): Pick<ItemPacket, 'upl
   }
 }
 
-async function downloadPreferredVariant(
+async function downloadVariant(
   client: SupabaseClient,
   photo: RemotePhotoRow,
   variantsByPhotoId: Map<string, RemoteVariantRow[]>,
+  variantType: 'thumbnail' | 'listing',
 ): Promise<{ blob: Blob; variant: RemoteVariantRow | null; error: string | null }> {
   const variants = variantsByPhotoId.get(photo.id) || []
-  const thumbnail = variants.find((variant) => variant.variant_type === 'thumbnail')
-  const listingFallback = variants.find((variant) => variant.variant_type === 'listing')
-  const preferred = thumbnail || listingFallback || null
+  const variant = variants.find((entry) => entry.variant_type === variantType) || null
 
-  if (!preferred) {
+  if (!variant) {
     return {
       blob: new Blob([]),
       variant: null,
-      error: `Photo ${photo.id} has no thumbnail/listing variant`,
+      error: null,
     }
   }
 
   const { data, error } = await client
     .storage
-    .from(preferred.storage_bucket)
-    .download(preferred.storage_key)
+    .from(variant.storage_bucket)
+    .download(variant.storage_key)
 
   if (error || !data) {
     return {
       blob: new Blob([]),
-      variant: preferred,
-      error: `Photo ${photo.id} variant download failed: ${error?.message || 'missing data'}`,
+      variant,
+      error: `Photo ${photo.id} ${variantType} variant download failed: ${error?.message || 'missing data'}`,
     }
   }
 
   return {
     blob: data,
-    variant: preferred,
+    variant,
     error: null,
   }
 }
@@ -428,13 +427,19 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
         continue
       }
 
-      const download = await downloadPreferredVariant(client, remotePhoto, variantsByPhotoId)
-      if (download.error) {
-        summary.errors.push(download.error)
+      const listingDownload = await downloadVariant(client, remotePhoto, variantsByPhotoId, 'listing')
+      const thumbnailDownload = await downloadVariant(client, remotePhoto, variantsByPhotoId, 'thumbnail')
+
+      if (listingDownload.error) {
+        summary.errors.push(listingDownload.error)
+      }
+      if (thumbnailDownload.error) {
+        summary.errors.push(thumbnailDownload.error)
       }
 
-      const blob = download.blob
-      const mimeType = download.variant?.mime_type || blob.type || 'image/jpeg'
+      const blob = listingDownload.variant ? listingDownload.blob : thumbnailDownload.blob
+      const mimeType = listingDownload.variant?.mime_type || thumbnailDownload.variant?.mime_type || blob.type || 'image/jpeg'
+      const thumbnailBlob = thumbnailDownload.variant ? thumbnailDownload.blob : undefined
       const localPhotoId = makeLocalId('photo', remotePhoto.id, localPhotoIds)
       const uploadedAt = remotePhoto.captured_at || new Date().toISOString()
       const storedPhotoInput: Omit<StoredPhoto, 'savedAt'> = {
@@ -450,12 +455,12 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
         remoteDeleteEligibleAt: remotePhoto.remote_delete_eligible_at || undefined,
         remoteExpiresAt: remotePhoto.remote_expires_at || undefined,
         remoteDeletedAt: remotePhoto.remote_deleted_at || undefined,
-        thumbnailBlob: blob,
-        thumbnailSize: blob.size,
-        thumbnailWidth: download.variant?.width || undefined,
-        thumbnailHeight: download.variant?.height || undefined,
-        outputWidth: download.variant?.width || undefined,
-        outputHeight: download.variant?.height || undefined,
+        thumbnailBlob,
+        thumbnailSize: thumbnailBlob?.size || undefined,
+        thumbnailWidth: thumbnailDownload.variant?.width || undefined,
+        thumbnailHeight: thumbnailDownload.variant?.height || undefined,
+        outputWidth: listingDownload.variant?.width || thumbnailDownload.variant?.width || undefined,
+        outputHeight: listingDownload.variant?.height || thumbnailDownload.variant?.height || undefined,
       }
 
       try {

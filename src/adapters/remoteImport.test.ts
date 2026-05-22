@@ -17,8 +17,13 @@ function makeThumbnailBlob(): Blob {
   return new Blob([Uint8Array.from([137, 80, 78, 71])], { type: 'image/jpeg' })
 }
 
+function makeListingBlob(): Blob {
+  return new Blob([Uint8Array.from([255, 216, 255, 219, 0, 67])], { type: 'image/jpeg' })
+}
+
 function createMockClient(itemStatus: RemoteItemStatus = 'new') {
   const thumbnailBlob = makeThumbnailBlob()
+  const listingBlob = makeListingBlob()
   const storeQuery = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
@@ -106,6 +111,26 @@ function createMockClient(itemStatus: RemoteItemStatus = 'new') {
           mime_type: 'image/jpeg',
         },
         {
+          photo_id: REMOTE_PHOTO_A,
+          variant_type: 'listing',
+          storage_bucket: 'photo-assets',
+          storage_key: `${REMOTE_STORE_ID}/batches/${REMOTE_BATCH_ID}/items/${REMOTE_ITEM_ID}/photos/${REMOTE_PHOTO_A}/listing`,
+          width: 4800,
+          height: 4800,
+          bytes: 2000,
+          mime_type: 'image/jpeg',
+        },
+        {
+          photo_id: REMOTE_PHOTO_B,
+          variant_type: 'thumbnail',
+          storage_bucket: 'photo-assets',
+          storage_key: `${REMOTE_STORE_ID}/batches/${REMOTE_BATCH_ID}/items/${REMOTE_ITEM_ID}/photos/${REMOTE_PHOTO_B}/thumbnail`,
+          width: 480,
+          height: 480,
+          bytes: 1000,
+          mime_type: 'image/jpeg',
+        },
+        {
           photo_id: REMOTE_PHOTO_B,
           variant_type: 'listing',
           storage_bucket: 'photo-assets',
@@ -139,7 +164,7 @@ function createMockClient(itemStatus: RemoteItemStatus = 'new') {
 
   const storageFrom = vi.fn(() => ({
     download: vi.fn(async (storageKey: string) => ({
-      data: thumbnailBlob,
+      data: storageKey.endsWith('/listing') ? listingBlob : thumbnailBlob,
       error: null,
       storageKey,
     })),
@@ -148,11 +173,14 @@ function createMockClient(itemStatus: RemoteItemStatus = 'new') {
   return {
     from,
     storage: { from: storageFrom },
+    thumbnailBlob,
+    listingBlob,
   }
 }
 
 function createMockDeltaClient(itemStatus: RemoteItemStatus) {
   const thumbnailBlob = makeThumbnailBlob()
+  const listingBlob = makeListingBlob()
   const storeQuery = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
@@ -231,11 +259,13 @@ function createMockDeltaClient(itemStatus: RemoteItemStatus) {
     storage: {
       from: vi.fn(() => ({
         download: vi.fn(async () => ({
-          data: thumbnailBlob,
+          data: listingBlob,
           error: null,
         })),
       })),
     },
+    thumbnailBlob,
+    listingBlob,
   }
 }
 
@@ -323,6 +353,13 @@ describe('importRemoteBatchToLocal', () => {
       expect(photo.uploadStatus).toBe('uploaded')
       expect(photo.remoteStatus).toBe('uploaded')
     }
+
+    const importedPhotoA = photos.find((photo) => photo.remoteId === REMOTE_PHOTO_A)
+    const importedPhotoB = photos.find((photo) => photo.remoteId === REMOTE_PHOTO_B)
+    expect(importedPhotoA).toBeDefined()
+    expect(importedPhotoB).toBeDefined()
+    expect(importedPhotoA?.outputWidth).toBeGreaterThan(importedPhotoA?.thumbnailWidth || 0)
+    expect(importedPhotoB?.outputWidth).toBeGreaterThan(importedPhotoB?.thumbnailWidth || 0)
   })
 
   it('is idempotent on repeated import', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent } from 'react'
 import { IndexedDbItemPacketStore, type ItemPacket, type ListingStatus } from '../adapters/itemPacket'
 import { IndexedDbPhotoStore, type StoredPhoto } from '../adapters/localPhotoStore'
 import {
@@ -81,6 +81,74 @@ function getListingStatusLabel(status: ListingStatus | undefined): string {
       return 'Needs retake'
     default:
       return 'To list'
+  }
+}
+
+function sanitizeExportStem(value: string, fallback: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || fallback
+}
+
+function isListingQualityPhoto(photo: StoredPhoto): boolean {
+  if (photo.originalBlob) {
+    return true
+  }
+  if (!photo.thumbnailBlob) {
+    return true
+  }
+  return (
+    photo.thumbnailBlob.size !== photo.blob.size
+    || photo.thumbnailWidth !== photo.outputWidth
+    || photo.thumbnailHeight !== photo.outputHeight
+  )
+}
+
+function buildPhotoDragExportPlan(item: DesktopItemView, photoById: Map<string, StoredPhoto>) {
+  const baseName = sanitizeExportStem(item.packet.sku?.trim() || item.label, `item-${item.packet.itemNumber}`)
+  const files: Array<{ file: File; ready: boolean }> = []
+  let missingCount = 0
+  let thumbnailOnlyCount = 0
+
+  item.packet.photoIds.forEach((photoId, index) => {
+    const photo = photoById.get(photoId)
+    if (!photo) {
+      missingCount += 1
+      return
+    }
+
+    const ready = isListingQualityPhoto(photo)
+    if (!ready) {
+      thumbnailOnlyCount += 1
+    }
+
+    const fileName = `${String(index + 1).padStart(2, '0')}-${baseName}.jpg`
+    files.push({
+      file: new File([photo.blob], fileName, {
+        type: photo.mimeType || photo.blob.type || 'image/jpeg',
+        lastModified: Date.parse(photo.capturedAt) || Date.now(),
+      }),
+      ready,
+    })
+  })
+
+  const canDrag = files.length > 0 && missingCount === 0 && thumbnailOnlyCount === 0
+  const warning = missingCount > 0
+    ? `Missing ${missingCount} photo${missingCount === 1 ? '' : 's'} locally.`
+    : thumbnailOnlyCount > 0
+      ? `${thumbnailOnlyCount} photo${thumbnailOnlyCount === 1 ? '' : 's'} only have thumbnail-quality blobs locally.`
+      : null
+
+  return {
+    files,
+    canDrag,
+    warning,
+    total: item.packet.photoIds.length,
+    readyCount: files.filter((entry) => entry.ready).length,
+    missingCount,
+    thumbnailOnlyCount,
   }
 }
 
@@ -929,6 +997,7 @@ export function DesktopListerPrototype() {
           status={selectedItem.packet.listingStatus}
           storeName={selectedStore?.name ?? 'Store'}
           batchName={selectedStoreId ? (batchesByStore[selectedStoreId]?.name ?? 'Current batch') : 'Current batch'}
+          photoById={photoById}
           busy={updatingItemId === selectedItem.packet.id}
           onClose={() => setSelectedItemId(null)}
           onChangeStatus={(nextStatus) => void updateItemListingStatus(selectedItem.packet, nextStatus)}
@@ -965,6 +1034,7 @@ function ItemDetailModal({
   status,
   storeName,
   batchName,
+  photoById,
   busy,
   onClose,
   onChangeStatus,
@@ -973,6 +1043,7 @@ function ItemDetailModal({
   status: ListingStatus | undefined
   storeName: string
   batchName: string
+  photoById: Map<string, StoredPhoto>
   busy: boolean
   onClose: () => void
   onChangeStatus: (status: ListingStatus) => void
@@ -992,6 +1063,26 @@ function ItemDetailModal({
     { label: 'Notes', value: packet.note, wide: true },
   ]
   const hasMetadata = metadataFields.some((field) => Boolean(field.value?.trim()))
+  const dragExportPlan = useMemo(() => buildPhotoDragExportPlan(item, photoById), [item, photoById])
+
+  const handleDragStart = useCallback((event: ReactDragEvent<HTMLButtonElement>) => {
+    if (!dragExportPlan.canDrag) {
+      event.preventDefault()
+      return
+    }
+
+    const transfer = event.dataTransfer
+    if (!transfer) {
+      return
+    }
+
+    transfer.effectAllowed = 'copy'
+    transfer.clearData()
+    dragExportPlan.files.forEach((entry) => {
+      transfer.items.add(entry.file)
+    })
+    transfer.setData('text/plain', dragExportPlan.files.map((entry) => entry.file.name).join('\n'))
+  }, [dragExportPlan])
 
   return (
     <div style={styles.modalBackdrop} onClick={onClose} role="presentation">
@@ -1113,6 +1204,29 @@ function ItemDetailModal({
                   <div style={styles.detailBlockEyebrow}>Actions</div>
                   <div style={styles.detailBlockTitle}>Listing status</div>
                 </div>
+              </div>
+              <div style={styles.dragExportWrap}>
+                <button
+                  type="button"
+                  style={dragExportPlan.canDrag ? styles.dragExportButton : styles.dragExportButtonDisabled}
+                  draggable={dragExportPlan.canDrag}
+                  onDragStart={handleDragStart}
+                  disabled={!dragExportPlan.canDrag}
+                  title={dragExportPlan.canDrag ? 'Drag to eBay image uploader' : 'Not ready for drag export'}
+                >
+                  <div style={styles.dragExportButtonTitle}>Drag ordered photos to eBay</div>
+                  <div style={styles.dragExportButtonMeta}>
+                    {dragExportPlan.canDrag
+                      ? `${dragExportPlan.readyCount}/${dragExportPlan.total} photos ready for manual handoff`
+                      : 'Disabled until all photos have listing-quality local blobs'}
+                  </div>
+                </button>
+                <div style={styles.dragExportNote}>
+                  Experimental manual handoff. Keep this source scoped to the item’s ordered photo set.
+                </div>
+                {dragExportPlan.warning ? (
+                  <div style={styles.dragExportWarning}>{dragExportPlan.warning}</div>
+                ) : null}
               </div>
               <ListingStatusControls currentStatus={status} busy={busy} onChange={onChangeStatus} />
             </section>
@@ -1790,6 +1904,56 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '13px',
     lineHeight: 1.5,
     padding: '16px',
+  },
+  dragExportWrap: {
+    display: 'grid',
+    gap: '8px',
+  },
+  dragExportButton: {
+    border: '1px solid #c9d2e3',
+    borderRadius: '14px',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f4f7ff 100%)',
+    padding: '14px',
+    textAlign: 'left',
+    cursor: 'grab',
+    display: 'grid',
+    gap: '6px',
+  },
+  dragExportButtonDisabled: {
+    border: '1px solid #e1e6f1',
+    borderRadius: '14px',
+    background: '#f7f9fc',
+    padding: '14px',
+    textAlign: 'left',
+    cursor: 'not-allowed',
+    display: 'grid',
+    gap: '6px',
+    opacity: 0.82,
+  },
+  dragExportButtonTitle: {
+    color: '#1e2430',
+    fontSize: '14px',
+    fontWeight: 800,
+    lineHeight: 1.2,
+  },
+  dragExportButtonMeta: {
+    color: '#5e6b84',
+    fontSize: '12px',
+    lineHeight: 1.4,
+  },
+  dragExportNote: {
+    color: '#6b778d',
+    fontSize: '12px',
+    lineHeight: 1.45,
+  },
+  dragExportWarning: {
+    borderRadius: '10px',
+    background: '#fff4da',
+    color: '#7a5a12',
+    padding: '8px 10px',
+    fontSize: '12px',
+    lineHeight: 1.4,
+    border: '1px solid #f1d28a',
   },
   iconButton: {
     border: '1px solid #c9d2e3',
