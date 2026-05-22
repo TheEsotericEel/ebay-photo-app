@@ -6,7 +6,7 @@ struct GuideToggleRow: View {
   let showsTapToFocusHint: Bool
 
   var body: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: 6) {
       guideChip("Grid", isOn: gridEnabled) {
         gridEnabled.toggle()
       }
@@ -20,15 +20,15 @@ struct GuideToggleRow: View {
           .foregroundStyle(.secondary)
       }
     }
-    .padding(.horizontal)
+    .padding(.horizontal, 16)
   }
 
   private func guideChip(_ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Text(title)
-        .font(.caption.weight(.semibold))
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
+        .font(.caption2.weight(.semibold))
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
         .background {
           Capsule(style: .continuous)
             .fill(isOn ? Color.white : Color.white.opacity(0.08))

@@ -286,7 +286,7 @@ private struct CameraContextStrip: View {
   let onItemTap: () -> Void
 
   var body: some View {
-    HStack(spacing: 10) {
+    HStack(spacing: 8) {
       contextChip(
         title: "Store",
         value: storeShortCode,
@@ -344,8 +344,8 @@ private struct CameraContextStrip: View {
         Spacer(minLength: 0)
       }
       .padding(.horizontal, 12)
-      .padding(.vertical, 10)
-      .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+      .padding(.vertical, 8)
+      .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
       .background {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
           .fill(.white.opacity(0.08))
@@ -370,7 +370,7 @@ private struct CameraMetadataTray: View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
         Label("Item Details", systemImage: "doc.text")
-          .font(.headline.weight(.semibold))
+          .font(.subheadline.weight(.semibold))
           .foregroundStyle(.white)
         Spacer()
         Button("Edit", action: onEditDetails)
@@ -391,7 +391,7 @@ private struct CameraMetadataTray: View {
         }
       }
     }
-    .padding(14)
+    .padding(12)
     .background {
       RoundedRectangle(cornerRadius: 22, style: .continuous)
         .fill(.white.opacity(0.08))
@@ -413,9 +413,9 @@ private struct CameraMetadataTray: View {
         .lineLimit(isWide ? 2 : 1)
         .minimumScaleFactor(0.85)
     }
-    .frame(maxWidth: .infinity, minHeight: isWide ? 56 : 48, alignment: .leading)
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
+    .frame(maxWidth: .infinity, minHeight: isWide ? 48 : 42, alignment: .leading)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 8)
     .background {
       RoundedRectangle(cornerRadius: 16, style: .continuous)
         .fill(.black.opacity(0.28))
@@ -942,12 +942,13 @@ private struct CameraSessionView: View {
   }
 
   var body: some View {
-    VStack(spacing: 12) {
+    VStack(spacing: 8) {
       CameraTopBar(
         title: "Current Batch · Item \(appState.currentItemNumber)",
         photoCount: appState.capturedPhotos.count,
         onBack: onBack
       )
+      .padding(.top, 2)
 
       CameraContextStrip(
         storeName: appState.captureStoreName,
@@ -958,6 +959,7 @@ private struct CameraSessionView: View {
         onItemTap: { presentDetailsEditor() }
       )
       .padding(.horizontal, 16)
+      .layoutPriority(0)
 
       Group {
         if isEditingOverlayPresented {
@@ -986,6 +988,7 @@ private struct CameraSessionView: View {
       }
       .frame(maxHeight: .infinity)
       .padding(.horizontal, 16)
+      .layoutPriority(1)
 
       CameraMetadataTray(
         sku: appState.currentItemSku,
@@ -995,20 +998,24 @@ private struct CameraSessionView: View {
         onEditDetails: { presentDetailsEditor() }
       )
       .padding(.horizontal, 16)
+      .layoutPriority(0)
 
-      ZoomControlRow(
-        currentZoom: cameraService.currentZoom,
-        minZoom: cameraService.minZoom,
-        maxZoom: cameraService.userFacingMaxZoom,
-        onZoomChange: updateZoom,
-        formatZoom: formatZoom
-      )
+      VStack(spacing: 6) {
+        ZoomControlRow(
+          currentZoom: cameraService.currentZoom,
+          minZoom: cameraService.minZoom,
+          maxZoom: cameraService.userFacingMaxZoom,
+          onZoomChange: updateZoom,
+          formatZoom: formatZoom
+        )
 
-      GuideToggleRow(
-        gridEnabled: $cameraPreferences.gridEnabled,
-        horizonGuideEnabled: $cameraPreferences.horizonGuideEnabled,
-        showsTapToFocusHint: cameraService.supportsFocusPoint || cameraService.supportsExposurePoint
-      )
+        GuideToggleRow(
+          gridEnabled: $cameraPreferences.gridEnabled,
+          horizonGuideEnabled: $cameraPreferences.horizonGuideEnabled,
+          showsTapToFocusHint: cameraService.supportsFocusPoint || cameraService.supportsExposurePoint
+        )
+      }
+      .layoutPriority(0)
 
       CameraActionBar(
         thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
@@ -1026,6 +1033,7 @@ private struct CameraSessionView: View {
         },
         onDone: onDone
       )
+      .layoutPriority(0)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(Color.black.ignoresSafeArea())

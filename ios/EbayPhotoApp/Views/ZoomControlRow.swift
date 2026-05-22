@@ -8,14 +8,14 @@ struct ZoomControlRow: View {
   let formatZoom: (Double) -> String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: 6) {
       HStack {
         Text("Zoom")
-          .font(.caption.weight(.semibold))
+          .font(.caption2.weight(.semibold))
           .foregroundStyle(.secondary)
         Spacer()
         Text(formatZoom(currentZoom))
-          .font(.caption.weight(.semibold))
+          .font(.caption2.weight(.semibold))
           .foregroundStyle(.secondary)
       }
 
@@ -32,10 +32,10 @@ struct ZoomControlRow: View {
         )
       } else {
         Text("Zoom unavailable")
-          .font(.caption)
+          .font(.caption2)
           .foregroundStyle(.secondary)
       }
     }
-    .padding(.horizontal)
+    .padding(.horizontal, 16)
   }
 }

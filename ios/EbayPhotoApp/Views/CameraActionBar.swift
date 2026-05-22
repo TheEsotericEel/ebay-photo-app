@@ -8,17 +8,17 @@ struct CameraActionBar: View {
   let onCapture: () -> Void
   let onNextItem: () -> Void
   let onDone: () -> Void
-  private let captureButtonSize: CGFloat = 88
+  private let captureButtonSize: CGFloat = 84
 
   var body: some View {
-    HStack(alignment: .bottom, spacing: 18) {
-      VStack(spacing: 8) {
+    HStack(alignment: .bottom, spacing: 14) {
+      VStack(spacing: 6) {
         thumbnailView
         Text("\(photoCount) photo\(photoCount == 1 ? "" : "s")")
           .font(.caption2.weight(.medium))
           .foregroundStyle(.secondary)
       }
-      .frame(width: 78)
+      .frame(width: 72)
 
       Spacer(minLength: 0)
 
@@ -48,10 +48,10 @@ struct CameraActionBar: View {
         secondaryButton("Next", action: onNextItem)
         secondaryButton("Done", action: onDone)
       }
-      .frame(width: 116)
+      .frame(width: 108)
     }
     .padding(.horizontal, 16)
-    .padding(.top, 6)
+    .padding(.top, 2)
     .padding(.bottom, 2)
   }
 
@@ -59,17 +59,17 @@ struct CameraActionBar: View {
     ZStack {
       RoundedRectangle(cornerRadius: 16, style: .continuous)
         .fill(.white.opacity(0.08))
-        .frame(width: 64, height: 64)
+        .frame(width: 58, height: 58)
 
       if let thumbnailImage {
         Image(uiImage: thumbnailImage)
           .resizable()
           .scaledToFill()
-          .frame(width: 64, height: 64)
+          .frame(width: 58, height: 58)
           .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
       } else {
         Image(systemName: "photo")
-          .font(.system(size: 20, weight: .semibold))
+          .font(.system(size: 18, weight: .semibold))
           .foregroundStyle(.secondary)
       }
 
@@ -84,8 +84,8 @@ struct CameraActionBar: View {
       Text(title)
         .font(.subheadline.weight(.semibold))
         .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, minHeight: 40)
-        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 38)
+        .padding(.horizontal, 10)
         .background {
           Capsule(style: .continuous)
             .fill(.white.opacity(title == "Done" ? 0.14 : 0.1))

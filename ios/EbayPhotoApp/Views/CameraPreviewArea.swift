@@ -59,7 +59,7 @@ struct CameraPreviewArea: View {
       .overlay(alignment: .topLeading) {
         if canUndo {
           cameraOverlayButton(systemName: "arrow.uturn.backward", action: onUndo)
-            .padding(16)
+            .padding(12)
         }
       }
       .overlay(alignment: .bottomTrailing) {
@@ -70,7 +70,7 @@ struct CameraPreviewArea: View {
           onSelectLens: onSelectLens,
           onSelectAuto: onSelectAuto
         )
-        .padding(16)
+        .padding(12)
       }
   }
 
@@ -80,9 +80,9 @@ struct CameraPreviewArea: View {
   ) -> some View {
     Button(action: action) {
       Image(systemName: systemName)
-        .font(.system(size: 15, weight: .semibold))
+        .font(.system(size: 14, weight: .semibold))
         .foregroundStyle(.white)
-        .frame(width: 42, height: 42)
+        .frame(width: 38, height: 38)
         .background {
           Circle()
             .fill(.black.opacity(0.56))

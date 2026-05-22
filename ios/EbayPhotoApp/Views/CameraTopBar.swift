@@ -43,6 +43,6 @@ struct CameraTopBar: View {
         .frame(minWidth: 64, alignment: .trailing)
     }
     .padding(.horizontal, 16)
-    .padding(.top, 6)
+    .padding(.top, 2)
   }
 }
