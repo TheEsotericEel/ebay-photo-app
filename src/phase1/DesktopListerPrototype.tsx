@@ -71,8 +71,17 @@ function isDoneStatus(status: ListingStatus | undefined): boolean {
   return status === 'listed'
 }
 
-function toListingStatus(done: boolean): ListingStatus {
-  return done ? 'listed' : 'new'
+function getListingStatusLabel(status: ListingStatus | undefined): string {
+  switch (status) {
+    case 'listed':
+      return 'Listed'
+    case 'hold':
+      return 'Hold'
+    case 'needs_retake':
+      return 'Needs retake'
+    default:
+      return 'To list'
+  }
 }
 
 function mapItemView(item: ItemPacket, photoUrlsById: Record<string, string>): DesktopItemView {
@@ -543,6 +552,75 @@ export function DesktopListerPrototype() {
     return mapItemView(packet, photoUrlsById)
   }, [items, selectedItemId, photoUrlsById])
 
+  const updateItemListingStatus = useCallback(async (item: ItemPacket, status: ListingStatus) => {
+    const now = new Date().toISOString()
+    const isListed = status === 'listed'
+    const batch = batchesByStore[item.storeId] ?? null
+    const retentionMode = (batch?.remoteRetentionMode || 'delete_7d_after_listed') as RemoteRetentionMode
+    const retentionWindow = isListed
+      ? calculateRetentionWindow(now, retentionMode)
+      : { eligibleAt: null, expiresAt: null }
+
+    setUpdatingItemId(item.id)
+    setActionError(null)
+
+    try {
+      const localPatch = {
+        listingStatus: status,
+        listedAt: isListed ? now : undefined,
+        remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
+        remoteExpiresAt: retentionWindow.expiresAt || undefined,
+      }
+
+      await itemPacketStore.updateItem(item.id, localPatch)
+
+      for (const photoId of item.photoIds) {
+        await photoStore.updatePhoto(photoId, {
+          remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
+          remoteExpiresAt: retentionWindow.expiresAt || undefined,
+        }).catch(() => undefined)
+      }
+
+      if (session && supabase && item.remoteId) {
+        const mutation = createItemMutation({
+          clientId: getClientId(),
+          item: {
+            ...item,
+            ...localPatch,
+          },
+          patch: {
+            listingStatus: status,
+            listedAt: isListed ? now : null,
+            remoteDeleteEligibleAt: retentionWindow.eligibleAt,
+            remoteExpiresAt: retentionWindow.expiresAt,
+          },
+        })
+
+        await enqueueItemMutation({
+          workflowStore,
+          batchId: item.batchId,
+          mutation,
+        })
+
+        const flushSummary = await flushItemMutations({
+          client: supabase,
+          workflowStore,
+          itemStore: itemPacketStore,
+          batchId: item.batchId,
+        })
+        if (flushSummary.errors.length > 0) {
+          throw new Error(`Remote item queue flush failed: ${flushSummary.errors[0]}`)
+        }
+      }
+
+      await loadDesktopData()
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setUpdatingItemId(null)
+    }
+  }, [batchesByStore, loadDesktopData, session, supabase])
+
   const handleSendOtp = useCallback(async () => {
     setSendingOtp(true)
     setLoginError(null)
@@ -584,82 +662,6 @@ export function DesktopListerPrototype() {
       setPasswordSigningIn(false)
     }
   }, [email, password, signInWithPassword])
-
-  const setItemDone = useCallback(async (item: ItemPacket, done: boolean) => {
-    const status = toListingStatus(done)
-    const now = new Date().toISOString()
-    const isListed = status === 'listed'
-    const batch = batchesByStore[item.storeId] ?? null
-    const retentionMode = (batch?.remoteRetentionMode || 'delete_7d_after_listed') as RemoteRetentionMode
-    const retentionWindow = isListed
-      ? calculateRetentionWindow(now, retentionMode)
-      : { eligibleAt: null, expiresAt: null }
-
-    setUpdatingItemId(item.id)
-    setActionError(null)
-
-    try {
-      await itemPacketStore.updateItem(item.id, {
-        listingStatus: status,
-        listedAt: isListed ? now : undefined,
-        remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
-        remoteExpiresAt: retentionWindow.expiresAt || undefined,
-      })
-
-      for (const photoId of item.photoIds) {
-        await photoStore.updatePhoto(photoId, {
-          remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
-          remoteExpiresAt: retentionWindow.expiresAt || undefined,
-        }).catch(() => undefined)
-      }
-
-      if (session && supabase && item.remoteId) {
-        const mutation = createItemMutation({
-          clientId: getClientId(),
-          item: {
-            ...item,
-            listingStatus: status,
-            listedAt: isListed ? now : undefined,
-            remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
-            remoteExpiresAt: retentionWindow.expiresAt || undefined,
-          },
-          patch: {
-            listingStatus: status,
-            listedAt: isListed ? now : null,
-            remoteDeleteEligibleAt: retentionWindow.eligibleAt,
-            remoteExpiresAt: retentionWindow.expiresAt,
-          },
-        })
-
-        await enqueueItemMutation({
-          workflowStore,
-          batchId: item.batchId,
-          mutation,
-        })
-
-        const flushSummary = await flushItemMutations({
-          client: supabase,
-          workflowStore,
-          itemStore: itemPacketStore,
-          batchId: item.batchId,
-        })
-        if (flushSummary.errors.length > 0) {
-          throw new Error(`Remote item queue flush failed: ${flushSummary.errors[0]}`)
-        }
-      }
-
-      await loadDesktopData()
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setUpdatingItemId(null)
-    }
-  }, [batchesByStore, loadDesktopData, session, supabase])
-
-  const toggleDone = useCallback(async (item: ItemPacket) => {
-    const nextDone = !isDoneStatus(item.listingStatus)
-    await setItemDone(item, nextDone)
-  }, [setItemDone])
 
   if (authLoading) {
     return <div style={styles.loadingState}>Loading authentication...</div>
@@ -893,29 +895,28 @@ export function DesktopListerPrototype() {
       ) : (
         <section style={styles.itemGrid}>
           {storeItemViews.map((item) => {
-            const done = isDoneStatus(item.packet.listingStatus)
+            const status = item.packet.listingStatus
             const busy = updatingItemId === item.packet.id
             return (
-              <article key={item.packet.id} style={done ? styles.itemCardDone : styles.itemCard}>
+              <article key={item.packet.id} style={getItemCardStyle(status)}>
                 <button
                   type="button"
                   style={styles.cardMainButton}
                   onClick={() => setSelectedItemId(item.packet.id)}
                 >
                   <StackedPreview photos={item.photoUrls} />
+                  <div style={styles.cardHeaderRow}>
+                    <span style={statusBadgeStyle(status)}>{getListingStatusLabel(status)}</span>
+                    {hasMetadata(item) ? <div style={styles.metadataChip}>metadata</div> : null}
+                  </div>
                   <div style={styles.itemTitle}>{item.label}</div>
                   <div style={styles.itemMeta}>{item.photoCount} photos</div>
-                  {hasMetadata(item) ? <div style={styles.metadataChip}>metadata</div> : null}
                 </button>
-                <label style={styles.checkboxRow}>
-                  <input
-                    type="checkbox"
-                    checked={done}
-                    disabled={busy}
-                    onChange={() => void toggleDone(item.packet)}
-                  />
-                  <span>{busy ? 'Saving...' : done ? 'Done' : 'Mark done'}</span>
-                </label>
+                <ListingStatusControls
+                  currentStatus={status}
+                  busy={busy}
+                  onChange={(nextStatus) => void updateItemListingStatus(item.packet, nextStatus)}
+                />
               </article>
             )
           })}
@@ -925,10 +926,12 @@ export function DesktopListerPrototype() {
       {selectedItem ? (
         <ItemDetailModal
           item={selectedItem}
-          done={isDoneStatus(selectedItem.packet.listingStatus)}
+          status={selectedItem.packet.listingStatus}
+          storeName={selectedStore?.name ?? 'Store'}
+          batchName={selectedStoreId ? (batchesByStore[selectedStoreId]?.name ?? 'Current batch') : 'Current batch'}
           busy={updatingItemId === selectedItem.packet.id}
           onClose={() => setSelectedItemId(null)}
-          onToggleDone={() => void toggleDone(selectedItem.packet)}
+          onChangeStatus={(nextStatus) => void updateItemListingStatus(selectedItem.packet, nextStatus)}
         />
       ) : null}
 
@@ -959,16 +962,20 @@ function StackedPreview({ photos }: { photos: string[] }) {
 
 function ItemDetailModal({
   item,
-  done,
+  status,
+  storeName,
+  batchName,
   busy,
   onClose,
-  onToggleDone,
+  onChangeStatus,
 }: {
   item: DesktopItemView
-  done: boolean
+  status: ListingStatus | undefined
+  storeName: string
+  batchName: string
   busy: boolean
   onClose: () => void
-  onToggleDone: () => void
+  onChangeStatus: (status: ListingStatus) => void
 }) {
   const packet = item.packet
 
@@ -982,7 +989,17 @@ function ItemDetailModal({
         onClick={(event) => event.stopPropagation()}
       >
         <header style={styles.modalHeader}>
-          <h2 style={styles.modalTitle}>{item.label}</h2>
+          <div>
+            <h2 style={styles.modalTitle}>{item.label}</h2>
+            <div style={styles.modalContextRow}>
+              <span style={statusBadgeStyle(status)}>{getListingStatusLabel(status)}</span>
+              <span style={styles.modalContextText}>{storeName}</span>
+              <span style={styles.modalContextDivider}>·</span>
+              <span style={styles.modalContextText}>{batchName}</span>
+              <span style={styles.modalContextDivider}>·</span>
+              <span style={styles.modalContextText}>Item {packet.itemNumber}</span>
+            </div>
+          </div>
           <button type="button" style={styles.iconButton} onClick={onClose}>
             X
           </button>
@@ -1005,11 +1022,44 @@ function ItemDetailModal({
           <MetaRow label="Notes" value={packet.note} />
         </dl>
 
-        <label style={styles.checkboxRow}>
-          <input type="checkbox" checked={done} disabled={busy} onChange={onToggleDone} />
-          <span>{busy ? 'Saving...' : done ? 'Done' : 'Mark done'}</span>
-        </label>
+        <ListingStatusControls currentStatus={status} busy={busy} onChange={onChangeStatus} />
       </section>
+    </div>
+  )
+}
+
+function ListingStatusControls({
+  currentStatus,
+  busy,
+  onChange,
+}: {
+  currentStatus: ListingStatus | undefined
+  busy: boolean
+  onChange: (status: ListingStatus) => void
+}) {
+  const options: Array<{ status: ListingStatus; label: string }> = [
+    { status: 'new', label: 'New / To list' },
+    { status: 'listed', label: 'Listed' },
+    { status: 'hold', label: 'Hold' },
+    { status: 'needs_retake', label: 'Needs retake' },
+  ]
+
+  return (
+    <div style={styles.statusControls}>
+      {options.map((option) => {
+        const selected = (currentStatus ?? 'new') === option.status
+        return (
+          <button
+            key={option.status}
+            type="button"
+            style={selected ? styles.statusButtonActive : styles.statusButton}
+            disabled={busy || selected}
+            onClick={() => onChange(option.status)}
+          >
+            {busy && selected ? 'Saving...' : option.label}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -1041,6 +1091,48 @@ function importStatusStyle(phase: ImportStatusPhase): CSSProperties {
     return { ...base, color: '#3b4b83', background: '#edf2ff' }
   }
   return { ...base, color: '#5e6b84', background: '#eef2f7' }
+}
+
+function statusBadgeStyle(status: ListingStatus | undefined): CSSProperties {
+  switch (status) {
+    case 'listed':
+      return {
+        ...styles.statusBadge,
+        color: '#225c2a',
+        background: '#eaf8ec',
+      }
+    case 'hold':
+      return {
+        ...styles.statusBadge,
+        color: '#7a5a12',
+        background: '#fff4da',
+      }
+    case 'needs_retake':
+      return {
+        ...styles.statusBadge,
+        color: '#9f2525',
+        background: '#fdecec',
+      }
+    default:
+      return {
+        ...styles.statusBadge,
+        color: '#3b4b83',
+        background: '#edf2ff',
+      }
+  }
+}
+
+function getItemCardStyle(status: ListingStatus | undefined): CSSProperties {
+  switch (status) {
+    case 'listed':
+      return styles.itemCardListed
+    case 'hold':
+      return styles.itemCardHold
+    case 'needs_retake':
+      return styles.itemCardNeedsRetake
+    default:
+      return styles.itemCard
+  }
 }
 
 const styles: Record<string, CSSProperties> = {
@@ -1217,10 +1309,28 @@ const styles: Record<string, CSSProperties> = {
     flexDirection: 'column',
     gap: '8px',
   },
-  itemCardDone: {
+  itemCardListed: {
     border: '1px solid #9ec59d',
     borderRadius: '12px',
     background: '#f2fbf2',
+    padding: '10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  itemCardHold: {
+    border: '1px solid #e8cb79',
+    borderRadius: '12px',
+    background: '#fffaf0',
+    padding: '10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  itemCardNeedsRetake: {
+    border: '1px solid #f0b0b0',
+    borderRadius: '12px',
+    background: '#fff5f5',
     padding: '10px',
     display: 'flex',
     flexDirection: 'column',
@@ -1285,8 +1395,24 @@ const styles: Record<string, CSSProperties> = {
     fontSize: '13px',
     color: '#5e6b84',
   },
+  cardHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '6px',
+    marginBottom: '2px',
+  },
+  statusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    borderRadius: '999px',
+    fontSize: '11px',
+    fontWeight: 700,
+    padding: '3px 8px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.03em',
+  },
   metadataChip: {
-    marginTop: '6px',
     display: 'inline-block',
     borderRadius: '999px',
     background: '#edf2ff',
@@ -1297,12 +1423,30 @@ const styles: Record<string, CSSProperties> = {
     textTransform: 'uppercase',
     letterSpacing: '0.02em',
   },
-  checkboxRow: {
+  statusControls: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '14px',
-    fontWeight: 600,
+    flexWrap: 'wrap',
+    gap: '6px',
+  },
+  statusButton: {
+    border: '1px solid #c9d2e3',
+    borderRadius: '999px',
+    background: '#fff',
+    color: '#1e2430',
+    fontWeight: 700,
+    fontSize: '12px',
+    padding: '6px 10px',
+    cursor: 'pointer',
+  },
+  statusButtonActive: {
+    border: '1px solid #2e5cff',
+    borderRadius: '999px',
+    background: '#edf2ff',
+    color: '#2e5cff',
+    fontWeight: 700,
+    fontSize: '12px',
+    padding: '6px 10px',
+    cursor: 'default',
   },
   modalBackdrop: {
     position: 'fixed',
@@ -1330,6 +1474,22 @@ const styles: Record<string, CSSProperties> = {
   modalTitle: {
     margin: 0,
     fontSize: '24px',
+  },
+  modalContextRow: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '6px',
+    marginTop: '6px',
+  },
+  modalContextText: {
+    fontSize: '12px',
+    color: '#5e6b84',
+    fontWeight: 600,
+  },
+  modalContextDivider: {
+    color: '#aab3c6',
+    fontSize: '12px',
   },
   iconButton: {
     border: '1px solid #c9d2e3',
