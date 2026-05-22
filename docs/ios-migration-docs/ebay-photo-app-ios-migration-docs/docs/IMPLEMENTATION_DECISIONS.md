@@ -1,23 +1,28 @@
 # Implementation Decisions
 
-**Status:** locked implementation assumptions for the native iOS migration  
-**Date:** 2026-05-21  
+**Status:** product decisions plus implementation defaults for the native iOS migration  
+**Date:** 05/21/2026  
 **Purpose:** resolve the remaining product/technical gaps so implementation starts with stable defaults without over-locking deferred details.
 
-## Decisions
+## Locked Product Decisions
 
-- **Auth:** Supabase email OTP code entry is the MVP default for both iOS and web. Magic-link/deep-link auth may be added later, but it is not required for the first native slice.
-- **Local iOS storage:** captured image files live in the iOS app's Application Support directory. Metadata/state lives in SQLite. SwiftData is not the default storage model for the first native slice.
-- **Storage path:** new uploads use an owner-scoped path:
-  - `{owner_id}/stores/{store_id}/batches/{batch_id}/items/{item_id}/photos/{photo_id}/{variant}`
-  - the desktop app and migration code should tolerate legacy paths during transition.
-- **Photo variants:** `original` and `listing` are required for MVP. `thumbnail` is strongly recommended and should be generated when feasible, but the app must tolerate missing thumbnails.
+- **Auth:** Supabase email OTP code entry is the MVP default for both iOS and web.
+- **Storage path contract:** V1 uses `docs/BACKEND_CONTRACT_V1.md` path:
+  - `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}`
+- **Photo variants:** V1 requires `listing` + `thumbnail`; `original` upload is deferred.
 - **Web previews:** the desktop web app should use private Supabase storage with signed URLs or authenticated downloads. Signed URLs are preferred for queue and detail views.
 - **Browser fallback:** PWA/browser camera remains fallback and diagnostic only. It is not the primary production capture path.
 - **MVP operating shape:** iPhone only, portrait first, single account, manual foreground submit/upload only.
 - **Mobile queue shape:** the iPhone app uses a real local multi-item queue built around item packets.
 - **Item boundary:** `Next` is the official item boundary.
 - **Store assignment:** store is a property of each item packet, not only of the whole local queue.
+
+## Current Implementation Defaults (Pending Confirmation)
+
+These are practical defaults for the first slice, not long-term architecture commitments:
+
+- **Local iOS storage:** captured image files in Application Support plus SQLite metadata/state.
+- **Owner-scoped schema/path migration:** deferred unless explicitly scheduled as backend schema work.
 
 ## Explicitly Not Locked Yet
 

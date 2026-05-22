@@ -45,9 +45,9 @@ The implementation choices for the current native slice are fixed as follows:
 - Auth uses Supabase email OTP code entry by default.
 - Local image files live in Application Support.
 - Local metadata/state lives in SQLite.
-- New uploads use the owner-scoped storage path from `BACKEND_CONTRACT.md`.
-- `original` and `listing` variants are required.
-- `thumbnail` should be generated when feasible, but missing thumbnails must not block submit/upload.
+- New uploads use the V1 storage path from `docs/BACKEND_CONTRACT_V1.md`.
+- `listing` and `thumbnail` variants are required in V1.
+- `original` upload is deferred in V1.
 - Browser/PWA capture remains fallback or diagnostic only, not primary production capture.
 - Submit/upload is a deliberate user action in MVP.
 
@@ -139,11 +139,10 @@ Shown if no active session exists.
 Required:
 
 - email input
-- send magic link or OTP
-- deep-link/session handling
+- send OTP code
 - visible auth error state
 
-MVP may use magic link if deep linking is configured reliably. If magic link flow is awkward during early TestFlight, use email OTP code entry instead.
+Magic-link/deep-link auth is optional future scope and not required for the first native slice.
 
 ### 5.2 Capture Home
 
@@ -325,20 +324,18 @@ Local cleanup must delete image files but keep metadata.
 
 ### 9.1 MVP Required Variants
 
-- `original`
 - `listing`
-
-### 9.2 Strongly Recommended Variant
-
 - `thumbnail`
+
+### 9.2 Deferred Variant
+
+- `original`
 
 ### 9.3 Variant Rules
 
-- `original` should preserve the highest practical still capture quality.
 - `listing` should be suitable for manual eBay listing use.
 - `thumbnail` should be small enough for fast desktop queue loading.
-
-The desktop web app must tolerate missing thumbnails during early native MVP.
+- If a local `original` is kept, preserve the highest practical still capture quality.
 
 ---
 

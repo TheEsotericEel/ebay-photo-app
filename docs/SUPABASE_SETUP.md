@@ -36,7 +36,7 @@ VITE_SUPABASE_ANON_KEY=your_anon_key
 
 ## App login and sync
 
-- The workspace uses Supabase Auth magic-link login.
+- The workspace uses Supabase Auth with email OTP as the default login flow.
 - The same account is used on the phone and desktop for now.
 - On mobile, sign in with an email address in the app, then use the deliberate submit/upload action to push eligible unsubmitted item packets into Supabase.
 - On desktop, Supabase acts as the shared remote workspace backend for stores, batches, items, and photos.

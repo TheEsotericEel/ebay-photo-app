@@ -1,23 +1,35 @@
 # eBay Photo App Migration Documentation Index
 
 **Status:** repo-ready planning package  
-**Generated:** 2026-05-21  
+**Generated:** 05/21/2026  
 **Purpose:** organize the migration from PWA-first capture to native iPhone capture + web desktop management.
 
 ---
 
-## Document Set
+## Must Read Before Coding
 
-| Document | Role | Read Before Coding? |
-|---|---|---:|
-| `ARCHITECTURE_DECISION_IOS.md` | Locks the decision to split native iPhone capture from web desktop management. | Yes |
-| `PROJECT_SPEC.md` | Updated product/source-of-truth spec for the current mobile-first handoff direction. | Yes |
-| `BACKEND_CONTRACT.md` | Defines shared data/lifecycle contract between iPhone, web, and Supabase. | Yes |
-| `IMPLEMENTATION_DECISIONS.md` | Locks the remaining open migration assumptions without over-locking deferred details. | Yes |
-| `FIRST_NATIVE_BUILD_HANDOFF.md` | Single implementation-ready handoff for the current native iPhone build direction. | Yes |
-| `IOS_CAPTURE_APP_SPEC.md` | Native iPhone capture client requirements and MVP boundary. | Yes |
-| `WEB_DESKTOP_APP_SPEC.md` | Web desktop management app requirements and migration target. | Yes |
-| `MIGRATION_PLAN.md` | Ordered implementation sequence, acceptance criteria, and risk controls. | Yes |
+| Document | Role |
+|---|---|
+| `PROJECT_SPEC.md` | Product source-of-truth for current native iPhone + desktop handoff direction. |
+| `IMPLEMENTATION_DECISIONS.md` | Locked product decisions plus implementation defaults pending confirmation. |
+| `FIRST_NATIVE_BUILD_HANDOFF.md` | Compact implementation handoff for the first native build loop. |
+| `IOS_CAPTURE_APP_SPEC.md` | Native iPhone capture requirements and MVP boundaries. |
+| `docs/BACKEND_CONTRACT_V1.md` | Canonical V1 submit/upload contract and remote shape. |
+| `MIGRATION_PLAN.md` | Ordered implementation sequence and acceptance criteria. |
+
+## Reference Docs
+
+| Document | Role |
+|---|---|
+| `ARCHITECTURE_DECISION_IOS.md` | Architecture rationale and platform boundary decisions. |
+| `WEB_DESKTOP_APP_SPEC.md` | Desktop management requirements and remote-data-first migration target. |
+| `BACKEND_CONTRACT.md` | Future-safe backend target (owner-scoped and post-V1 direction). |
+
+## Historical Context
+
+| Document | Role |
+|---|---|
+| `ebay-photo-handoff-camera-app-official-spec.md` | Historical PWA-first spec superseded for native iPhone planning. |
 
 ---
 
@@ -25,12 +37,13 @@
 
 1. `ARCHITECTURE_DECISION_IOS.md`
 2. `PROJECT_SPEC.md`
-3. `BACKEND_CONTRACT.md`
+3. `docs/BACKEND_CONTRACT_V1.md`
 4. `IMPLEMENTATION_DECISIONS.md`
 5. `FIRST_NATIVE_BUILD_HANDOFF.md`
 6. `MIGRATION_PLAN.md`
 7. `IOS_CAPTURE_APP_SPEC.md`
 8. `WEB_DESKTOP_APP_SPEC.md`
+9. `BACKEND_CONTRACT.md` (future-safe target reference)
 
 ---
 

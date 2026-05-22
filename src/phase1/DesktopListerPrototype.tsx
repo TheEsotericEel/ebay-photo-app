@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { IndexedDbItemPacketStore, type ItemPacket, type ListingStatus } from '../adapters/itemPacket'
 import { IndexedDbPhotoStore, type StoredPhoto } from '../adapters/localPhotoStore'
 import {
-  importRemoteBatchToLocal,
+  syncRemoteBatchDeltaToLocal,
   syncLocalWorkspaceToRemote,
   syncRemoteWorkspaceToLocal,
   type RemoteWorkspacePushSummary,
@@ -10,6 +10,7 @@ import {
 } from '../adapters/remoteImport'
 import { calculateRetentionWindow, type RemoteRetentionMode } from '../adapters/retention'
 import { IndexedDbWorkflowStore, type BatchRecord, type StoreRecord } from '../adapters/workflowStore'
+import { createItemMutation, enqueueItemMutation, flushItemMutations, getClientId } from '../adapters/itemSync'
 import { supabase } from '../lib/supabase'
 import { useSupabaseSession } from '../lib/useSupabaseSession'
 
@@ -150,7 +151,7 @@ function filterStoreBatchItems(
   })
 }
 
-function formatImportStatusMessage(importedItems: number, errors: string[]): ImportStatus {
+function formatImportStatusMessage(importedItems: number, updatedItems: number, errors: string[]): ImportStatus {
   if (errors.length > 0) {
     return {
       phase: 'error',
@@ -161,6 +162,12 @@ function formatImportStatusMessage(importedItems: number, errors: string[]): Imp
     return {
       phase: 'success',
       message: `Imported ${importedItems} new item${importedItems === 1 ? '' : 's'}`,
+    }
+  }
+  if (updatedItems > 0) {
+    return {
+      phase: 'success',
+      message: `Updated ${updatedItems} synced item${updatedItems === 1 ? '' : 's'}`,
     }
   }
   return {
@@ -192,6 +199,7 @@ function formatWorkspaceSyncSummaryMessage(
   if (pullSummary.importedStores > 0) parts.push(`${pullSummary.importedStores} store${pullSummary.importedStores === 1 ? '' : 's'} pulled`)
   if (pullSummary.importedBatches > 0) parts.push(`${pullSummary.importedBatches} batch${pullSummary.importedBatches === 1 ? '' : 'es'} pulled`)
   if (pullSummary.importedItems > 0) parts.push(`${pullSummary.importedItems} item${pullSummary.importedItems === 1 ? '' : 's'} pulled`)
+  if (pullSummary.updatedItems > 0) parts.push(`${pullSummary.updatedItems} item${pullSummary.updatedItems === 1 ? '' : 's'} refreshed`)
   if (pullSummary.importedPhotos > 0) parts.push(`${pullSummary.importedPhotos} photo${pullSummary.importedPhotos === 1 ? '' : 's'} pulled`)
 
   if (parts.length === 0) {
@@ -231,6 +239,7 @@ export function DesktopListerPrototype() {
   const photoUrlsRef = useRef<Record<string, string>>({})
   const importInFlightRef = useRef(false)
   const workspaceBootstrapAttemptedRef = useRef(false)
+  const realtimeImportTimerRef = useRef<number | null>(null)
 
   const photoById = useMemo(() => buildPhotoById(photos), [photos])
 
@@ -299,24 +308,24 @@ export function DesktopListerPrototype() {
     setImportStatus({ phase: 'checking', message: 'Checking for new items…' })
 
     try {
-      const [localItems, localPhotos] = await Promise.all([
-        itemPacketStore.getAllItems(),
-        photoStore.getAll(),
-      ])
+      await flushItemMutations({
+        client: supabase,
+        workflowStore,
+        itemStore: itemPacketStore,
+        batchId: batch.id,
+      })
 
-      const summary = await importRemoteBatchToLocal({
+      const summary = await syncRemoteBatchDeltaToLocal({
         client: supabase,
         store,
         batch,
-        localItems,
-        localPhotos,
         workflowStore,
         itemStore: itemPacketStore,
         photoStore,
       })
 
       await loadDesktopData({ silent: true })
-      setImportStatus(formatImportStatusMessage(summary.importedItems, summary.errors))
+      setImportStatus(formatImportStatusMessage(summary.importedItems, summary.updatedItems, summary.errors))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setImportStatus({ phase: 'error', message: `Import failed: ${message}` })
@@ -337,6 +346,22 @@ export function DesktopListerPrototype() {
     setActionError(null)
 
     try {
+      const localStores = await workflowStore.getAllStores()
+      for (const store of localStores) {
+        const batches = await workflowStore.getBatches(store.id)
+        for (const batch of batches) {
+          if (!batch.pendingItemMutations || batch.pendingItemMutations.length === 0) {
+            continue
+          }
+          await flushItemMutations({
+            client: supabase,
+            workflowStore,
+            itemStore: itemPacketStore,
+            batchId: batch.id,
+          })
+        }
+      }
+
       const pushSummary = await syncLocalWorkspaceToRemote({
         client: supabase,
         workflowStore,
@@ -365,6 +390,48 @@ export function DesktopListerPrototype() {
     }
     void runRemoteImport(selectedStoreId)
   }, [selectedStoreId, session, runRemoteImport])
+
+  useEffect(() => {
+    if (!session || !supabase || !selectedStoreId) {
+      return
+    }
+    const realtimeClient = supabase
+
+    const selectedBatch = batchesByStore[selectedStoreId]
+    const selectedStore = stores.find((store) => store.id === selectedStoreId) || null
+    if (!selectedBatch?.remoteId || !selectedStore?.remoteId) {
+      return
+    }
+
+    const channel = realtimeClient
+      .channel(`desktop-items-poke-${selectedBatch.remoteId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'items',
+          filter: `batch_id=eq.${selectedBatch.remoteId}`,
+        },
+        () => {
+          if (realtimeImportTimerRef.current) {
+            window.clearTimeout(realtimeImportTimerRef.current)
+          }
+          realtimeImportTimerRef.current = window.setTimeout(() => {
+            void runRemoteImport(selectedStoreId)
+          }, 600)
+        },
+      )
+      .subscribe()
+
+    return () => {
+      if (realtimeImportTimerRef.current) {
+        window.clearTimeout(realtimeImportTimerRef.current)
+        realtimeImportTimerRef.current = null
+      }
+      void realtimeClient.removeChannel(channel)
+    }
+  }, [batchesByStore, runRemoteImport, selectedStoreId, session, stores])
 
   useEffect(() => {
     if (!session || !selectedStoreId || !supabase) {
@@ -507,17 +574,37 @@ export function DesktopListerPrototype() {
       }
 
       if (session && supabase && item.remoteId) {
-        const { error } = await supabase
-          .from('items')
-          .update({
-            status,
-            listed_at: isListed ? now : null,
-            photo_retention_until: retentionWindow.expiresAt || null,
-          })
-          .eq('id', item.remoteId)
+        const mutation = createItemMutation({
+          clientId: getClientId(),
+          item: {
+            ...item,
+            listingStatus: status,
+            listedAt: isListed ? now : undefined,
+            remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
+            remoteExpiresAt: retentionWindow.expiresAt || undefined,
+          },
+          patch: {
+            listingStatus: status,
+            listedAt: isListed ? now : null,
+            remoteDeleteEligibleAt: retentionWindow.eligibleAt,
+            remoteExpiresAt: retentionWindow.expiresAt,
+          },
+        })
 
-        if (error) {
-          throw new Error(`Remote item update failed: ${error.message}`)
+        await enqueueItemMutation({
+          workflowStore,
+          batchId: item.batchId,
+          mutation,
+        })
+
+        const flushSummary = await flushItemMutations({
+          client: supabase,
+          workflowStore,
+          itemStore: itemPacketStore,
+          batchId: item.batchId,
+        })
+        if (flushSummary.errors.length > 0) {
+          throw new Error(`Remote item queue flush failed: ${flushSummary.errors[0]}`)
         }
       }
 
@@ -527,7 +614,7 @@ export function DesktopListerPrototype() {
     } finally {
       setUpdatingItemId(null)
     }
-  }, [batchesByStore, loadDesktopData, session])
+  }, [batchesByStore, loadDesktopData, session, supabase])
 
   const toggleDone = useCallback(async (item: ItemPacket) => {
     const nextDone = !isDoneStatus(item.listingStatus)

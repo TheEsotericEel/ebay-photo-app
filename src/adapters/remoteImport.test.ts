@@ -4,7 +4,7 @@ import { DB_VERSION } from './dbConfig'
 import { IndexedDbItemPacketStore } from './itemPacket'
 import { IndexedDbPhotoStore } from './localPhotoStore'
 import { IndexedDbWorkflowStore } from './workflowStore'
-import { importRemoteBatchToLocal } from './remoteImport'
+import { importRemoteBatchToLocal, syncRemoteBatchDeltaToLocal } from './remoteImport'
 
 const REMOTE_STORE_ID = '11111111-1111-1111-1111-111111111111'
 const REMOTE_BATCH_ID = '22222222-2222-2222-2222-222222222222'
@@ -307,5 +307,86 @@ describe('importRemoteBatchToLocal', () => {
     expect(summary.conflicts).toBe(1)
     expect((await itemStore.getAllItems())).toHaveLength(1)
     expect((await itemStore.getAllItems())[0].remoteId).toBeUndefined()
+  })
+
+  it('updates existing remote-linked item via delta sync and advances cursor', async () => {
+    const store = {
+      ...(await workflowStore.getStore(localStoreId))!,
+      shortCode: 'DEF',
+      remoteId: REMOTE_STORE_ID,
+    }
+    const batch = {
+      ...(await workflowStore.getBatch(localBatchId))!,
+      name: 'Current Batch',
+      remoteId: REMOTE_BATCH_ID,
+      itemSyncCursor: '2026-05-19T00:00:00.000Z',
+    }
+    await workflowStore.upsertStore(store)
+    await workflowStore.upsertBatch(batch)
+
+    const localItem = await itemStore.createItem(localStoreId, localBatchId)
+    await itemStore.updateItem(localItem.id, {
+      remoteId: REMOTE_ITEM_ID,
+      status: 'complete',
+      listingStatus: 'new',
+      note: 'old note',
+      remoteUpdatedAt: '2026-05-19T00:00:00.000Z',
+    })
+
+    const gt = vi.fn().mockReturnThis()
+    const itemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      gt,
+      returns: vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: REMOTE_ITEM_ID,
+            sequence: 1,
+            status: 'listed',
+            sku: 'SKU-UPDATED',
+            notes: 'new note',
+            weight: '2 lb',
+            dimensions: '20x20',
+            listed_at: '2026-05-21T00:00:00.000Z',
+            photo_retention_until: null,
+            photos_cleaned_at: null,
+            created_at: '2026-05-20T16:54:07.394982+00:00',
+            updated_at: '2026-05-21T16:54:07.394982+00:00',
+          },
+        ],
+        error: null,
+      }),
+    }
+
+    const baseClient = createMockClient()
+    const from = vi.fn((table: string) => {
+      if (table === 'items') {
+        return itemsQuery
+      }
+      return (baseClient as { from: (name: string) => unknown }).from(table)
+    })
+
+    const summary = await syncRemoteBatchDeltaToLocal({
+      client: { ...baseClient, from } as never,
+      store,
+      batch,
+      workflowStore,
+      itemStore,
+      photoStore,
+    })
+
+    expect(gt).toHaveBeenCalledWith('updated_at', '2026-05-19T00:00:00.000Z')
+    expect(summary.importedItems).toBe(0)
+    expect(summary.updatedItems).toBe(1)
+
+    const syncedBatch = await workflowStore.getBatch(batch.id)
+    expect(syncedBatch?.itemSyncCursor).toBe('2026-05-21T16:54:07.394982+00:00')
+
+    const syncedItem = (await itemStore.getAllItems()).find((item) => item.remoteId === REMOTE_ITEM_ID)
+    expect(syncedItem?.listingStatus).toBe('listed')
+    expect(syncedItem?.note).toBe('new note')
+    expect(syncedItem?.sku).toBe('SKU-UPDATED')
   })
 })

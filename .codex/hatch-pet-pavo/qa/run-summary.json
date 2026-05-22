@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "run_dir": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo",
+  "spritesheet": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/final/spritesheet.webp",
+  "validation": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/final/validation.json",
+  "contact_sheet": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/qa/contact-sheet.png",
+  "review": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/qa/review.json",
+  "package": "/Users/joe/.codex/pets/pavo"
+}

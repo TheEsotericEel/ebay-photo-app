@@ -27,6 +27,10 @@ The product will evolve into a **multi-platform application** with:
 - **Shared backend**: Supabase auth, Postgres schema, and storage (unchanged)
 - **Current PWA fallback**: The existing PWA mobile capture path remains as a working fallback and historical reference
 
+Implementation authority note:
+
+- For active implementation planning, prefer the native iPhone direction and V1 backend contract sections over older PWA-first implementation descriptions.
+
 ### 1.3 Platform Roles
 
 | Platform | Primary Role | Secondary Role | Status |
@@ -53,7 +57,7 @@ The product will evolve into a **multi-platform application** with:
 
 **Included**:
 - Supabase schema (stores, batches, items, photos, photo_variants, upload_jobs)
-- Supabase Auth (magic-link login, single shared account)
+- Supabase Auth (email OTP default, single shared account)
 - Private storage bucket (photo-assets, 50MB limit, JPEG/PNG)
 - Retention/cleanup logic (delete after listing/completion window)
 - Upload/sync logic (manual submit/upload, retry/resume, verification)
@@ -170,14 +174,14 @@ stores → batches → items → photos → photo_variants
 - Signed URLs: Generated on demand for upload/download
 
 **Photo Variant Types**:
-- `original`: Full-resolution photo from camera
-- `listing`: Optimized for eBay listing (max 1600px longest dimension)
-- `thumbnail`: Small preview (max 300px longest dimension)
+- `listing`: Required V1 upload variant (max 1600px longest dimension)
+- `thumbnail`: Required V1 upload variant for queue/detail preview
+- `original`: Deferred in V1 (local safety asset; optional future upload variant)
 
 ### 4.3 Auth Contracts
 
-**Current**: Supabase Auth with magic-link login, single shared account
-- User logs in via email magic link on both phone and desktop
+**Current**: Supabase Auth with email OTP default, single shared account
+- User logs in via email OTP on both phone and desktop
 - Same account used on all platforms
 - RLS policies allow authenticated users to manage all data
 
@@ -522,7 +526,7 @@ The following remain intentionally deferred and should stay unlocked in planning
 ### 8.1 Current Auth
 
 **Supabase Auth**:
-- Magic-link login (email input, user clicks link in email)
+- Email OTP login (default)
 - Single shared account model
 - Session persisted in browser storage
 - Session refresh automatic
@@ -531,7 +535,7 @@ The following remain intentionally deferred and should stay unlocked in planning
 ### 8.2 Webapp Auth
 
 **Unchanged**:
-- Supabase Auth with magic-link
+- Supabase Auth with email OTP
 - Single shared account
 - Browser storage for session
 - RLS policies unchanged
@@ -539,7 +543,7 @@ The following remain intentionally deferred and should stay unlocked in planning
 ### 8.3 iOS App Auth
 
 **Supabase Auth iOS SDK** (assumption):
-- Magic-link login (email input, open mail app, deep link back to app)
+- Email OTP login
 - Session persisted in Keychain
 - Session refresh automatic
 - Same Supabase project as webapp

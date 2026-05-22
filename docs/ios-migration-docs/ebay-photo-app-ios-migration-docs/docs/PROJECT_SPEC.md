@@ -89,16 +89,20 @@ Needs:
 
 ## 4. Implementation Defaults
 
-The migration assumptions that were previously open are now locked:
+Locked product-level defaults:
 
 - Auth defaults to Supabase email OTP code entry for MVP.
-- Native iPhone local state uses Application Support files plus SQLite metadata.
-- New uploads use owner-scoped storage paths.
-- `original` and `listing` photo variants are required for MVP.
-- `thumbnail` is strongly recommended and should be generated when feasible.
+- New uploads use the V1 path from `docs/BACKEND_CONTRACT_V1.md`.
+- `listing` and `thumbnail` photo variants are required for MVP.
+- `original` upload is deferred in MVP.
 - The browser/PWA camera remains fallback and diagnostic only.
 - The first native slice is iPhone-only and portrait-first.
 - Manual submit/upload is the MVP default.
+
+Current implementation defaults pending confirmation:
+
+- Native iPhone local state uses Application Support files plus SQLite metadata.
+- Owner-scoped schema/path migration is deferred unless explicitly scheduled as backend work.
 
 ---
 
@@ -244,7 +248,7 @@ Owns:
 Owns:
 
 - authentication
-- user-owned records
+- shared backend records for the single-account MVP
 - store/batch/item/photo state
 - private temporary photo assets
 - upload status
@@ -299,7 +303,7 @@ Must include:
 
 Must include:
 
-- user-owned tables
+- shared backend tables for the single-account MVP
 - private storage bucket
 - item/photo status transitions
 - upload attempt tracking

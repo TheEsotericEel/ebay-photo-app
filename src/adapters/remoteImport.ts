@@ -75,16 +75,19 @@ interface RemoteVariantRow {
 
 export interface RemoteImportSummary {
   importedItems: number
+  updatedItems: number
   skippedItems: number
   importedPhotos: number
   conflicts: number
   errors: string[]
+  latestRemoteUpdatedAt?: string
 }
 
 export interface RemoteWorkspaceSyncSummary {
   importedStores: number
   importedBatches: number
   importedItems: number
+  updatedItems: number
   skippedItems: number
   importedPhotos: number
   conflicts: number
@@ -106,6 +109,8 @@ export interface RemoteImportOptions {
   workflowStore: IndexedDbWorkflowStore
   itemStore: IndexedDbItemPacketStore
   photoStore: IndexedDbPhotoStore
+  sinceUpdatedAt?: string
+  upsertExisting?: boolean
 }
 
 export interface RemoteWorkspaceSyncOptions {
@@ -254,10 +259,12 @@ async function downloadPreferredVariant(
 export async function importRemoteBatchToLocal(options: RemoteImportOptions): Promise<RemoteImportSummary> {
   const summary: RemoteImportSummary = {
     importedItems: 0,
+    updatedItems: 0,
     skippedItems: 0,
     importedPhotos: 0,
     conflicts: 0,
     errors: [],
+    latestRemoteUpdatedAt: options.sinceUpdatedAt,
   }
 
   const {
@@ -269,6 +276,8 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
     workflowStore,
     itemStore,
     photoStore,
+    sinceUpdatedAt,
+    upsertExisting = false,
   } = options
 
   const { data: remoteStore, error: storeError } = await client
@@ -315,11 +324,17 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
     summary.errors.push(`Local batch linkage update failed: ${msg}`)
   })
 
-  const { data: remoteItems, error: itemsError } = await client
+  let remoteItemsQuery = client
     .from('items')
     .select('id, sequence, status, sku, notes, weight, dimensions, listed_at, photo_retention_until, photos_cleaned_at, created_at, updated_at')
     .eq('batch_id', remoteBatch.id)
     .order('sequence', { ascending: true })
+
+  if (sinceUpdatedAt) {
+    remoteItemsQuery = remoteItemsQuery.gt('updated_at', sinceUpdatedAt)
+  }
+
+  const { data: remoteItems, error: itemsError } = await remoteItemsQuery
     .returns<RemoteItemRow[]>()
 
   if (itemsError) {
@@ -385,7 +400,9 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
   const localPhotoIds = new Set(localPhotos.map((photo) => photo.id))
 
   for (const remoteItem of remoteItems) {
-    if (localItemByRemoteId.has(remoteItem.id)) {
+    const existingLocalItem = localItemByRemoteId.get(remoteItem.id)
+
+    if (existingLocalItem && !upsertExisting) {
       summary.skippedItems += 1
       continue
     }
@@ -452,7 +469,7 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
       }
     }
 
-    const localItemId = makeLocalId('item', remoteItem.id, localItemIds)
+    const localItemId = existingLocalItem?.id || makeLocalId('item', remoteItem.id, localItemIds)
     const derivedStatuses = deriveItemStatuses(itemPhotos)
     const item: ItemPacket = {
       id: localItemId,
@@ -460,13 +477,14 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
       storeId: store.id,
       batchId: batch.id,
       itemNumber: remoteItem.sequence,
-      createdAt: remoteItem.created_at,
+      createdAt: existingLocalItem?.createdAt || remoteItem.created_at,
       updatedAt: remoteItem.updated_at || new Date().toISOString(),
-      status: itemLocalPhotoIds.length > 0 ? 'complete' : 'draft',
-      photoIds: itemLocalPhotoIds,
+      status: itemLocalPhotoIds.length > 0 ? 'complete' : (existingLocalItem?.status || 'draft'),
+      photoIds: itemLocalPhotoIds.length > 0 ? itemLocalPhotoIds : (existingLocalItem?.photoIds || []),
       listingStatus: mapListingStatus(remoteItem.status),
       uploadStatus: derivedStatuses.uploadStatus,
       remoteStatus: derivedStatuses.remoteStatus,
+      remoteUpdatedAt: remoteItem.updated_at || undefined,
       listedAt: remoteItem.listed_at || undefined,
       remoteExpiresAt: remoteItem.photo_retention_until || undefined,
       remoteDeletedAt: remoteItem.photos_cleaned_at || undefined,
@@ -479,11 +497,39 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
     try {
       await itemStore.upsertItem(item)
       localItemByRemoteId.set(remoteItem.id, item)
-      summary.importedItems += 1
+      if (existingLocalItem) {
+        summary.updatedItems += 1
+      } else {
+        summary.importedItems += 1
+      }
+      if (remoteItem.updated_at && (!summary.latestRemoteUpdatedAt || remoteItem.updated_at > summary.latestRemoteUpdatedAt)) {
+        summary.latestRemoteUpdatedAt = remoteItem.updated_at
+      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       summary.errors.push(`Local item save failed (${remoteItem.id}): ${msg}`)
     }
+  }
+
+  return summary
+}
+
+export async function syncRemoteBatchDeltaToLocal(
+  options: Omit<RemoteImportOptions, 'localItems' | 'localPhotos' | 'sinceUpdatedAt' | 'upsertExisting'>,
+): Promise<RemoteImportSummary> {
+  const { workflowStore, itemStore, photoStore, batch } = options
+  const localItems = await itemStore.getAllItems()
+  const localPhotos = await photoStore.getAll()
+  const summary = await importRemoteBatchToLocal({
+    ...options,
+    localItems,
+    localPhotos,
+    sinceUpdatedAt: batch.itemSyncCursor,
+    upsertExisting: true,
+  })
+
+  if (summary.latestRemoteUpdatedAt && summary.latestRemoteUpdatedAt !== batch.itemSyncCursor) {
+    await workflowStore.updateBatch(batch.id, { itemSyncCursor: summary.latestRemoteUpdatedAt })
   }
 
   return summary
@@ -844,6 +890,7 @@ export async function syncRemoteWorkspaceToLocal(
     importedStores: 0,
     importedBatches: 0,
     importedItems: 0,
+    updatedItems: 0,
     skippedItems: 0,
     importedPhotos: 0,
     conflicts: 0,
@@ -904,6 +951,7 @@ export async function syncRemoteWorkspaceToLocal(
       })
 
       summary.importedItems += batchImport.importedItems
+      summary.updatedItems += batchImport.updatedItems
       summary.skippedItems += batchImport.skippedItems
       summary.importedPhotos += batchImport.importedPhotos
       summary.conflicts += batchImport.conflicts

@@ -11,6 +11,25 @@ export interface StoreRecord {
 
 export type BatchStatus = 'active' | 'ready_for_listing' | 'archived'
 
+export interface BatchItemMutation {
+  id: string
+  clientId: string
+  itemId: string
+  remoteItemId?: string
+  createdAt: string
+  baseRemoteUpdatedAt?: string
+  patch: {
+    listingStatus?: 'new' | 'listed' | 'hold' | 'needs_retake'
+    listedAt?: string | null
+    remoteDeleteEligibleAt?: string | null
+    remoteExpiresAt?: string | null
+    sku?: string | null
+    note?: string | null
+    weight?: string | null
+    dimensions?: string | null
+  }
+}
+
 export interface BatchRecord {
   id: string
   remoteId?: string
@@ -25,6 +44,8 @@ export interface BatchRecord {
   localCleanupCompletedAt?: string | null
   remoteExpiresAt?: string | null
   remoteDeletedAt?: string | null
+  itemSyncCursor?: string
+  pendingItemMutations?: BatchItemMutation[]
   createdAt: string
   updatedAt: string
 }
@@ -182,6 +203,7 @@ export class IndexedDbWorkflowStore {
       localCleanupCompletedAt: null,
       remoteExpiresAt: null,
       remoteDeletedAt: null,
+      pendingItemMutations: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
@@ -203,6 +225,7 @@ export class IndexedDbWorkflowStore {
       localCleanupCompletedAt: null,
       remoteExpiresAt: null,
       remoteDeletedAt: null,
+      pendingItemMutations: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }

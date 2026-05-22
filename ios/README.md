@@ -48,12 +48,11 @@ If Xcode says no destinations are available, install the iOS 26.5 Simulator runt
 ## Your next steps
 
 1. Install Xcode.
-2. Open Xcode and create a new iOS App project named `EbayPhotoApp`.
-3. Use SwiftUI and the default lifecycle.
-4. Replace the generated app files with the source files in this folder.
-5. Set the camera usage strings in the project settings or Info.plist.
-6. Enable Developer Mode on your iPhone.
-7. Sign the app with your Apple ID team in Xcode.
-8. If the scheme cannot build because no simulator destination exists, install the iOS 26.5 Simulator runtime in Xcode.
+2. Open the existing `ios/EbayPhotoApp.xcodeproj` project in Xcode.
+3. Confirm the app target uses SwiftUI lifecycle and the expected bundle/team signing settings.
+4. Verify camera usage strings are present in the app Info.plist.
+5. Enable Developer Mode on your iPhone.
+6. Sign the app with your Apple ID team in Xcode.
+7. If the scheme cannot build because no simulator destination exists, install the iOS 26.5 Simulator runtime in Xcode.
 
 When Xcode is installed, I can help wire the project file and finish the first build loop.

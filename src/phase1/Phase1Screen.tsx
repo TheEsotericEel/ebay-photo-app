@@ -14,9 +14,10 @@ import { attachOrderedPhotosToItem, getItemReadiness, sortItems } from '../adapt
 import { getBatchUploadStateSummary, getCleanupReport } from '../adapters/uploadState'
 import { calculateRetentionWindow, getRetentionModeLabel, RemoteRetentionMode } from '../adapters/retention'
 import { deleteEligibleRemotePhotos, getRemoteCleanupReport, RemoteCleanupProgress } from '../adapters/remoteCleanup'
-import { importRemoteBatchToLocal, syncLocalWorkspaceToRemote, RemoteImportSummary } from '../adapters/remoteImport'
+import { syncRemoteBatchDeltaToLocal, syncLocalWorkspaceToRemote, RemoteImportSummary } from '../adapters/remoteImport'
 import { probeSecureContext, SecureContextInfo } from '../adapters/secureContext'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from '../adapters/workflowStore'
+import { createItemMutation, enqueueItemMutation, flushItemMutations, getClientId } from '../adapters/itemSync'
 import { CameraCapabilities, CameraDeviceInfo, CameraTestConstraintSet, CaptureDiagnostics } from '../adapters/camera'
 import { runCameraProbe, summarizeProbeForLog } from '../adapters/cameraProbe'
 import { buildCameraTestLogText, formatCameraTestLogEntry } from '../adapters/cameraTestLog'
@@ -1953,6 +1954,7 @@ export function WorkspaceScreen() {
   const pinchLastAppliedZoomRef = useRef<number | null>(null)
   const pinchApplyingRef = useRef(false)
   const restorePreferredZoomPendingRef = useRef(false)
+  const realtimeImportTimerRef = useRef<number | null>(null)
   const isMobile = useIsMobile()
   const { session, loading: authLoading, error: authError, signInWithPassword, signOut, configured: supabaseReady } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
@@ -2476,6 +2478,16 @@ export function WorkspaceScreen() {
         onProgress: setUploadProgress,
       })
 
+      const flushSummary = await flushItemMutations({
+        client: supabase,
+        workflowStore,
+        itemStore: itemPacketStore,
+        batchId: batch.id,
+      })
+      if (flushSummary.errors.length > 0) {
+        setStorageErrors((prev) => [...prev, ...flushSummary.errors.map((msg) => `Mutation flush failed: ${msg}`)])
+      }
+
       await loadData()
       setStatusMsg(`Synced ${result.uploadedItems} item${result.uploadedItems === 1 ? '' : 's'} to Supabase`)
     } catch (err) {
@@ -2506,12 +2518,20 @@ export function WorkspaceScreen() {
     setRemoteImportSummary(null)
 
     try {
-      const summary = await importRemoteBatchToLocal({
+      const flushSummary = await flushItemMutations({
+        client: supabase,
+        workflowStore,
+        itemStore: itemPacketStore,
+        batchId: batch.id,
+      })
+      if (flushSummary.errors.length > 0) {
+        setStorageErrors((prev) => [...prev, ...flushSummary.errors.map((msg) => `Mutation flush failed: ${msg}`)])
+      }
+
+      const summary = await syncRemoteBatchDeltaToLocal({
         client: supabase,
         store,
         batch,
-        localItems: allItems,
-        localPhotos: allPhotos,
         workflowStore,
         itemStore: itemPacketStore,
         photoStore,
@@ -2519,7 +2539,7 @@ export function WorkspaceScreen() {
       await loadData()
       setRemoteImportSummary(summary)
       setStatusMsg(
-        `Imported ${summary.importedItems} item${summary.importedItems === 1 ? '' : 's'} and ${summary.importedPhotos} photo${summary.importedPhotos === 1 ? '' : 's'} from Supabase`,
+        `Imported ${summary.importedItems} item${summary.importedItems === 1 ? '' : 's'}, updated ${summary.updatedItems} item${summary.updatedItems === 1 ? '' : 's'}, and synced ${summary.importedPhotos} photo${summary.importedPhotos === 1 ? '' : 's'} from Supabase`,
       )
       if (summary.errors.length > 0) {
         setStorageErrors((prev) => [...prev, ...summary.errors.map((msg) => `Import failed: ${msg}`)])
@@ -2530,7 +2550,49 @@ export function WorkspaceScreen() {
     } finally {
       setImportingRemote(false)
     }
-  }, [allItems, allPhotos, batches, importingRemote, loadData, photoStore, selectedBatchId, selectedStoreId, session, stores])
+  }, [batches, importingRemote, loadData, photoStore, selectedBatchId, selectedStoreId, session, stores])
+
+  useEffect(() => {
+    if (!supabase || !session || !selectedStoreId || !selectedBatchId) {
+      return
+    }
+    const realtimeClient = supabase
+
+    const selectedStore = stores.find((store) => store.id === selectedStoreId) || null
+    const selectedBatch = batches.find((batch) => batch.id === selectedBatchId) || null
+    if (!selectedStore?.remoteId || !selectedBatch?.remoteId) {
+      return
+    }
+
+    const channel = realtimeClient
+      .channel(`workspace-items-poke-${selectedBatch.remoteId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'items',
+          filter: `batch_id=eq.${selectedBatch.remoteId}`,
+        },
+        () => {
+          if (realtimeImportTimerRef.current) {
+            window.clearTimeout(realtimeImportTimerRef.current)
+          }
+          realtimeImportTimerRef.current = window.setTimeout(() => {
+            void handleImportFromSupabase()
+          }, 600)
+        },
+      )
+      .subscribe()
+
+    return () => {
+      if (realtimeImportTimerRef.current) {
+        window.clearTimeout(realtimeImportTimerRef.current)
+        realtimeImportTimerRef.current = null
+      }
+      void realtimeClient.removeChannel(channel)
+    }
+  }, [batches, handleImportFromSupabase, selectedBatchId, selectedStoreId, session, stores])
 
   const handleClearVerifiedLocalCopies = useCallback(async () => {
     const report = getCleanupReport(allItems, allPhotos, selectedStoreId, selectedBatchId)
@@ -2580,17 +2642,37 @@ export function WorkspaceScreen() {
     }
 
     if (session && supabase && item.remoteId) {
-      const { error } = await supabase
-        .from('items')
-        .update({
-          status,
-          listed_at: isListed ? now : null,
-          photo_retention_until: retentionWindow.expiresAt || null,
-        })
-        .eq('id', item.remoteId)
+      const mutation = createItemMutation({
+        clientId: getClientId(),
+        item: {
+          ...item,
+          listingStatus: status,
+          listedAt: isListed ? now : undefined,
+          remoteDeleteEligibleAt: retentionWindow.eligibleAt || undefined,
+          remoteExpiresAt: retentionWindow.expiresAt || undefined,
+        },
+        patch: {
+          listingStatus: status,
+          listedAt: isListed ? now : null,
+          remoteDeleteEligibleAt: retentionWindow.eligibleAt,
+          remoteExpiresAt: retentionWindow.expiresAt,
+        },
+      })
 
-      if (error) {
-        setStorageErrors((prev) => [...prev, `Remote item update failed: ${error.message}`])
+      await enqueueItemMutation({
+        workflowStore,
+        batchId: item.batchId,
+        mutation,
+      })
+
+      const flushSummary = await flushItemMutations({
+        client: supabase,
+        workflowStore,
+        itemStore: itemPacketStore,
+        batchId: item.batchId,
+      })
+      if (flushSummary.errors.length > 0) {
+        setStorageErrors((prev) => [...prev, `Remote item queue flush failed: ${flushSummary.errors[0]}`])
       }
     }
 

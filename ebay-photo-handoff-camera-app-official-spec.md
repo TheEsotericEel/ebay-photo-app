@@ -2,7 +2,7 @@
 
 > Historical note: this document captures the earlier PWA-first product definition. For the current native iPhone workflow direction, use the newer docs under `docs/`, especially the cross-platform, backend-contract, and iOS-specific migration docs.
 
-**Status:** Source-of-truth planning document  
+**Status:** Historical PWA-first spec; superseded for native iPhone planning  
 **Intended location:** Repository documentation, e.g. `docs/PROJECT_SPEC.md`  
 **Audience:** AI IDE, developer, reviewer, future maintainer  
 **Current build direction:** iPhone-first PWA capture app + cloud-backed item packets + store-organized desktop listing queue on one shared account  

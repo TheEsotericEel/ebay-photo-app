@@ -3,7 +3,7 @@
 Use the simulator for non-camera-critical work:
 
 - Supabase config validation
-- auth flow (password sign-in preferred; OTP optional; sign out, session restore)
+- auth flow (email OTP default; sign out, session restore)
 - upload service behavior
 - storage path and DB row verification
 - status/failure handling
@@ -62,7 +62,7 @@ If OTP or account creation fails with email rate limit errors, see:
 
 - `docs/SUPABASE_AUTH_RATE_LIMITS.md`
 
-Quick path: create an auto-confirmed user in Supabase Dashboard, then use **Sign In with Password** (no email sent).
+Quick dev fallback when email rate limits block OTP: create an auto-confirmed user in Supabase Dashboard, then use **Sign In with Password** (no email sent).
 
 ## Physical iPhone logging
 

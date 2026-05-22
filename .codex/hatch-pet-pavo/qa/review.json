@@ -1,0 +1,990 @@
+{
+  "ok": true,
+  "frames_root": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames",
+  "errors": [],
+  "warnings": [
+    "idle used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "running-right used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "running-left used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "waving used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "jumping used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "failed used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "waiting used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "running used extraction method stable-slots; confirm motion playback remains stable and unclipped",
+    "review used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+  ],
+  "rows": [
+    {
+      "state": "idle",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "idle used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/idle/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15635,
+          "bbox": [
+            32,
+            5,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 202
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/idle/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14830,
+          "bbox": [
+            32,
+            8,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 270
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/idle/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14830,
+          "bbox": [
+            32,
+            12,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 228
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/idle/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14801,
+          "bbox": [
+            32,
+            10,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 209
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/idle/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14084,
+          "bbox": [
+            32,
+            12,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 232
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/idle/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14463,
+          "bbox": [
+            32,
+            14,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 238
+        }
+      ]
+    },
+    {
+      "state": "running-right",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "running-right used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-right/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16612,
+          "bbox": [
+            25,
+            5,
+            166,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 367
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-right/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16104,
+          "bbox": [
+            24,
+            6,
+            167,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 371
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-right/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15535,
+          "bbox": [
+            25,
+            9,
+            165,
+            199
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 347
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-right/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15060,
+          "bbox": [
+            27,
+            9,
+            163,
+            198
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 359
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-right/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15169,
+          "bbox": [
+            28,
+            10,
+            163,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 339
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-right/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14533,
+          "bbox": [
+            28,
+            14,
+            163,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 357
+        },
+        {
+          "index": 6,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-right/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14442,
+          "bbox": [
+            28,
+            21,
+            162,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 344
+        },
+        {
+          "index": 7,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-right/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14643,
+          "bbox": [
+            27,
+            18,
+            164,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 309
+        }
+      ]
+    },
+    {
+      "state": "running-left",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "running-left used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-left/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16661,
+          "bbox": [
+            25,
+            5,
+            166,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 373
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-left/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16101,
+          "bbox": [
+            24,
+            6,
+            167,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 371
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-left/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15546,
+          "bbox": [
+            25,
+            9,
+            165,
+            199
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 352
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-left/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15117,
+          "bbox": [
+            27,
+            9,
+            163,
+            198
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 351
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-left/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15183,
+          "bbox": [
+            28,
+            10,
+            163,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 341
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-left/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15344,
+          "bbox": [
+            11,
+            14,
+            180,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 399
+        },
+        {
+          "index": 6,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-left/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14360,
+          "bbox": [
+            31,
+            21,
+            160,
+            202
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 342
+        },
+        {
+          "index": 7,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running-left/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14082,
+          "bbox": [
+            34,
+            18,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 294
+        }
+      ]
+    },
+    {
+      "state": "waving",
+      "expected_frames": 4,
+      "actual_frames": 4,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "waving used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waving/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16314,
+          "bbox": [
+            24,
+            5,
+            168,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 209
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waving/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16718,
+          "bbox": [
+            24,
+            8,
+            168,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 189
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waving/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16492,
+          "bbox": [
+            27,
+            10,
+            165,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 189
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waving/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16339,
+          "bbox": [
+            24,
+            5,
+            168,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 187
+        }
+      ]
+    },
+    {
+      "state": "jumping",
+      "expected_frames": 5,
+      "actual_frames": 5,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "jumping used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/jumping/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9640,
+          "bbox": [
+            31,
+            81,
+            161,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 107
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/jumping/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10249,
+          "bbox": [
+            35,
+            30,
+            157,
+            174
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 123
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/jumping/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 11197,
+          "bbox": [
+            32,
+            5,
+            160,
+            155
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 96
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/jumping/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10573,
+          "bbox": [
+            29,
+            44,
+            163,
+            190
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 116
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/jumping/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9262,
+          "bbox": [
+            40,
+            67,
+            152,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 102
+        }
+      ]
+    },
+    {
+      "state": "failed",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "failed used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/failed/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16764,
+          "bbox": [
+            25,
+            5,
+            165,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 329
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/failed/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13423,
+          "bbox": [
+            24,
+            46,
+            167,
+            201
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 248
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/failed/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13740,
+          "bbox": [
+            39,
+            8,
+            152,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 259
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/failed/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13722,
+          "bbox": [
+            32,
+            13,
+            159,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 281
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/failed/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 12857,
+          "bbox": [
+            33,
+            44,
+            158,
+            200
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 214
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/failed/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14270,
+          "bbox": [
+            38,
+            6,
+            153,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 303
+        },
+        {
+          "index": 6,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/failed/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 11772,
+          "bbox": [
+            30,
+            54,
+            161,
+            201
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 207
+        },
+        {
+          "index": 7,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/failed/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13313,
+          "bbox": [
+            40,
+            12,
+            151,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 279
+        }
+      ]
+    },
+    {
+      "state": "waiting",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "waiting used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waiting/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14207,
+          "bbox": [
+            41,
+            5,
+            158,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 202
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waiting/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13138,
+          "bbox": [
+            34,
+            10,
+            158,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 223
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waiting/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14786,
+          "bbox": [
+            34,
+            5,
+            158,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 197
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waiting/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14037,
+          "bbox": [
+            34,
+            7,
+            158,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 210
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waiting/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13696,
+          "bbox": [
+            34,
+            13,
+            158,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 218
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/waiting/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13247,
+          "bbox": [
+            34,
+            9,
+            135,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 166
+        }
+      ]
+    },
+    {
+      "state": "running",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "running used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14757,
+          "bbox": [
+            35,
+            5,
+            156,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 224
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13362,
+          "bbox": [
+            38,
+            14,
+            153,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 207
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14134,
+          "bbox": [
+            36,
+            5,
+            155,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 203
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13886,
+          "bbox": [
+            38,
+            5,
+            153,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 230
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13226,
+          "bbox": [
+            38,
+            10,
+            153,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 197
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/running/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13662,
+          "bbox": [
+            37,
+            5,
+            154,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 188
+        }
+      ]
+    },
+    {
+      "state": "review",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "stable-slots",
+      "ok": true,
+      "errors": [],
+      "warnings": [
+        "review used extraction method stable-slots; confirm motion playback remains stable and unclipped"
+      ],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/review/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14128,
+          "bbox": [
+            35,
+            6,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 207
+        },
+        {
+          "index": 1,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/review/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13296,
+          "bbox": [
+            38,
+            8,
+            154,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 226
+        },
+        {
+          "index": 2,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/review/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14326,
+          "bbox": [
+            35,
+            5,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 199
+        },
+        {
+          "index": 3,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/review/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14085,
+          "bbox": [
+            35,
+            6,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 216
+        },
+        {
+          "index": 4,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/review/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 13911,
+          "bbox": [
+            37,
+            7,
+            155,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 229
+        },
+        {
+          "index": 5,
+          "file": "/Users/joe/Projects/ebay-photo-app/.codex/hatch-pet-pavo/frames/review/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 14068,
+          "bbox": [
+            35,
+            5,
+            157,
+            203
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 211
+        }
+      ]
+    }
+  ]
+}

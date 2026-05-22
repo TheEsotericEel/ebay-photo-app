@@ -28,8 +28,8 @@ The migration now assumes:
 
 - Supabase email OTP is the default auth flow for MVP
 - native iPhone local metadata uses SQLite plus Application Support files
-- new uploads use owner-scoped storage paths
-- `original` and `listing` are required variants; `thumbnail` is best-effort
+- new uploads use the V1 path from `docs/BACKEND_CONTRACT_V1.md`
+- `listing` and `thumbnail` are required variants in V1; `original` upload is deferred
 - browser/PWA camera stays fallback and diagnostic only
 - the iPhone app uses a real local multi-item queue
 - `Next` is the item boundary
@@ -141,7 +141,7 @@ Make the backend contract explicit and enforceable before the iPhone app writes 
 - verify existing migrations against `BACKEND_CONTRACT.md`
 - confirm RLS and storage privacy
 - confirm required linkage and uniqueness rules
-- decide whether to move storage path fully to owner-scoped path before iPhone submit/upload
+- explicitly defer owner-scoped storage/schema migration unless scheduled as separate backend work
 
 ### Acceptance Criteria
 

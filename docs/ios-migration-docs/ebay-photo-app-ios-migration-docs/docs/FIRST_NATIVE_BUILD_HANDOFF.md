@@ -1,7 +1,7 @@
 # First Native Build Handoff
 
 **Status:** implementation handoff for the current native iOS build direction  
-**Date:** 2026-05-21  
+**Date:** 05/21/2026  
 **Purpose:** provide one compact starting point for building the first useful native iOS capture client from the migration docs.
 
 ## 1. Product Goal
@@ -26,9 +26,9 @@ These assumptions are fixed for the current native build direction:
 - Auth uses Supabase email OTP code entry.
 - Native local files live in Application Support.
 - Native metadata/state lives in SQLite.
-- New uploads use the owner-scoped storage path from `BACKEND_CONTRACT.md`.
-- `original` and `listing` photo variants are required.
-- `thumbnail` is best-effort and may be missing.
+- New uploads use the V1 storage path from `docs/BACKEND_CONTRACT_V1.md`.
+- `listing` and `thumbnail` photo variants are required in V1.
+- `original` upload is deferred in V1.
 - Browser/PWA capture remains fallback and diagnostic only.
 - The build is iPhone-only and portrait-first.
 - The iPhone app uses a real local multi-item queue.

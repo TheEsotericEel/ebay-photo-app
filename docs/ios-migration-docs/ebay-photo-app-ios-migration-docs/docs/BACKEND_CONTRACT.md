@@ -1,7 +1,7 @@
 # Backend Contract
 
 **Project:** eBay Photo App  
-**Status:** required contract before native iOS migration  
+**Status:** future-safe target contract; align active MVP work to `docs/BACKEND_CONTRACT_V1.md`  
 **Backend:** Supabase Auth + Postgres + Storage  
 **Primary clients:** native iPhone capture app and web desktop management app
 
@@ -41,23 +41,20 @@ This contract defines the remote shape after submit/upload. It does not force th
 
 ---
 
-## 3. Canonical Ownership Model
+## 3. Ownership Model
 
-MVP uses one shared account, but tables should still be owner-scoped now to avoid a future security rewrite.
+V1 does not require an owner-scoped schema rewrite.
 
-Every user-created top-level entity should include:
+For active MVP work, follow `docs/BACKEND_CONTRACT_V1.md`:
 
-```sql
-owner_id uuid not null references auth.users(id)
-```
+- one shared authenticated account
+- existing table graph and storage layout
+- no required `owner_id` additions in V1
 
-Recommended owner rules:
+Future target (deferred until explicit schema work):
 
-- `stores.owner_id` is required
-- `batches.owner_id` is required and must match parent store owner
-- `items.owner_id` is required and must match parent batch owner
-- `photos.owner_id` is required and must match parent item owner
-- `photo_variants.owner_id` is required and must match parent photo owner
+- add `owner_id` to user-created top-level entities
+- enforce owner consistency across the hierarchy via RLS/policies
 
 ---
 
@@ -99,29 +96,32 @@ photo-assets
 
 The bucket should be private.
 
-### 5.2 Recommended Storage Path
+### 5.2 Storage Path
 
-For long-term safety, storage paths should be owner-scoped:
+V1 canonical path (active contract):
+
+```txt
+{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}
+```
+
+Future target path (deferred):
 
 ```txt
 {owner_id}/stores/{store_id}/batches/{batch_id}/items/{item_id}/photos/{photo_id}/{variant}
 ```
 
-Legacy path support may remain only during a transition window if needed for compatibility.
-
 ---
 
 ## 6. Photo Variants
 
-Canonical variants:
+V1 canonical variants:
 
 | Variant | Required for MVP? | Purpose |
 |---|---:|---|
-| `original` | Yes | Highest-quality captured image; temporary remote handoff source. |
+| `original` | No (deferred) | Highest-quality captured image; optional future remote handoff source. |
 | `listing` | Yes | Listing-ready image. |
-| `thumbnail` | Recommended | Fast desktop queue/detail preview. |
-
-If native MVP needs to move faster, it may initially upload `original` + `listing` only, but the web app must tolerate missing thumbnails.
+| `thumbnail` | Yes | Fast desktop queue/detail preview. |
+For V1, upload `listing` + `thumbnail` and treat `original` as deferred.
 
 ---
 

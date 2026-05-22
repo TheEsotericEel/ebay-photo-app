@@ -26,7 +26,7 @@ Some Phase 1 implementation language in this repo still reflects older browser-s
 - mobile capture surface with upload/cleanup status
 - mobile camera overlay for SKU, weight, and dimensions
 - desktop tabbed shell with batch drilldown, item detail, and upload tools
-- Supabase Auth magic-link bootstrap
+- Supabase Auth bootstrap (email OTP default)
 - sync into Supabase tables and private storage
 - single shared account across capture and lister devices
 - retention dates and remote cleanup for listed items
