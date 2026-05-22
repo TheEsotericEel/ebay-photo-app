@@ -10,6 +10,7 @@
 
 | Document | Role |
 |---|---|
+| `docs/SUPABASE_SSOT.md` | Architecture and data-ownership reference: Supabase SSOT, local execution layers, handoff rules, V1 desktop bridge. |
 | `PROJECT_SPEC.md` | Product source-of-truth for current native iPhone + desktop handoff direction. |
 | `IMPLEMENTATION_DECISIONS.md` | Locked product decisions plus implementation defaults pending confirmation. |
 | `FIRST_NATIVE_BUILD_HANDOFF.md` | Compact implementation handoff for the first native build loop. |
@@ -35,15 +36,16 @@
 
 ## Recommended Reading Order
 
-1. `ARCHITECTURE_DECISION_IOS.md`
-2. `PROJECT_SPEC.md`
-3. `docs/BACKEND_CONTRACT_V1.md`
-4. `IMPLEMENTATION_DECISIONS.md`
-5. `FIRST_NATIVE_BUILD_HANDOFF.md`
-6. `MIGRATION_PLAN.md`
-7. `IOS_CAPTURE_APP_SPEC.md`
-8. `WEB_DESKTOP_APP_SPEC.md`
-9. `BACKEND_CONTRACT.md` (future-safe target reference)
+1. `docs/SUPABASE_SSOT.md`
+2. `ARCHITECTURE_DECISION_IOS.md`
+3. `PROJECT_SPEC.md`
+4. `docs/BACKEND_CONTRACT_V1.md`
+5. `IMPLEMENTATION_DECISIONS.md`
+6. `FIRST_NATIVE_BUILD_HANDOFF.md`
+7. `MIGRATION_PLAN.md`
+8. `IOS_CAPTURE_APP_SPEC.md`
+9. `WEB_DESKTOP_APP_SPEC.md`
+10. `BACKEND_CONTRACT.md` (future-safe target reference)
 
 ---
 

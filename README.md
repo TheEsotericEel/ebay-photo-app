@@ -63,8 +63,9 @@ See `docs/IOS_SIMULATOR_TESTING.md` for simulator-vs-device testing guidance and
 The repo includes a linked Supabase project and migrations in `supabase/`.
 See:
 
-- [`docs/SUPABASE_SETUP.md`](/Users/joe/Projects/ebay-photo-app/docs/SUPABASE_SETUP.md)
-- [`.env.example`](/Users/joe/Projects/ebay-photo-app/.env.example)
+- [`docs/SUPABASE_SSOT.md`](docs/SUPABASE_SSOT.md) — architecture and data-ownership reference (must-read)
+- [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
+- [`.env.example`](.env.example)
 
 The app uses Supabase Auth and syncs item/photo handoff data into the remote `stores`, `batches`, `items`, `photos`, and `photo_variants` tables.
 The same account is intended for both phone capture and desktop management.
