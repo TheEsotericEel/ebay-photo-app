@@ -87,6 +87,21 @@ Notes:
 - `listedAt` is optional in V1; normal capture flow should leave item as `new`.
 - Each item packet may belong to a different store than the previous item in the same local mobile queue.
 
+## 1.5 Source of Truth
+
+Use this rule for V1 and future extensions unless a document explicitly says otherwise:
+
+- Supabase is the source of truth for shared, durable, cross-device workflow data.
+- Supabase Storage is the source of truth for uploaded photo objects.
+- IndexedDB is the local execution layer: it may temporarily own in-progress capture queues, unsynced edits, cached remote records, local photo blobs, sync cursors, and offline retry state.
+- React state is transient UI state only.
+
+Practical rule:
+
+- Before submit or flush, local queue or local edit state can be authoritative for that device.
+- After submit or flush, Supabase records and Storage objects are the canonical shared state for any other device or client.
+- Local copies may remain as cache, retry state, or retained working copies, but they are not the cross-device source of truth.
+
 ---
 
 ## 2) Required table inserts/updates

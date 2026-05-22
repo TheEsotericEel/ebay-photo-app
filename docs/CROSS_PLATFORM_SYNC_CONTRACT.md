@@ -15,6 +15,20 @@ This contract is intentionally high-level. It should not be used to prematurely 
 - exact backend batch mapping for the mobile local queue
 - exact `Done` semantics on mobile
 
+## 0. Data Ownership Rule
+
+Use this ownership model throughout the product:
+
+- Supabase is the source of truth for shared, durable, cross-device workflow data.
+- IndexedDB is the local execution layer: it may temporarily own in-progress capture queues, unsynced edits, cached records, local photo blobs, sync cursors, and offline retry state.
+- React state is transient UI state only.
+
+Practical rule:
+
+- Before submit or flush, local queue or local edit state can be authoritative for that device.
+- After submit or flush, Supabase is the canonical shared state for any record that another device needs to trust.
+- Local copies may remain as cache, retry state, or retained working copies, but they are not the cross-device source of truth.
+
 ## 1. Sync Model
 
 The system should use layered sync, not per-item timer polling.
