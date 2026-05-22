@@ -978,6 +978,20 @@ function ItemDetailModal({
   onChangeStatus: (status: ListingStatus) => void
 }) {
   const packet = item.packet
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0)
+
+  useEffect(() => {
+    setActivePhotoIndex(0)
+  }, [item.packet.id])
+
+  const activePhotoUrl = item.photoUrls[activePhotoIndex] ?? item.photoUrls[0] ?? null
+  const metadataFields = [
+    { label: 'SKU', value: packet.sku },
+    { label: 'Weight', value: packet.weight },
+    { label: 'Dimensions', value: packet.dimensions },
+    { label: 'Notes', value: packet.note, wide: true },
+  ]
+  const hasMetadata = metadataFields.some((field) => Boolean(field.value?.trim()))
 
   return (
     <div style={styles.modalBackdrop} onClick={onClose} role="presentation">
@@ -1005,24 +1019,105 @@ function ItemDetailModal({
           </button>
         </header>
 
-        <div style={styles.modalPhotoGrid}>
-          {item.photoUrls.length > 0 ? (
-            item.photoUrls.map((photoUrl, index) => (
-              <img key={`${item.packet.id}-${index}`} src={photoUrl} alt={`${item.label} photo ${index + 1}`} style={styles.modalPhoto} />
-            ))
-          ) : (
-            <div style={styles.modalEmptyPhoto}>No photos available.</div>
-          )}
+        <div style={styles.modalBody}>
+          <section style={styles.modalPhotoPane}>
+            <div style={styles.sectionLabelRow}>
+              <h3 style={styles.sectionLabel}>Photos</h3>
+              <span style={styles.sectionMeta}>{item.photoUrls.length} total</span>
+            </div>
+
+            <div style={styles.modalHeroFrame}>
+              {activePhotoUrl ? (
+                <img
+                  src={activePhotoUrl}
+                  alt={`${item.label} photo ${activePhotoIndex + 1}`}
+                  style={styles.modalHeroPhoto}
+                />
+              ) : (
+                <div style={styles.modalMissingPhoto}>
+                  <div style={styles.modalMissingPhotoTitle}>No photos available</div>
+                  <div style={styles.modalMissingPhotoText}>This item has not received any local photos yet.</div>
+                </div>
+              )}
+            </div>
+
+            <div style={styles.modalThumbRow}>
+              {item.photoUrls.length > 0 ? (
+                item.photoUrls.map((photoUrl, index) => {
+                  const selected = index === activePhotoIndex
+                  return (
+                    <button
+                      key={`${item.packet.id}-${index}`}
+                      type="button"
+                      style={selected ? styles.modalThumbButtonActive : styles.modalThumbButton}
+                      onClick={() => setActivePhotoIndex(index)}
+                      aria-label={`Show photo ${index + 1}`}
+                    >
+                      <img src={photoUrl} alt="" style={styles.modalThumbImage} />
+                      <span style={styles.modalThumbIndex}>{index + 1}</span>
+                    </button>
+                  )
+                })
+              ) : (
+                <div style={styles.modalThumbEmpty}>No photo thumbnails to browse.</div>
+              )}
+            </div>
+
+            {item.photoUrls.length > 0 ? (
+              <div style={styles.modalPhotoCaption}>
+                Showing photo {activePhotoIndex + 1} of {item.photoUrls.length}
+              </div>
+            ) : null}
+          </section>
+
+          <aside style={styles.modalSidebar}>
+            <section style={styles.detailBlock}>
+              <div style={styles.detailBlockHeader}>
+                <div>
+                  <div style={styles.detailBlockEyebrow}>Item</div>
+                  <div style={styles.detailBlockTitle}>{item.label}</div>
+                </div>
+                <span style={statusBadgeStyle(status)}>{getListingStatusLabel(status)}</span>
+              </div>
+              <div style={styles.modalContextRow}>
+                <span style={styles.modalContextText}>{storeName}</span>
+                <span style={styles.modalContextDivider}>·</span>
+                <span style={styles.modalContextText}>{batchName}</span>
+                <span style={styles.modalContextDivider}>·</span>
+                <span style={styles.modalContextText}>Item {packet.itemNumber}</span>
+              </div>
+            </section>
+
+            <section style={styles.detailBlock}>
+              <div style={styles.detailBlockHeader}>
+                <div>
+                  <div style={styles.detailBlockEyebrow}>Metadata</div>
+                  <div style={styles.detailBlockTitle}>Readout</div>
+                </div>
+              </div>
+
+              {hasMetadata ? (
+                <div style={styles.metaGrid}>
+                  {metadataFields.map((field) => (
+                    <MetaRow key={field.label} label={field.label} value={field.value} wide={field.wide} />
+                  ))}
+                </div>
+              ) : (
+                <div style={styles.emptyDetailState}>No metadata has been added for this item.</div>
+              )}
+            </section>
+
+            <section style={styles.detailBlock}>
+              <div style={styles.detailBlockHeader}>
+                <div>
+                  <div style={styles.detailBlockEyebrow}>Actions</div>
+                  <div style={styles.detailBlockTitle}>Listing status</div>
+                </div>
+              </div>
+              <ListingStatusControls currentStatus={status} busy={busy} onChange={onChangeStatus} />
+            </section>
+          </aside>
         </div>
-
-        <dl style={styles.metaList}>
-          <MetaRow label="SKU" value={packet.sku} />
-          <MetaRow label="Weight" value={packet.weight} />
-          <MetaRow label="Dimensions" value={packet.dimensions} />
-          <MetaRow label="Notes" value={packet.note} />
-        </dl>
-
-        <ListingStatusControls currentStatus={status} busy={busy} onChange={onChangeStatus} />
       </section>
     </div>
   )
@@ -1064,12 +1159,12 @@ function ListingStatusControls({
   )
 }
 
-function MetaRow({ label, value }: { label: string; value: string | undefined }) {
+function MetaRow({ label, value, wide }: { label: string; value: string | undefined; wide?: boolean }) {
   return (
-    <>
-      <dt style={styles.metaLabel}>{label}</dt>
-      <dd style={styles.metaValue}>{value || '—'}</dd>
-    </>
+    <div style={wide ? styles.metaFieldWide : styles.metaField}>
+      <div style={styles.metaFieldLabel}>{label}</div>
+      <div style={styles.metaFieldValue}>{value || '—'}</div>
+    </div>
   )
 }
 
@@ -1457,19 +1552,21 @@ const styles: Record<string, CSSProperties> = {
     padding: '20px',
   },
   modal: {
-    width: 'min(920px, 100%)',
-    maxHeight: '90vh',
+    width: 'min(1120px, calc(100vw - 40px))',
+    maxHeight: '92vh',
     overflow: 'auto',
     background: '#fff',
     borderRadius: '14px',
     border: '1px solid #d8deea',
-    padding: '16px',
+    padding: '18px',
+    boxShadow: '0 24px 80px rgba(16, 24, 40, 0.22)',
   },
   modalHeader: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '12px',
+    alignItems: 'flex-start',
+    gap: '12px',
+    marginBottom: '16px',
   },
   modalTitle: {
     margin: 0,
@@ -1491,6 +1588,209 @@ const styles: Record<string, CSSProperties> = {
     color: '#aab3c6',
     fontSize: '12px',
   },
+  modalBody: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1.35fr) minmax(320px, 0.85fr)',
+    gap: '18px',
+    alignItems: 'start',
+  },
+  modalPhotoPane: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    minWidth: 0,
+  },
+  modalSidebar: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    minWidth: 0,
+  },
+  detailBlock: {
+    border: '1px solid #d8deea',
+    borderRadius: '14px',
+    background: '#fafdff',
+    padding: '14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  detailBlockHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '10px',
+  },
+  detailBlockEyebrow: {
+    color: '#6b778d',
+    fontSize: '11px',
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    marginBottom: '2px',
+  },
+  detailBlockTitle: {
+    fontSize: '16px',
+    fontWeight: 800,
+    color: '#1e2430',
+    lineHeight: 1.2,
+  },
+  sectionLabelRow: {
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: '12px',
+  },
+  sectionLabel: {
+    margin: 0,
+    fontSize: '16px',
+    fontWeight: 800,
+    color: '#1e2430',
+  },
+  sectionMeta: {
+    fontSize: '12px',
+    color: '#6b778d',
+    fontWeight: 600,
+  },
+  modalHeroFrame: {
+    borderRadius: '16px',
+    overflow: 'hidden',
+    border: '1px solid #d8deea',
+    background: '#f8faff',
+    aspectRatio: '4 / 3',
+    minHeight: '420px',
+  },
+  modalHeroPhoto: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    background: '#f8faff',
+    display: 'block',
+  },
+  modalMissingPhoto: {
+    width: '100%',
+    height: '100%',
+    display: 'grid',
+    placeItems: 'center',
+    textAlign: 'center',
+    padding: '24px',
+    color: '#7d889d',
+  },
+  modalMissingPhotoTitle: {
+    fontSize: '16px',
+    fontWeight: 800,
+    color: '#5e6b84',
+    marginBottom: '4px',
+  },
+  modalMissingPhotoText: {
+    fontSize: '13px',
+    lineHeight: 1.5,
+  },
+  modalThumbRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))',
+    gap: '10px',
+  },
+  modalThumbButton: {
+    position: 'relative',
+    border: '1px solid #d8deea',
+    borderRadius: '12px',
+    padding: '0',
+    overflow: 'hidden',
+    background: '#fff',
+    cursor: 'pointer',
+    aspectRatio: '1 / 1',
+  },
+  modalThumbButtonActive: {
+    position: 'relative',
+    border: '2px solid #2e5cff',
+    borderRadius: '12px',
+    padding: '0',
+    overflow: 'hidden',
+    background: '#fff',
+    cursor: 'pointer',
+    aspectRatio: '1 / 1',
+  },
+  modalThumbImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    display: 'block',
+  },
+  modalThumbIndex: {
+    position: 'absolute',
+    left: '6px',
+    bottom: '6px',
+    borderRadius: '999px',
+    background: 'rgba(16, 24, 40, 0.72)',
+    color: '#fff',
+    fontSize: '11px',
+    fontWeight: 700,
+    lineHeight: 1,
+    padding: '3px 6px',
+  },
+  modalThumbEmpty: {
+    border: '1px dashed #c9d2e3',
+    borderRadius: '12px',
+    minHeight: '78px',
+    display: 'grid',
+    placeItems: 'center',
+    color: '#7d889d',
+    fontSize: '12px',
+    background: '#f8faff',
+    padding: '8px',
+    textAlign: 'center',
+  },
+  modalPhotoCaption: {
+    fontSize: '12px',
+    color: '#6b778d',
+    fontWeight: 600,
+  },
+  metaGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '10px',
+  },
+  metaField: {
+    border: '1px solid #d8deea',
+    borderRadius: '12px',
+    background: '#fff',
+    padding: '10px 12px',
+    minWidth: 0,
+  },
+  metaFieldWide: {
+    gridColumn: '1 / -1',
+    border: '1px solid #d8deea',
+    borderRadius: '12px',
+    background: '#fff',
+    padding: '10px 12px',
+    minWidth: 0,
+  },
+  metaFieldLabel: {
+    color: '#6b778d',
+    fontSize: '11px',
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '4px',
+  },
+  metaFieldValue: {
+    color: '#1e2430',
+    fontSize: '14px',
+    lineHeight: 1.45,
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    userSelect: 'text',
+  },
+  emptyDetailState: {
+    border: '1px dashed #c9d2e3',
+    borderRadius: '12px',
+    background: '#f8faff',
+    color: '#6b778d',
+    fontSize: '13px',
+    lineHeight: 1.5,
+    padding: '16px',
+  },
   iconButton: {
     border: '1px solid #c9d2e3',
     background: '#fff',
@@ -1498,46 +1798,6 @@ const styles: Record<string, CSSProperties> = {
     width: '34px',
     height: '34px',
     cursor: 'pointer',
-  },
-  modalPhotoGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-    gap: '10px',
-    marginBottom: '14px',
-  },
-  modalPhoto: {
-    width: '100%',
-    aspectRatio: '1 / 1',
-    objectFit: 'cover',
-    borderRadius: '10px',
-    border: '1px solid #d8deea',
-    background: '#f8faff',
-  },
-  modalEmptyPhoto: {
-    border: '1px dashed #c9d2e3',
-    borderRadius: '10px',
-    minHeight: '120px',
-    display: 'grid',
-    placeItems: 'center',
-    color: '#7d889d',
-    fontSize: '13px',
-  },
-  metaList: {
-    display: 'grid',
-    gridTemplateColumns: '120px 1fr',
-    gap: '8px 12px',
-    margin: '0 0 14px',
-  },
-  metaLabel: {
-    margin: 0,
-    fontWeight: 700,
-    fontSize: '13px',
-    color: '#4b5770',
-  },
-  metaValue: {
-    margin: 0,
-    fontSize: '14px',
-    color: '#1e2430',
   },
   footerRow: {
     marginTop: '16px',
