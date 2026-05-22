@@ -5,6 +5,14 @@
 **Status:** implementation spec for post-iOS-migration desktop role  
 **Primary responsibility:** remote item queue, listing workflow, retention, and cleanup management  
 
+Canonical V1 desktop contract for this document:
+
+- Desktop expects V1 handoff variants `listing` + `thumbnail`; `original` is deferred for V1 submit/handoff.
+- MVP auth default is Supabase email OTP code entry; password sign-in may be used as a development fallback for email rate-limit recovery.
+- Current V1 storage path contract is `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}`.
+- MVP uses one shared account and shared backend records/tables; owner-scoped hardening is deferred.
+- Backend `batches` remain part of the remote schema; exact local queue/workflow-to-batch mapping remains deferred.
+
 ---
 
 ## 1. Purpose
@@ -71,6 +79,7 @@ Native iOS captures on iPhone
 The web app must support:
 
 - sign in with the same Supabase account and OTP flow as iOS
+- allow password sign-in as development fallback when OTP/email limits block normal testing
 - sign out
 - session loading state
 - missing env/config state
@@ -187,7 +196,8 @@ Preferred MVP behavior:
 
 - generate signed URLs for queue/detail previews
 - prefer thumbnail variants in the queue
-- fall back to listing/original variants when thumbnails are unavailable
+- fall back to listing variants when thumbnails are unavailable
+- treat `original` as deferred in V1 (legacy tolerance only if older rows exist)
 - preserve the current browser IndexedDB path only as legacy/fallback behavior
 
 ---
@@ -196,7 +206,7 @@ Preferred MVP behavior:
 
 The web app needs a remote read adapter that can load:
 
-- stores owned by current user
+- stores available in the shared single-account MVP workspace
 - batches for selected store
 - items for selected batch
 - photos for each item
@@ -236,7 +246,8 @@ MVP recommendation:
 
 - use Supabase signed URLs for desktop preview where practical
 - prefer thumbnail variant for queue
-- prefer listing or original variant for detail view
+- prefer listing variant for detail view
+- treat `original` as deferred in V1 unless a later explicit migration enables it
 
 ---
 
@@ -253,6 +264,8 @@ The desktop web app should not claim it cleared iPhone files unless it actually 
 ### 8.2 Remote Cleanup
 
 Remote cleanup applies to Supabase storage objects and remote table state.
+
+Remote operations must use remote IDs only (for both rows and storage keys), never local-only IDs.
 
 The web app may trigger remote cleanup after:
 

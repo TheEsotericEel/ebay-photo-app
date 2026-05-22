@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4AF21D4F2C2F4D5D8B900001 /* AppStateQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF21D4E2C2F4D5D8B900001 /* AppStateQueueTests.swift */; };
+		4AF21D4F2C2F4D5D8B900002 /* AppStatePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF21D4E2C2F4D5D8B900002 /* AppStatePersistenceTests.swift */; };
+		4AF21D4F2C2F4D5D8B900003 /* UploadIdempotencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF21D4E2C2F4D5D8B900003 /* UploadIdempotencyTests.swift */; };
 		4A8F1D4F2C2F4D5D8B900001 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */; };
 		4A8F1D4F2C2F4D5D8B900018 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90001A /* AppLog.swift */; };
 		4A8F1D4F2C2F4D5D8B900002 /* EbayPhotoAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */; };
@@ -33,7 +36,21 @@
 		4A8F1D4F2C2F4D5D8B90000B /* Combine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90000B /* Combine.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		4AF21D5A2C2F4D5D8B900001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4A8F1D4A2C2F4D5D8B900001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4A8F1D4C2C2F4D5D8B900001;
+			remoteInfo = EbayPhotoApp;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		4AF21D4E2C2F4D5D8B900001 /* AppStateQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateQueueTests.swift; sourceTree = "<group>"; };
+		4AF21D4E2C2F4D5D8B900002 /* AppStatePersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStatePersistenceTests.swift; sourceTree = "<group>"; };
+		4AF21D4E2C2F4D5D8B900003 /* UploadIdempotencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadIdempotencyTests.swift; sourceTree = "<group>"; };
+		4AF21D4E2C2F4D5D8B90000D /* EbayPhotoAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EbayPhotoAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B90001A /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbayPhotoAppApp.swift; sourceTree = "<group>"; };
@@ -65,6 +82,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		4AF21D4D2C2F4D5D8B900001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4A8F1D4D2C2F4D5D8B900001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -83,9 +107,20 @@
 			isa = PBXGroup;
 			children = (
 				4A8F1D4B2C2F4D5D8B900002 /* EbayPhotoApp */,
+				4AF21D4B2C2F4D5D8B900001 /* EbayPhotoAppTests */,
 				4A8F1D4B2C2F4D5D8B90000E /* Products */,
 				D82D3AC32FBCACEC00EFCBD9 /* Recovered References */,
 			);
+			sourceTree = "<group>";
+		};
+		4AF21D4B2C2F4D5D8B900001 /* EbayPhotoAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				4AF21D4E2C2F4D5D8B900001 /* AppStateQueueTests.swift */,
+				4AF21D4E2C2F4D5D8B900002 /* AppStatePersistenceTests.swift */,
+				4AF21D4E2C2F4D5D8B900003 /* UploadIdempotencyTests.swift */,
+			);
+			path = EbayPhotoAppTests;
 			sourceTree = "<group>";
 		};
 		4A8F1D4B2C2F4D5D8B900002 /* EbayPhotoApp */ = {
@@ -170,6 +205,7 @@
 			isa = PBXGroup;
 			children = (
 				4A8F1D4E2C2F4D5D8B90000D /* EbayPhotoApp.app */,
+				4AF21D4E2C2F4D5D8B90000D /* EbayPhotoAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -188,6 +224,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		4AF21D4C2C2F4D5D8B900001 /* EbayPhotoAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4AF21D522C2F4D5D8B900001 /* Build configuration list for PBXNativeTarget "EbayPhotoAppTests" */;
+			buildPhases = (
+				4AF21D4D2C2F4D5D8B900001 /* Frameworks */,
+				4AF21D4D2C2F4D5D8B900002 /* Sources */,
+				4AF21D4D2C2F4D5D8B900003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4AF21D5B2C2F4D5D8B900001 /* PBXTargetDependency */,
+			);
+			name = EbayPhotoAppTests;
+			productName = EbayPhotoAppTests;
+			productReference = 4AF21D4E2C2F4D5D8B90000D /* EbayPhotoAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		4A8F1D4C2C2F4D5D8B900001 /* EbayPhotoApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4A8F1D522C2F4D5D8B900001 /* Build configuration list for PBXNativeTarget "EbayPhotoApp" */;
@@ -218,6 +272,10 @@
 					4A8F1D4C2C2F4D5D8B900001 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					4AF21D4C2C2F4D5D8B900001 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 4A8F1D4C2C2F4D5D8B900001;
+					};
 				};
 			};
 			buildConfigurationList = 4A8F1D512C2F4D5D8B900001 /* Build configuration list for PBXProject "EbayPhotoApp" */;
@@ -234,11 +292,19 @@
 			projectRoot = "";
 			targets = (
 				4A8F1D4C2C2F4D5D8B900001 /* EbayPhotoApp */,
+				4AF21D4C2C2F4D5D8B900001 /* EbayPhotoAppTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		4AF21D4D2C2F4D5D8B900003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4A8F1D4D2C2F4D5D8B900003 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -249,6 +315,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4AF21D4D2C2F4D5D8B900002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4AF21D4F2C2F4D5D8B900001 /* AppStateQueueTests.swift in Sources */,
+				4AF21D4F2C2F4D5D8B900002 /* AppStatePersistenceTests.swift in Sources */,
+				4AF21D4F2C2F4D5D8B900003 /* UploadIdempotencyTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4A8F1D4D2C2F4D5D8B900002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -277,6 +353,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4AF21D5B2C2F4D5D8B900001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4A8F1D4C2C2F4D5D8B900001 /* EbayPhotoApp */;
+			targetProxy = 4AF21D5A2C2F4D5D8B900001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		4A8F1D532C2F4D5D8B900001 /* Debug */ = {
@@ -346,6 +430,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2U387T5BM4;
+				ENABLE_TESTABILITY = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
@@ -385,6 +470,57 @@
 			};
 			name = Release;
 		};
+		4AF21D552C2F4D5D8B900001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4A8F1D4E2C2F4D5D8B900018 /* RuntimeConfig.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2U387T5BM4;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.joesprojects.ebayphotoappTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EbayPhotoApp.app/EbayPhotoApp";
+			};
+			name = Debug;
+		};
+		4AF21D562C2F4D5D8B900001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4A8F1D4E2C2F4D5D8B900018 /* RuntimeConfig.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2U387T5BM4;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.joesprojects.ebayphotoappTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/EbayPhotoApp.app/EbayPhotoApp";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -402,6 +538,15 @@
 			buildConfigurations = (
 				4A8F1D552C2F4D5D8B900001 /* Debug */,
 				4A8F1D562C2F4D5D8B900001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4AF21D522C2F4D5D8B900001 /* Build configuration list for PBXNativeTarget "EbayPhotoAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4AF21D552C2F4D5D8B900001 /* Debug */,
+				4AF21D562C2F4D5D8B900001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

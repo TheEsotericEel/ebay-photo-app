@@ -132,6 +132,12 @@ export function getRemoteCleanupReport(
       continue
     }
 
+    if (!photo.remoteId) {
+      issues.push('missing remote id')
+      blockedPhotos += 1
+      continue
+    }
+
     eligiblePhotos += 1
   }
 
@@ -156,13 +162,16 @@ export async function deleteEligibleRemotePhotos({
   onProgress,
 }: RemoteCleanupOptions): Promise<RemoteCleanupSummary> {
   const relevant = getRelevantPhotos(items, photos, batch.storeId, batch.id)
-  const eligible = relevant.filter(({ item, photo }) => {
-    if (item.listingStatus !== 'listed') return false
-    if (photo.remoteStatus !== 'verified' || photo.uploadStatus !== 'verified') return false
-    const window = calculateRetentionWindow(item.listedAt, batch.remoteRetentionMode as RemoteRetentionMode | undefined)
-    const expiresAt = photo.remoteExpiresAt || window.expiresAt
-    return isRetentionExpired(expiresAt, new Date())
-  })
+  const eligible = relevant
+    .map(({ item, photo }) => ({ item, photo, remotePhotoId: photo.remoteId }))
+    .filter(({ item, photo, remotePhotoId }) => {
+      if (!remotePhotoId) return false
+      if (item.listingStatus !== 'listed') return false
+      if (photo.remoteStatus !== 'verified' || photo.uploadStatus !== 'verified') return false
+      const window = calculateRetentionWindow(item.listedAt, batch.remoteRetentionMode as RemoteRetentionMode | undefined)
+      const expiresAt = photo.remoteExpiresAt || window.expiresAt
+      return isRetentionExpired(expiresAt, new Date())
+    })
 
   let deletedPhotos = 0
   let skippedPhotos = relevant.filter(({ photo }) => photo.remoteStatus === 'deleted').length
@@ -178,7 +187,7 @@ export async function deleteEligibleRemotePhotos({
     photoCount: eligible.length,
   })
 
-  const eligiblePhotoIds = eligible.map(({ photo }) => photo.id)
+  const eligiblePhotoIds = eligible.map(({ remotePhotoId }) => remotePhotoId as string)
   const { data: variantRows, error: variantsError } = await client
     .from('photo_variants')
     .select('photo_id, storage_bucket, storage_key, variant_type')
@@ -197,8 +206,8 @@ export async function deleteEligibleRemotePhotos({
   }
 
   for (let index = 0; index < eligible.length; index += 1) {
-    const { item, photo } = eligible[index]
-    const photoRows = rowsByPhotoId.get(photo.id) || []
+    const { item, photo, remotePhotoId } = eligible[index]
+    const photoRows = rowsByPhotoId.get(remotePhotoId as string) || []
     const keysToRemove = photoRows
       .filter((row) => row.storage_bucket === bucket)
       .map((row) => row.storage_key)
@@ -223,7 +232,7 @@ export async function deleteEligibleRemotePhotos({
     const { error: variantsUpdateError } = await client
       .from('photo_variants')
       .update({ remote_deleted_at: deletedAt })
-      .eq('photo_id', photo.id)
+      .eq('photo_id', remotePhotoId as string)
 
     if (variantsUpdateError) {
       throw variantsUpdateError
@@ -236,7 +245,7 @@ export async function deleteEligibleRemotePhotos({
         remote_deleted_at: deletedAt,
         local_status: photo.localStatus || 'safe_to_clear',
       })
-      .eq('id', photo.id)
+      .eq('id', remotePhotoId as string)
 
     if (photoUpdateError) {
       throw photoUpdateError

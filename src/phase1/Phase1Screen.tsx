@@ -1956,7 +1956,16 @@ export function WorkspaceScreen() {
   const restorePreferredZoomPendingRef = useRef(false)
   const realtimeImportTimerRef = useRef<number | null>(null)
   const isMobile = useIsMobile()
-  const { session, loading: authLoading, error: authError, signInWithPassword, signOut, configured: supabaseReady } = useSupabaseSession()
+  const {
+    session,
+    loading: authLoading,
+    error: authError,
+    sendOtp,
+    verifyOtp,
+    signInWithPassword,
+    signOut,
+    configured: supabaseReady,
+  } = useSupabaseSession()
   const [mobileMode, setMobileMode] = useState<'home' | 'camera'>('home')
   const [desktopMode, setDesktopMode] = useState<DesktopMode>(() => loadWorkspacePreferences().desktopMode || 'queue')
   const [cameraPermissionRemembered, setCameraPermissionRemembered] = useState(() => loadCameraPermissionGranted())
@@ -1995,9 +2004,12 @@ export function WorkspaceScreen() {
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('new')
   const [selectedQueueItemId, setSelectedQueueItemId] = useState<string>('')
   const [authEmail, setAuthEmail] = useState('')
+  const [authCode, setAuthCode] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [authSubmitting, setAuthSubmitting] = useState(false)
+  const [otpSending, setOtpSending] = useState(false)
+  const [otpVerifying, setOtpVerifying] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<BatchUploadProgress | null>(null)
   const [remoteCleanupProgress, setRemoteCleanupProgress] = useState<RemoteCleanupProgress | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -2422,12 +2434,40 @@ export function WorkspaceScreen() {
     }
   }, [loadData])
 
+  const handleSendOtp = useCallback(async () => {
+    try {
+      setOtpSending(true)
+      setAuthMessage('')
+      await sendOtp(authEmail)
+      setAuthMessage(`OTP code sent to ${authEmail.trim()}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setAuthMessage(`OTP send failed: ${msg}`)
+    } finally {
+      setOtpSending(false)
+    }
+  }, [authEmail, sendOtp])
+
+  const handleVerifyOtp = useCallback(async () => {
+    try {
+      setOtpVerifying(true)
+      setAuthMessage('')
+      await verifyOtp(authEmail, authCode)
+      setAuthMessage(`Signed in as ${authEmail.trim()} with OTP`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setAuthMessage(`OTP verify failed: ${msg}`)
+    } finally {
+      setOtpVerifying(false)
+    }
+  }, [authCode, authEmail, verifyOtp])
+
   const handleSignInWithPassword = useCallback(async () => {
     try {
       setAuthSubmitting(true)
       setAuthMessage('')
       await signInWithPassword(authEmail, authPassword)
-      setAuthMessage(`Signed in as ${authEmail.trim()}`)
+      setAuthMessage(`Signed in as ${authEmail.trim()} with password fallback`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setAuthMessage(`Auth failed: ${msg}`)
@@ -2602,17 +2642,31 @@ export function WorkspaceScreen() {
       return
     }
 
-    const verifiedPhotoIds = allPhotos
+    const verifiedPhotos = allPhotos
       .filter((photo) => photo.uploadStatus === 'verified' && photo.remoteStatus === 'verified')
       .filter((photo) => allItems.some((item) => item.storeId === selectedStoreId && item.batchId === selectedBatchId && item.photoIds.includes(photo.id)))
-      .map((photo) => photo.id)
 
     try {
-      for (const photoId of verifiedPhotoIds) {
-        await photoStore.delete(photoId)
+      for (const photo of verifiedPhotos) {
+        await photoStore.updatePhoto(photo.id, {
+          // Keep metadata/remote IDs; remove local binary payloads only.
+          blob: new Blob([], { type: photo.mimeType || 'application/octet-stream' }),
+          size: 0,
+          originalBlob: undefined,
+          originalSize: undefined,
+          originalWidth: undefined,
+          originalHeight: undefined,
+          thumbnailBlob: undefined,
+          thumbnailSize: undefined,
+          thumbnailWidth: undefined,
+          thumbnailHeight: undefined,
+          localStatus: 'cleared',
+        })
       }
       await loadData()
-      setCleanupMessage(`Cleared ${verifiedPhotoIds.length} verified local photo${verifiedPhotoIds.length === 1 ? '' : 's'}.`)
+      setCleanupMessage(
+        `Cleared local copies for ${verifiedPhotos.length} verified photo${verifiedPhotos.length === 1 ? '' : 's'} (metadata preserved).`,
+      )
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setCleanupMessage(`Cleanup failed: ${msg}`)
@@ -3789,17 +3843,38 @@ export function WorkspaceScreen() {
                       />
                       <input
                         style={s.select}
+                        placeholder="OTP code"
+                        value={authCode}
+                        onChange={(e) => setAuthCode(e.target.value)}
+                        type="text"
+                      />
+                      <button
+                        style={{ ...s.button, ...s.buttonSmall }}
+                        onClick={handleSendOtp}
+                        disabled={otpSending || !authEmail.trim()}
+                      >
+                        {otpSending ? 'Sending…' : 'Send OTP'}
+                      </button>
+                      <button
+                        style={{ ...s.button, ...s.buttonPrimary }}
+                        onClick={handleVerifyOtp}
+                        disabled={otpVerifying || !authEmail.trim() || !authCode.trim()}
+                      >
+                        {otpVerifying ? 'Verifying…' : 'Sign in with OTP'}
+                      </button>
+                      <input
+                        style={s.select}
                         placeholder="Password"
                         value={authPassword}
                         onChange={(e) => setAuthPassword(e.target.value)}
                         type="password"
                       />
                       <button
-                        style={{ ...s.button, ...s.buttonPrimary }}
+                        style={{ ...s.button, ...s.buttonSmall }}
                         onClick={handleSignInWithPassword}
                         disabled={authSubmitting || !authEmail.trim() || !authPassword.trim()}
                       >
-                        {authSubmitting ? 'Signing in…' : 'Sign in'}
+                        {authSubmitting ? 'Signing in…' : 'Use password fallback'}
                       </button>
                     </div>
                   )}
@@ -4054,17 +4129,38 @@ export function WorkspaceScreen() {
                     />
                     <input
                       style={s.select}
+                      placeholder="OTP code"
+                      value={authCode}
+                      onChange={(e) => setAuthCode(e.target.value)}
+                      type="text"
+                    />
+                    <button
+                      style={{ ...s.button, ...s.buttonSmall }}
+                      onClick={handleSendOtp}
+                      disabled={otpSending || !authEmail.trim()}
+                    >
+                      {otpSending ? 'Sending…' : 'Send OTP'}
+                    </button>
+                    <button
+                      style={{ ...s.button, ...s.buttonPrimary }}
+                      onClick={handleVerifyOtp}
+                      disabled={otpVerifying || !authEmail.trim() || !authCode.trim()}
+                    >
+                      {otpVerifying ? 'Verifying…' : 'Sign in with OTP'}
+                    </button>
+                    <input
+                      style={s.select}
                       placeholder="Password"
                       value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)}
                       type="password"
                     />
                     <button
-                      style={{ ...s.button, ...s.buttonPrimary }}
+                      style={{ ...s.button, ...s.buttonSmall }}
                       onClick={handleSignInWithPassword}
                       disabled={authSubmitting || !authEmail.trim() || !authPassword.trim()}
                     >
-                      {authSubmitting ? 'Signing in…' : 'Sign in'}
+                      {authSubmitting ? 'Signing in…' : 'Use password fallback'}
                     </button>
                   </div>
                 )}

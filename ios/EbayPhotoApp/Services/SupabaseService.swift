@@ -125,6 +125,13 @@ final class SupabaseService: ObservableObject {
     let batchName: String
   }
 
+  struct UploadProgress {
+    let stage: String
+    let message: String
+    let photoIndex: Int?
+    let photoCount: Int?
+  }
+
   private let sessionStoreKey = "ebp.supabase.session.v1"
   private let defaultStorageBucket = "photo-assets"
   private let userDefaults: UserDefaults
@@ -428,7 +435,10 @@ final class SupabaseService: ObservableObject {
   }
 
   @discardableResult
-  func uploadItemPacket(_ packet: NativeUploadItemPacketV1) async throws -> NativeUploadItemPacketV1Result {
+  func uploadItemPacket(
+    _ packet: NativeUploadItemPacketV1,
+    onProgress: ((UploadProgress) -> Void)? = nil
+  ) async throws -> NativeUploadItemPacketV1Result {
     guard !packet.photos.isEmpty else {
       throw AppServiceError.invalidRequest("Item packet must include at least one photo.")
     }
@@ -444,15 +454,30 @@ final class SupabaseService: ObservableObject {
 
     do {
       currentStage = "resolve_store"
+      onProgress?(UploadProgress(stage: currentStage, message: "Resolving store", photoIndex: nil, photoCount: packet.photos.count))
       AppLog.upload.info("Store resolve/create start shortCode=\(packet.store.shortCode, privacy: .public)")
-      let storeId = try await resolveOrCreateStore(config: config, session: session, store: packet.store)
+      let storeId = try await upsertWorkspaceStore(
+        config: config,
+        session: session,
+        storeName: packet.store.name,
+        storeShortCode: packet.store.shortCode,
+        remoteStoreId: packet.store.remoteId
+      )
       AppLog.upload.info("Store resolve/create success storeId=\(storeId, privacy: .public)")
       currentStage = "resolve_batch"
+      onProgress?(UploadProgress(stage: currentStage, message: "Resolving batch", photoIndex: nil, photoCount: packet.photos.count))
       AppLog.upload.info("Batch resolve/create start batch=\(packet.batch.name, privacy: .public)")
-      let batchId = try await resolveOrCreateBatch(config: config, session: session, storeId: storeId, batch: packet.batch)
+      let batchId = try await upsertWorkspaceBatch(
+        config: config,
+        session: session,
+        storeId: storeId,
+        batchName: packet.batch.name,
+        batchRemoteId: packet.batch.remoteId
+      )
       AppLog.upload.info("Batch resolve/create success batchId=\(batchId, privacy: .public)")
       batchIdForFailure = batchId
       currentStage = "upsert_item"
+      onProgress?(UploadProgress(stage: currentStage, message: "Upserting item", photoIndex: nil, photoCount: packet.photos.count))
       let itemId = try await upsertItem(
         config: config,
         session: session,
@@ -466,11 +491,37 @@ final class SupabaseService: ObservableObject {
       var listingStorageKeys: [String] = []
       var thumbnailStorageKeys: [String] = []
 
-      for photo in packet.photos.sorted(by: { $0.orderIndex < $1.orderIndex }) {
-        let remotePhotoId = UUID().uuidString.lowercased()
+      let orderedPhotos = packet.photos.sorted(by: { $0.orderIndex < $1.orderIndex })
+      for (loopIndex, photo) in orderedPhotos.enumerated() {
+        let remotePhotoId = photo.remotePhotoId ?? UUID().uuidString.lowercased()
         photoIdByLocalPhotoId[photo.localPhotoId] = remotePhotoId
 
+        if photo.remotePhotoId != nil, try await isRemotePhotoAlreadyUploaded(
+          config: config,
+          session: session,
+          photoId: remotePhotoId
+        ) {
+          successfulPhotoUploadCount += 1
+          onProgress?(
+            UploadProgress(
+              stage: "photo_already_uploaded",
+              message: "Photo \(loopIndex + 1) already uploaded, skipping",
+              photoIndex: loopIndex + 1,
+              photoCount: orderedPhotos.count
+            )
+          )
+          continue
+        }
+
         currentStage = "upsert_photo_row_\(photo.orderIndex)"
+        onProgress?(
+          UploadProgress(
+            stage: currentStage,
+            message: "Uploading photo \(loopIndex + 1) of \(orderedPhotos.count)",
+            photoIndex: loopIndex + 1,
+            photoCount: orderedPhotos.count
+          )
+        )
         AppLog.upload.debug("Photo row upsert start order=\(photo.orderIndex, privacy: .public) photoId=\(remotePhotoId, privacy: .public)")
         try await upsertPhotoPreUpload(
           config: config,
@@ -581,6 +632,7 @@ final class SupabaseService: ObservableObject {
       AppLog.upload.info("Batch finalize success status=uploaded")
 
       currentStage = "complete"
+      onProgress?(UploadProgress(stage: currentStage, message: "Submit complete", photoIndex: nil, photoCount: packet.photos.count))
       return NativeUploadItemPacketV1Result(
         storeId: storeId,
         batchId: batchId,
@@ -798,92 +850,6 @@ final class SupabaseService: ObservableObject {
     return createdId
   }
 
-  private func resolveOrCreateStore(
-    config: Config,
-    session: Session,
-    store: NativeUploadItemPacketV1.Store
-  ) async throws -> String {
-    let escapedShortCode = urlEncoded(store.shortCode)
-    let queryPath = "/rest/v1/stores?short_code=eq.\(escapedShortCode)&select=id&limit=1"
-    let existingData = try await performAuthedRequest(
-      config: config,
-      session: session,
-      method: "GET",
-      pathWithQuery: queryPath,
-      body: nil,
-      additionalHeaders: [:]
-    )
-    let existingRows = try decode([StoreRow].self, from: existingData)
-    if let id = existingRows.first?.id {
-      return id
-    }
-
-    let body: [[String: String]] = [[
-      "name": store.name,
-      "short_code": store.shortCode,
-    ]]
-    let createData = try await performAuthedRequest(
-      config: config,
-      session: session,
-      method: "POST",
-      pathWithQuery: "/rest/v1/stores",
-      body: body,
-      additionalHeaders: [
-        "Prefer": "return=representation",
-      ]
-    )
-    let createdRows = try decode([StoreRow].self, from: createData)
-    guard let createdId = createdRows.first?.id else {
-      throw AppServiceError.server("Store creation returned no id.")
-    }
-    return createdId
-  }
-
-  private func resolveOrCreateBatch(
-    config: Config,
-    session: Session,
-    storeId: String,
-    batch: NativeUploadItemPacketV1.Batch
-  ) async throws -> String {
-    let queryPath = "/rest/v1/batches?store_id=eq.\(urlEncoded(storeId))&name=eq.\(urlEncoded(batch.name))&select=id&limit=1"
-    let existingData = try await performAuthedRequest(
-      config: config,
-      session: session,
-      method: "GET",
-      pathWithQuery: queryPath,
-      body: nil,
-      additionalHeaders: [:]
-    )
-    let existingRows = try decode([BatchRow].self, from: existingData)
-    if let id = existingRows.first?.id {
-      return id
-    }
-
-    let body: [[String: Any]] = [[
-      "store_id": storeId,
-      "name": batch.name,
-      "status": batch.status,
-      "upload_status": "local",
-      "remote_retention_mode": "delete_7d_after_listed",
-    ]]
-
-    let createData = try await performAuthedRequest(
-      config: config,
-      session: session,
-      method: "POST",
-      pathWithQuery: "/rest/v1/batches",
-      body: body,
-      additionalHeaders: [
-        "Prefer": "return=representation",
-      ]
-    )
-    let createdRows = try decode([BatchRow].self, from: createData)
-    guard let createdId = createdRows.first?.id else {
-      throw AppServiceError.server("Batch creation returned no id.")
-    }
-    return createdId
-  }
-
   private func upsertItem(
     config: Config,
     session: Session,
@@ -891,7 +857,21 @@ final class SupabaseService: ObservableObject {
     batchId: String,
     item: NativeUploadItemPacketV1.Item
   ) async throws -> String {
-    let payload: [String: Any] = [
+    var remoteItemId = item.remoteId
+    if remoteItemId == nil {
+      let existingData = try await performAuthedRequest(
+        config: config,
+        session: session,
+        method: "GET",
+        pathWithQuery: "/rest/v1/items?batch_id=eq.\(urlEncoded(batchId))&sequence=eq.\(item.sequence)&select=id&limit=1",
+        body: nil,
+        additionalHeaders: [:]
+      )
+      let existingRows = try decode([ItemRow].self, from: existingData)
+      remoteItemId = existingRows.first?.id
+    }
+
+    var payload: [String: Any] = [
       "store_id": storeId,
       "batch_id": batchId,
       "sequence": item.sequence,
@@ -903,6 +883,9 @@ final class SupabaseService: ObservableObject {
       "listed_at": jsonOrNull(item.listedAtISO8601),
       "photo_retention_until": NSNull(),
     ]
+    if let remoteItemId {
+      payload["id"] = remoteItemId
+    }
 
     let data = try await performAuthedRequest(
       config: config,
@@ -921,6 +904,75 @@ final class SupabaseService: ObservableObject {
     return itemId
   }
 
+  private struct ExistingPhotoStatusRow: Decodable {
+    let upload_status: String
+    let remote_status: String
+  }
+
+  private struct ExistingPhotoVariantRow: Decodable {
+    let variant_type: String
+  }
+
+  private func isRemotePhotoAlreadyUploaded(
+    config: Config,
+    session: Session,
+    photoId: String
+  ) async throws -> Bool {
+    let data = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: "/rest/v1/photos?id=eq.\(urlEncoded(photoId))&select=upload_status,remote_status&limit=1",
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let rows = try decode([ExistingPhotoStatusRow].self, from: data)
+    guard let row = rows.first else { return false }
+    let uploadStatus = row.upload_status
+    let remoteStatus = row.remote_status
+    guard (uploadStatus == "uploaded" || uploadStatus == "verified")
+      && (remoteStatus == "uploaded" || remoteStatus == "verified")
+    else {
+      return false
+    }
+
+    let variantsData = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: "/rest/v1/photo_variants?photo_id=eq.\(urlEncoded(photoId))&variant_type=in.(listing,thumbnail)&select=variant_type",
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let variantRows = try decode([ExistingPhotoVariantRow].self, from: variantsData)
+    let variantTypes = Set(variantRows.map(\.variant_type))
+    return variantTypes.contains("listing") && variantTypes.contains("thumbnail")
+  }
+
+  private struct ExistingPhotoAttemptRow: Decodable {
+    let upload_attempt_count: Int?
+  }
+
+  private func nextUploadAttemptCount(
+    config: Config,
+    session: Session,
+    photoId: String
+  ) async throws -> Int {
+    let data = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "GET",
+      pathWithQuery: "/rest/v1/photos?id=eq.\(urlEncoded(photoId))&select=upload_attempt_count&limit=1",
+      body: nil,
+      additionalHeaders: [:]
+    )
+    let rows = try decode([ExistingPhotoAttemptRow].self, from: data)
+    guard let row = rows.first else {
+      return 1
+    }
+    return max((row.upload_attempt_count ?? 0) + 1, 1)
+  }
+
   private func upsertPhotoPreUpload(
     config: Config,
     session: Session,
@@ -931,6 +983,11 @@ final class SupabaseService: ObservableObject {
     orderIndex: Int,
     capturedAtISO8601: String
   ) async throws {
+    let uploadAttemptCount = try await nextUploadAttemptCount(
+      config: config,
+      session: session,
+      photoId: photoId
+    )
     let payload: [[String: Any]] = [[
       "id": photoId,
       "store_id": storeId,
@@ -941,7 +998,7 @@ final class SupabaseService: ObservableObject {
       "upload_status": "uploading",
       "remote_status": "not_uploaded",
       "captured_at": capturedAtISO8601,
-      "upload_attempt_count": 1,
+      "upload_attempt_count": uploadAttemptCount,
       "remote_delete_eligible_at": NSNull(),
       "remote_expires_at": NSNull(),
     ]]

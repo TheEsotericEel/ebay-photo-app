@@ -528,6 +528,7 @@ The following remain intentionally deferred and should stay unlocked in planning
 
 **Supabase Auth**:
 - Email OTP login (default)
+- Password sign-in may be used as a development fallback for email rate-limit recovery
 - Single shared account model
 - Session persisted in browser storage
 - Session refresh automatic
@@ -537,6 +538,7 @@ The following remain intentionally deferred and should stay unlocked in planning
 
 **Unchanged**:
 - Supabase Auth with email OTP
+- Password sign-in fallback for development/rate-limit recovery
 - Single shared account
 - Browser storage for session
 - RLS policies unchanged

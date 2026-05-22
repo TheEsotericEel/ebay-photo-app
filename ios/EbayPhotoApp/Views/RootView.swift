@@ -8,6 +8,7 @@ struct RootView: View {
   @StateObject private var cameraPreferences = CameraPreferencesStore()
   @State private var showingCamera = false
   @State private var showingDetails = false
+  @State private var showingQueueReview = false
   @State private var showingTextInputLab = false
   @State private var didRestoreSession = false
 
@@ -28,18 +29,63 @@ struct RootView: View {
           CaptureHomeView(
             onOpenCamera: { showingCamera = true },
             onUploadBatch: {
-              appState.statusMessage = "Uploading batch…"
+              appState.statusMessage = "Submitting queued items…"
               appState.uploadMessage = ""
               Task {
-                do {
-                  let packet = try makeUploadPacket()
-                  let result = try await supabase.uploadItemPacket(packet)
-                  appState.captureStoreRemoteId = result.storeId
-                  appState.captureBatchRemoteId = result.batchId
-                  appState.uploadMessage = "Uploaded item \(appState.currentItemNumber) (\(result.photoIdByLocalPhotoId.count) photo(s))."
-                } catch {
-                  appState.uploadMessage = error.localizedDescription
+                if !appState.capturedPhotos.isEmpty {
+                  appState.advanceToNextItem()
                 }
+                let eligible = appState.queueEligibleForSubmit()
+                guard !eligible.isEmpty else {
+                  appState.statusMessage = "No queued items are ready to submit."
+                  return
+                }
+
+                var submittedCount = 0
+                var failedCount = 0
+
+                for item in eligible {
+                  appState.markQueuedItemUploadAttemptStarted(itemId: item.id)
+                  appState.updateQueuedItemSubmitState(item.id, state: .submitting)
+                  appState.setQueueSubmitProgress(
+                    itemId: item.id,
+                    itemNumber: item.itemNumber,
+                    stage: "submitting_item",
+                    message: "Submitting item \(item.itemNumber)"
+                  )
+                  do {
+                    let packet = try appState.makeUploadPacket(from: item)
+                    let result = try await supabase.uploadItemPacket(packet) { progress in
+                      Task { @MainActor in
+                        appState.setQueueSubmitProgress(
+                          itemId: item.id,
+                          itemNumber: item.itemNumber,
+                          stage: progress.stage,
+                          message: progress.message,
+                          photoIndex: progress.photoIndex,
+                          photoCount: progress.photoCount
+                        )
+                      }
+                    }
+                    appState.captureStoreRemoteId = result.storeId
+                    appState.captureBatchRemoteId = result.batchId
+                    appState.applyUploadResult(for: item.id, result: result)
+                    appState.updateQueuedItemSubmitState(item.id, state: .submitted, errorMessage: nil)
+                    submittedCount += 1
+                  } catch {
+                    appState.markQueuedItemUploadFailure(itemId: item.id, errorMessage: error.localizedDescription)
+                    appState.updateQueuedItemSubmitState(
+                      item.id,
+                      state: .failed,
+                      errorMessage: error.localizedDescription
+                    )
+                    failedCount += 1
+                  }
+                }
+
+                appState.statusMessage = "Submit finished."
+                appState.uploadMessage = "Submitted \(submittedCount) item(s); failed \(failedCount)."
+                appState.clearQueueSubmitProgress()
               }
             },
             onUploadFixture: {
@@ -65,6 +111,15 @@ struct RootView: View {
                   appState.uploadMessage = error.localizedDescription
                   appState.statusMessage = "Debug fixture upload failed."
                 }
+              }
+            },
+            onReviewQueue: { showingQueueReview = true },
+            onClearSafeLocalCopies: {
+              let cleared = appState.clearSafeLocalPhotoCopies()
+              if cleared == 0 {
+                appState.statusMessage = "No safe local copies available to clear."
+              } else {
+                appState.statusMessage = "Cleared \(cleared) safe local photo copy(ies)."
               }
             },
             onSignOut: {
@@ -192,74 +247,13 @@ struct RootView: View {
     .fullScreenCover(isPresented: $showingTextInputLab) {
       TextInputLabView()
     }
-  }
-
-  private func makeUploadPacket() throws -> NativeUploadItemPacketV1 {
-    guard !appState.capturedPhotos.isEmpty else {
-      throw AppServiceError.invalidRequest("Capture at least one photo before uploading.")
+    .fullScreenCover(isPresented: $showingQueueReview) {
+      QueueReviewSheet(onOpenCamera: {
+        showingQueueReview = false
+        showingCamera = true
+      })
+      .environmentObject(appState)
     }
-
-    let formatter = ISO8601DateFormatter()
-    let photos = try appState.capturedPhotos.enumerated().map { index, photo in
-      guard let listingImage = UIImage(data: photo.data) else {
-        throw AppServiceError.invalidRequest("Photo \(index + 1) is invalid.")
-      }
-      let thumbnailData = photo.thumbnailData ?? listingImage.ebp_thumbnailData()
-      guard let thumbnailData, let thumbnailImage = UIImage(data: thumbnailData) else {
-        throw AppServiceError.invalidRequest("Unable to build thumbnail for photo \(index + 1).")
-      }
-
-      return NativeUploadItemPacketV1.Photo(
-        localPhotoId: photo.id.uuidString,
-        orderIndex: index,
-        capturedAtISO8601: formatter.string(from: photo.capturedAt),
-        listing: .init(
-          bytes: photo.data,
-          mimeType: "image/jpeg",
-          width: pixelWidth(from: listingImage),
-          height: pixelHeight(from: listingImage)
-        ),
-        thumbnail: .init(
-          bytes: thumbnailData,
-          mimeType: "image/jpeg",
-          width: pixelWidth(from: thumbnailImage),
-          height: pixelHeight(from: thumbnailImage)
-        )
-      )
-    }
-
-    return NativeUploadItemPacketV1(
-      store: .init(
-        shortCode: appState.captureStoreShortCode,
-        name: appState.captureStoreName
-      ),
-      batch: .init(
-        name: appState.captureBatchName,
-        status: "active"
-      ),
-      item: .init(
-        sequence: appState.currentItemNumber,
-        status: "new",
-        sku: appState.currentItemSku.nonEmpty,
-        notes: appState.currentItemNotes.nonEmpty,
-        weight: appState.currentItemWeight.nonEmpty,
-        dimensions: appState.currentItemDimensions.nonEmpty,
-        listedAtISO8601: nil
-      ),
-      photos: photos
-    )
-  }
-
-  private func pixelWidth(from image: UIImage) -> Int? {
-    if let cgImage = image.cgImage { return cgImage.width }
-    let value = Int((image.size.width * image.scale).rounded())
-    return value > 0 ? value : nil
-  }
-
-  private func pixelHeight(from image: UIImage) -> Int? {
-    if let cgImage = image.cgImage { return cgImage.height }
-    let value = Int((image.size.height * image.scale).rounded())
-    return value > 0 ? value : nil
   }
 
   private func pollWorkspaceSnapshotLoop() async {
@@ -310,6 +304,7 @@ private enum DebugFixtureBuilder {
 
       return NativeUploadItemPacketV1.Photo(
         localPhotoId: UUID().uuidString,
+        remotePhotoId: nil,
         orderIndex: index,
         capturedAtISO8601: formatter.string(from: now.addingTimeInterval(TimeInterval(index))),
         listing: .init(
@@ -328,9 +323,10 @@ private enum DebugFixtureBuilder {
     }
 
     return NativeUploadItemPacketV1(
-      store: .init(shortCode: input.captureStoreShortCode, name: input.captureStoreName),
-      batch: .init(name: input.captureBatchName, status: "active"),
+      store: .init(shortCode: input.captureStoreShortCode, name: input.captureStoreName, remoteId: nil),
+      batch: .init(name: input.captureBatchName, status: "active", remoteId: nil),
       item: .init(
+        remoteId: nil,
         sequence: input.currentItemNumber,
         status: "new",
         sku: "fixture-\(input.currentItemNumber)",
@@ -405,10 +401,10 @@ private struct AuthView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
           VStack(alignment: .leading, spacing: 8) {
-            Text("Sign In (recommended)")
+            Text("Email OTP (recommended)")
               .font(.headline)
             Text(
-              "Password sign-in does not send email. OTP and account creation count toward Supabase email limits (~few per hour on built-in SMTP)."
+              "Use OTP as the default sign-in flow. If email rate limits block OTP, use password as a temporary fallback."
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
@@ -420,19 +416,22 @@ private struct AuthView: View {
               autocorrectDisabled: true,
               keyboardType: .emailAddress
             )
-            LabeledTextField(title: "Password", text: $password, isSecure: true)
-            Button("Sign In with Password", action: onSignInWithPassword)
-              .buttonStyle(.borderedProminent)
-          }
-
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Email OTP (rate limited)")
-              .font(.headline)
             Button("Send OTP Code", action: onSendCode)
               .buttonStyle(.bordered)
             LabeledTextField(title: "Code", text: $code, keyboardType: .numberPad)
             Button("Sign In with OTP Code", action: onSignIn)
               .buttonStyle(.borderedProminent)
+          }
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Password fallback")
+              .font(.headline)
+            Text("Use only when OTP is temporarily unavailable.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+            LabeledTextField(title: "Password", text: $password, isSecure: true)
+            Button("Sign In with Password", action: onSignInWithPassword)
+              .buttonStyle(.bordered)
           }
 
           VStack(alignment: .leading, spacing: 8) {
@@ -466,17 +465,12 @@ private struct AuthView: View {
   }
 }
 
-private extension String {
-  var nonEmpty: String? {
-    let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? nil : trimmed
-  }
-}
-
 private struct CaptureHomeView: View {
   let onOpenCamera: () -> Void
   let onUploadBatch: () -> Void
   let onUploadFixture: () -> Void
+  let onReviewQueue: () -> Void
+  let onClearSafeLocalCopies: () -> Void
   let onSignOut: () -> Void
   let onOpenInputLab: (() -> Void)?
   @EnvironmentObject private var appState: AppState
@@ -489,12 +483,47 @@ private struct CaptureHomeView: View {
           LabeledContent("Short code", value: appState.captureStoreShortCode)
           LabeledContent("Batch", value: appState.captureBatchName)
           LabeledContent("Item", value: "\(appState.currentItemNumber)")
-          LabeledContent("Photos", value: "\(appState.capturedPhotos.count)")
+          LabeledContent("Draft photos", value: "\(appState.capturedPhotos.count)")
+          LabeledContent("Queued items", value: "\(appState.queuedItemPackets.count)")
+        }
+
+        Section("Local Queue") {
+          if appState.queuedItemPackets.isEmpty {
+            Text("No queued items yet. Capture photos and tap Next to add item packets.")
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(appState.queuedItemPackets.sorted(by: { $0.itemNumber < $1.itemNumber })) { item in
+              VStack(alignment: .leading, spacing: 4) {
+                Text("Item \(item.itemNumber) · \(item.photos.count) photo(s)")
+                  .font(.subheadline.weight(.semibold))
+                Text("\(item.storeShortCode) · \(item.batchName)")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                Text(queueStateText(item.submitState))
+                  .font(.footnote)
+                  .foregroundStyle(item.submitState == .failed ? .red : .secondary)
+                if let progress = appState.queueSubmitProgress, progress.itemId == item.id {
+                  Text(progress.message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+                if let error = item.lastSubmitError, !error.isEmpty {
+                  Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+                }
+              }
+            }
+          }
         }
 
         Section("Actions") {
           Button("Open Camera", action: onOpenCamera)
+          Button("Review Queue", action: onReviewQueue)
           Button("Upload Batch", action: onUploadBatch)
+          Button("Clear Safe Local Copies", action: onClearSafeLocalCopies)
+            .disabled(appState.safeLocalCleanupCandidates().isEmpty)
           #if DEBUG
           Button("Upload Debug Fixture", action: onUploadFixture)
           if let onOpenInputLab {
@@ -509,9 +538,237 @@ private struct CaptureHomeView: View {
           if !appState.uploadMessage.isEmpty {
             Text(appState.uploadMessage)
           }
+          if let progress = appState.queueSubmitProgress {
+            Text(progress.message)
+            if let photoIndex = progress.photoIndex, let photoCount = progress.photoCount {
+              Text("Photo \(photoIndex) of \(photoCount)")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+          }
         }
       }
       .navigationTitle("Capture Home")
+    }
+  }
+
+  private func queueStateText(_ state: AppState.QueueItemSubmitState) -> String {
+    switch state {
+    case .local:
+      return "Local (not submitted)"
+    case .submitting:
+      return "Submitting…"
+    case .submitted:
+      return "Submitted"
+    case .failed:
+      return "Failed"
+    }
+  }
+}
+
+private struct QueueReviewSheet: View {
+  @EnvironmentObject private var appState: AppState
+  @Environment(\.dismiss) private var dismiss
+  let onOpenCamera: () -> Void
+
+  var body: some View {
+    NavigationStack {
+      List {
+        if appState.queuedItemPackets.isEmpty {
+          Text("Queue is empty. Capture photos and tap Next to create queued item packets.")
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(appState.queuedItemPackets.sorted(by: { $0.itemNumber < $1.itemNumber })) { item in
+            NavigationLink {
+              QueueItemEditorView(itemId: item.id, onOpenCamera: onOpenCamera)
+                .environmentObject(appState)
+            } label: {
+              VStack(alignment: .leading, spacing: 4) {
+                Text("Item \(item.itemNumber)")
+                  .font(.headline)
+                Text("\(item.storeShortCode) · \(item.batchName)")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                Text("\(item.photos.count) photo(s) · \(submitStateLabel(item.submitState))")
+                  .font(.footnote)
+                  .foregroundStyle(.secondary)
+                if let progress = appState.queueSubmitProgress, progress.itemId == item.id {
+                  Text(progress.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+              }
+            }
+          }
+        }
+      }
+      .navigationTitle("Queue Review")
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Done") { dismiss() }
+        }
+      }
+    }
+  }
+
+  private func submitStateLabel(_ state: AppState.QueueItemSubmitState) -> String {
+    switch state {
+    case .local:
+      return "Local"
+    case .submitting:
+      return "Submitting"
+    case .submitted:
+      return "Submitted"
+    case .failed:
+      return "Failed"
+    }
+  }
+}
+
+private struct QueueItemEditorView: View {
+  @EnvironmentObject private var appState: AppState
+  @Environment(\.dismiss) private var dismiss
+  let itemId: UUID
+  let onOpenCamera: () -> Void
+
+  @State private var sku = ""
+  @State private var weight = ""
+  @State private var dimensions = ""
+  @State private var notes = ""
+  @State private var storeName = ""
+  @State private var storeShortCode = ""
+  @State private var batchName = ""
+
+  var body: some View {
+    Group {
+      if let item = appState.queuedItemPacket(id: itemId) {
+        let isSubmitting = item.submitState == .submitting
+        let isSubmitted = item.submitState == .submitted
+        let canEdit = !isSubmitting
+        Form {
+          Section("Metadata") {
+            TextField("SKU", text: $sku).disabled(!canEdit)
+            TextField("Weight", text: $weight).disabled(!canEdit)
+            TextField("Dimensions", text: $dimensions).disabled(!canEdit)
+            TextField("Notes", text: $notes, axis: .vertical)
+              .lineLimit(2 ... 4)
+              .disabled(!canEdit)
+            Button("Save Item Details") {
+              appState.updateQueuedItemContext(
+                itemId: item.id,
+                storeName: storeName,
+                storeShortCode: storeShortCode,
+                batchName: batchName
+              )
+              appState.updateQueuedItemMetadata(
+                itemId: item.id,
+                sku: sku,
+                weight: weight,
+                dimensions: dimensions,
+                notes: notes
+              )
+            }
+            .disabled(!canEdit)
+          }
+
+          Section("Store Assignment") {
+            TextField("Store name", text: $storeName).disabled(!canEdit)
+            TextField("Store short code", text: $storeShortCode).disabled(!canEdit)
+            TextField("Batch name", text: $batchName).disabled(!canEdit)
+            Text("Store assignment is per queued item packet.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
+
+          Section("Photos") {
+            if item.photos.isEmpty {
+              Text("No photos in this queued item.")
+                .foregroundStyle(.secondary)
+            } else {
+              ForEach(item.photos) { photo in
+                HStack(spacing: 12) {
+                  if let data = appState.queuedPhotoPreviewData(itemId: item.id, photoId: photo.id),
+                     let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                      .resizable()
+                      .scaledToFill()
+                      .frame(width: 52, height: 52)
+                      .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                  } else {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                      .fill(Color.gray.opacity(0.2))
+                      .frame(width: 52, height: 52)
+                  }
+
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(photo.lensLabel)
+                      .font(.subheadline.weight(.medium))
+                    Text(photo.capturedAt.formatted(date: .abbreviated, time: .shortened))
+                      .font(.caption)
+                      .foregroundStyle(.secondary)
+                    Text("State: \(photo.uploadState.rawValue) · attempts: \(photo.uploadAttemptCount)")
+                      .font(.caption2)
+                      .foregroundStyle(.secondary)
+                    if let err = photo.lastUploadError, !err.isEmpty {
+                      Text(err)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                    }
+                  }
+
+                  Spacer()
+
+                  Button("Remove", role: .destructive) {
+                    appState.removeQueuedPhoto(itemId: item.id, photoId: photo.id)
+                  }
+                  .buttonStyle(.borderless)
+                  .disabled(!canEdit || isSubmitted)
+                }
+              }
+            }
+          }
+
+          Section("Actions") {
+            if isSubmitted {
+              Button("Mark For Re-submit") {
+                appState.markQueuedItemForResubmit(itemId: item.id)
+              }
+              .foregroundStyle(.orange)
+            }
+
+            Button("Resume Item In Camera") {
+              let promoted = appState.promoteQueuedItemToDraft(itemId: item.id)
+              if promoted {
+                dismiss()
+                onOpenCamera()
+              } else {
+                appState.statusMessage = "Unable to load queued item into draft."
+              }
+            }
+            .foregroundStyle(.blue)
+            .disabled(isSubmitting)
+
+            Button("Delete Queued Item", role: .destructive) {
+              appState.removeQueuedItem(itemId: item.id)
+              dismiss()
+            }
+            .disabled(isSubmitting)
+          }
+        }
+        .navigationTitle("Item \(item.itemNumber)")
+        .onAppear {
+          sku = item.sku
+          weight = item.weight
+          dimensions = item.dimensions
+          notes = item.notes
+          storeName = item.storeName
+          storeShortCode = item.storeShortCode
+          batchName = item.batchName
+        }
+      } else {
+        ContentUnavailableView("Item Not Found", systemImage: "exclamationmark.triangle")
+      }
     }
   }
 }
@@ -655,8 +912,7 @@ private struct CameraSessionView: View {
       while true {
         do {
           let photo = try await cameraService.capturePhoto(aspectMode: cameraPreferences.aspectMode)
-          appState.capturedPhotos.append(photo)
-          appState.statusMessage = "Captured \(appState.capturedPhotos.count) photo(s)"
+          appState.addCapturedPhoto(photo)
         } catch {
           appState.statusMessage = "Capture failed: \(error.localizedDescription)"
         }

@@ -6,14 +6,17 @@ struct NativeUploadItemPacketV1 {
   struct Store {
     let shortCode: String
     let name: String
+    let remoteId: String?
   }
 
   struct Batch {
     let name: String
     let status: String
+    let remoteId: String?
   }
 
   struct Item {
+    let remoteId: String?
     let sequence: Int
     let status: SupabaseItemStatus
     let sku: String?
@@ -32,6 +35,7 @@ struct NativeUploadItemPacketV1 {
 
   struct Photo {
     let localPhotoId: String
+    let remotePhotoId: String?
     let orderIndex: Int
     let capturedAtISO8601: String
     let listing: VariantPayload

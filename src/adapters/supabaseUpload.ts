@@ -202,8 +202,6 @@ async function uploadPhotoVariants(
   remotePhotoId: string,
 ): Promise<void> {
   const basePath = storageBasePath(remoteStoreId, remoteBatchId, remoteItemId, remotePhotoId)
-  const originalBlob = localPhoto.originalBlob || localPhoto.blob
-  const originalMimeType = localPhoto.originalMimeType || localPhoto.mimeType
   const listingBlob = localPhoto.blob
   const listingMimeType = localPhoto.mimeType
   const thumbnailBlob = localPhoto.thumbnailBlob || localPhoto.blob
@@ -211,15 +209,6 @@ async function uploadPhotoVariants(
   const timestamp = nowIso()
 
   const uploads = [
-    {
-      variant: 'original' as const,
-      blob: originalBlob,
-      mimeType: originalMimeType,
-      storageKey: `${basePath}/original`,
-      width: localPhoto.originalWidth || localPhoto.outputWidth || null,
-      height: localPhoto.originalHeight || localPhoto.outputHeight || null,
-      bytes: localPhoto.originalSize || originalBlob.size,
-    },
     {
       variant: 'listing' as const,
       blob: listingBlob,

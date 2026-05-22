@@ -6,7 +6,8 @@ export interface SupabaseSessionState {
   session: Session | null
   loading: boolean
   error: string | null
-  sendMagicLink: (email: string) => Promise<void>
+  sendOtp: (email: string) => Promise<void>
+  verifyOtp: (email: string, code: string) => Promise<void>
   signInWithPassword: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   configured: boolean
@@ -51,7 +52,7 @@ export function useSupabaseSession(): SupabaseSessionState {
     }
   }, [])
 
-  const sendMagicLink = useCallback(async (email: string) => {
+  const sendOtp = useCallback(async (email: string) => {
     if (!supabase) {
       throw new Error('Supabase client is not configured')
     }
@@ -61,17 +62,39 @@ export function useSupabaseSession(): SupabaseSessionState {
       throw new Error('Email address is required')
     }
 
-    const redirectTo = typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname}`
-      : undefined
-
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: trimmed,
-      options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+      options: {
+        shouldCreateUser: true,
+      },
     })
 
     if (otpError) {
       throw otpError
+    }
+  }, [])
+
+  const verifyOtp = useCallback(async (email: string, code: string) => {
+    if (!supabase) {
+      throw new Error('Supabase client is not configured')
+    }
+
+    const trimmedEmail = email.trim()
+    const trimmedCode = code.trim()
+    if (!trimmedEmail) {
+      throw new Error('Email address is required')
+    }
+    if (!trimmedCode) {
+      throw new Error('OTP code is required')
+    }
+
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: trimmedEmail,
+      token: trimmedCode,
+      type: 'email',
+    })
+    if (verifyError) {
+      throw verifyError
     }
   }, [])
 
@@ -113,7 +136,8 @@ export function useSupabaseSession(): SupabaseSessionState {
     session,
     loading,
     error,
-    sendMagicLink,
+    sendOtp,
+    verifyOtp,
     signInWithPassword,
     signOut,
     configured: supabaseConfig.ready,
