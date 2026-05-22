@@ -7,22 +7,17 @@ struct CameraPreviewArea: View {
   @ObservedObject var cameraService: CameraService
   @ObservedObject var cameraPreferences: CameraPreferencesStore
   @Binding var pinchStartZoom: Double?
-  let thumbnailImage: UIImage?
+  let canUndo: Bool
+  let onUndo: () -> Void
   let onSelectLens: (CameraLensPreset) -> Void
   let onSelectAuto: () -> Void
-  private let cornerRadius: CGFloat = 20
+  private let cornerRadius: CGFloat = 28
 
   var body: some View {
     GeometryReader { geo in
       let squareSide = max(min(geo.size.width, geo.size.height), 120)
-      VStack(spacing: 0) {
-        squarePreview(side: squareSide)
-
-        subBar
-          .frame(maxWidth: squareSide)
-          .padding(.top, 10)
-      }
-      .frame(maxWidth: .infinity, alignment: .center)
+      squarePreview(side: squareSide)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
   }
 
@@ -32,6 +27,7 @@ struct CameraPreviewArea: View {
       .frame(width: side, height: side)
       .background(.black)
       .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+      .shadow(color: .black.opacity(0.34), radius: 20, x: 0, y: 12)
       .overlay {
         PreviewInteractionLayer(
           cameraService: cameraService,
@@ -60,41 +56,45 @@ struct CameraPreviewArea: View {
           }
         }
       }
+      .overlay(alignment: .topLeading) {
+        if canUndo {
+          cameraOverlayButton(systemName: "arrow.uturn.backward", action: onUndo)
+            .padding(16)
+        }
+      }
+      .overlay(alignment: .bottomTrailing) {
+        LensChipRow(
+          preferredLens: cameraPreferences.preferredLens,
+          switchingMode: cameraPreferences.switchingMode,
+          supportedLenses: cameraService.supportedLenses,
+          onSelectLens: onSelectLens,
+          onSelectAuto: onSelectAuto
+        )
+        .padding(16)
+      }
   }
 
-  private var subBar: some View {
-    HStack(spacing: 12) {
-      if let thumbnailImage {
-        thumbnailPreview(thumbnailImage)
-      } else {
-        Color.clear
-          .frame(width: 48, height: 48)
-      }
-
-      Spacer(minLength: 0)
-
-      LensChipRow(
-        preferredLens: cameraPreferences.preferredLens,
-        switchingMode: cameraPreferences.switchingMode,
-        supportedLenses: cameraService.supportedLenses,
-        onSelectLens: onSelectLens,
-        onSelectAuto: onSelectAuto
-      )
+  private func cameraOverlayButton(
+    systemName: String,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      Image(systemName: systemName)
+        .font(.system(size: 15, weight: .semibold))
+        .foregroundStyle(.white)
+        .frame(width: 42, height: 42)
+        .background {
+          Circle()
+            .fill(.black.opacity(0.56))
+        }
+        .overlay {
+          Circle()
+            .stroke(.white.opacity(0.14), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.35), radius: 6, x: 0, y: 3)
     }
-    .frame(maxWidth: .infinity)
-  }
-
-  private func thumbnailPreview(_ image: UIImage) -> some View {
-    Image(uiImage: image)
-      .resizable()
-      .scaledToFill()
-      .frame(width: 48, height: 48)
-      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-      .overlay {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .stroke(.white.opacity(0.5), lineWidth: 1)
-      }
-      .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
+    .buttonStyle(.plain)
+    .accessibilityLabel("Undo last capture")
   }
 }
 

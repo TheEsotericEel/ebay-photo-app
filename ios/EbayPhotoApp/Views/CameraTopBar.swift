@@ -1,49 +1,48 @@
 import SwiftUI
 
 struct CameraTopBar: View {
-  let contextLabel: String
+  let title: String
   let photoCount: Int
   let onBack: () -> Void
-  let onContext: () -> Void
-  let onDetails: () -> Void
 
   var body: some View {
-    VStack(spacing: 6) {
-      HStack {
-        Button("Back", action: onBack)
-
-        Spacer()
-
-        Text("\(photoCount) photo(s)")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-
-        Spacer()
-
-        Button("Details", action: onDetails)
-      }
-
-      Button(action: onContext) {
-        Text(contextLabel)
-          .font(.caption.weight(.semibold))
+    HStack(spacing: 12) {
+      Button(action: onBack) {
+        Image(systemName: "chevron.left")
+          .font(.system(size: 16, weight: .semibold))
           .foregroundStyle(.white)
-          .lineLimit(1)
-          .truncationMode(.tail)
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 6)
-          .padding(.horizontal, 10)
+          .frame(width: 36, height: 36)
           .background {
-            Capsule(style: .continuous)
-              .fill(Color.white.opacity(0.14))
+            Circle()
+              .fill(.white.opacity(0.12))
           }
           .overlay {
-            Capsule(style: .continuous)
-              .stroke(Color.white.opacity(0.22), lineWidth: 1)
+            Circle()
+              .stroke(.white.opacity(0.18), lineWidth: 1)
           }
       }
       .buttonStyle(.plain)
+      .accessibilityLabel("Back")
+
+      VStack(spacing: 2) {
+        Text(title)
+          .font(.headline.weight(.semibold))
+          .foregroundStyle(.white)
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+
+        Text("Camera-first capture")
+          .font(.caption2.weight(.medium))
+          .foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity)
+
+      Text("\(photoCount) photo\(photoCount == 1 ? "" : "s")")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .frame(minWidth: 64, alignment: .trailing)
     }
-    .padding(.horizontal)
-    .padding(.top, 4)
+    .padding(.horizontal, 16)
+    .padding(.top, 6)
   }
 }

@@ -1,57 +1,100 @@
 import SwiftUI
+import UIKit
 
 struct CameraActionBar: View {
-  let canUndo: Bool
+  let thumbnailImage: UIImage?
+  let photoCount: Int
   let canCapture: Bool
-  let onUndo: () -> Void
   let onCapture: () -> Void
   let onNextItem: () -> Void
   let onDone: () -> Void
+  private let captureButtonSize: CGFloat = 88
 
   var body: some View {
-    VStack(spacing: 8) {
-      HStack {
-        Spacer(minLength: 0)
-        Button(action: onCapture) {
-          Text("Capture")
-            .font(.headline.weight(.semibold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.9)
-            .frame(minWidth: 160)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .clipShape(Capsule(style: .continuous))
-        .disabled(!canCapture)
-        Spacer(minLength: 0)
+    HStack(alignment: .bottom, spacing: 18) {
+      VStack(spacing: 8) {
+        thumbnailView
+        Text("\(photoCount) photo\(photoCount == 1 ? "" : "s")")
+          .font(.caption2.weight(.medium))
+          .foregroundStyle(.secondary)
       }
+      .frame(width: 78)
 
-      HStack(spacing: 10) {
-        secondaryButton("Undo", action: onUndo)
-          .disabled(!canUndo)
+      Spacer(minLength: 0)
 
+      Button(action: onCapture) {
+        Circle()
+          .fill(.white)
+          .frame(width: captureButtonSize, height: captureButtonSize)
+          .overlay {
+            Circle()
+              .stroke(.white.opacity(0.9), lineWidth: 6)
+              .padding(4)
+          }
+          .overlay {
+            Circle()
+              .stroke(Color.black.opacity(canCapture ? 0.22 : 0.12), lineWidth: 1.5)
+          }
+          .shadow(color: .black.opacity(canCapture ? 0.28 : 0.12), radius: 10, x: 0, y: 6)
+          .scaleEffect(canCapture ? 1 : 0.96)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Capture")
+      .disabled(!canCapture)
+
+      Spacer(minLength: 0)
+
+      VStack(spacing: 10) {
         secondaryButton("Next", action: onNextItem)
-
         secondaryButton("Done", action: onDone)
       }
+      .frame(width: 116)
     }
-    .padding(.horizontal)
-    .padding(.bottom, 6)
+    .padding(.horizontal, 16)
+    .padding(.top, 6)
+    .padding(.bottom, 2)
+  }
+
+  private var thumbnailView: some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .fill(.white.opacity(0.08))
+        .frame(width: 64, height: 64)
+
+      if let thumbnailImage {
+        Image(uiImage: thumbnailImage)
+          .resizable()
+          .scaledToFill()
+          .frame(width: 64, height: 64)
+          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      } else {
+        Image(systemName: "photo")
+          .font(.system(size: 20, weight: .semibold))
+          .foregroundStyle(.secondary)
+      }
+
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .stroke(.white.opacity(0.14), lineWidth: 1)
+    }
+    .accessibilityLabel("Last photo thumbnail")
   }
 
   private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Text(title)
         .font(.subheadline.weight(.semibold))
-        .lineLimit(1)
-        .minimumScaleFactor(0.9)
-        .frame(maxWidth: .infinity, minHeight: 44)
-        .padding(.horizontal, 10)
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, minHeight: 40)
+        .padding(.horizontal, 12)
+        .background {
+          Capsule(style: .continuous)
+            .fill(.white.opacity(title == "Done" ? 0.14 : 0.1))
+        }
+        .overlay {
+          Capsule(style: .continuous)
+            .stroke(.white.opacity(title == "Done" ? 0.18 : 0.14), lineWidth: 1)
+        }
     }
-    .buttonStyle(.bordered)
-    .controlSize(.regular)
-    .clipShape(Capsule(style: .continuous))
+    .buttonStyle(.plain)
   }
 }

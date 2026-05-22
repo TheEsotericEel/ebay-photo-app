@@ -277,6 +277,156 @@ struct RootView: View {
 
 }
 
+private struct CameraContextStrip: View {
+  let storeName: String
+  let storeShortCode: String
+  let batchName: String
+  let itemNumber: Int
+  let onStoreBatchTap: () -> Void
+  let onItemTap: () -> Void
+
+  var body: some View {
+    HStack(spacing: 10) {
+      contextChip(
+        title: "Store",
+        value: storeShortCode,
+        subtitle: storeName,
+        icon: "storefront",
+        action: onStoreBatchTap
+      )
+
+      contextChip(
+        title: "Batch",
+        value: batchName,
+        subtitle: "Current set",
+        icon: "folder",
+        action: onStoreBatchTap
+      )
+
+      contextChip(
+        title: "Item",
+        value: "\(itemNumber)",
+        subtitle: "Active packet",
+        icon: "tag",
+        action: onItemTap
+      )
+    }
+  }
+
+  private func contextChip(
+    title: String,
+    value: String,
+    subtitle: String,
+    icon: String,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      HStack(alignment: .center, spacing: 10) {
+        Image(systemName: icon)
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundStyle(.white.opacity(0.9))
+          .frame(width: 22)
+
+        VStack(alignment: .leading, spacing: 1) {
+          Text(title)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+          Text(value)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+          Text(subtitle)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
+      .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+      .background {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+          .fill(.white.opacity(0.08))
+      }
+      .overlay {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+          .stroke(.white.opacity(0.12), lineWidth: 1)
+      }
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+private struct CameraMetadataTray: View {
+  let sku: String
+  let weight: String
+  let dimensions: String
+  let notes: String
+  let onEditDetails: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Label("Item Details", systemImage: "doc.text")
+          .font(.headline.weight(.semibold))
+          .foregroundStyle(.white)
+        Spacer()
+        Button("Edit", action: onEditDetails)
+          .font(.caption.weight(.semibold))
+          .buttonStyle(.bordered)
+          .tint(.white)
+      }
+
+      VStack(spacing: 10) {
+        HStack(spacing: 10) {
+          metadataCell(title: "SKU", value: sku)
+          metadataCell(title: "Weight", value: weight)
+        }
+
+        HStack(spacing: 10) {
+          metadataCell(title: "Dimensions", value: dimensions)
+          metadataCell(title: "Notes", value: notes, isWide: true)
+        }
+      }
+    }
+    .padding(14)
+    .background {
+      RoundedRectangle(cornerRadius: 22, style: .continuous)
+        .fill(.white.opacity(0.08))
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: 22, style: .continuous)
+        .stroke(.white.opacity(0.12), lineWidth: 1)
+    }
+  }
+
+  private func metadataCell(title: String, value: String, isWide: Bool = false) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(title)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+      Text(value.isEmpty ? "Tap Edit to add" : value)
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(value.isEmpty ? Color.secondary : Color.white)
+        .lineLimit(isWide ? 2 : 1)
+        .minimumScaleFactor(0.85)
+    }
+    .frame(maxWidth: .infinity, minHeight: isWide ? 56 : 48, alignment: .leading)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
+    .background {
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .fill(.black.opacity(0.28))
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .stroke(.white.opacity(0.08), lineWidth: 1)
+    }
+  }
+}
+
 #if DEBUG
 private enum DebugFixtureBuilder {
   struct Input: Sendable {
@@ -792,15 +942,22 @@ private struct CameraSessionView: View {
   }
 
   var body: some View {
-    VStack(spacing: 8) {
+    VStack(spacing: 12) {
       CameraTopBar(
-        contextLabel: appState.captureContextChipLabel,
+        title: "Current Batch · Item \(appState.currentItemNumber)",
         photoCount: appState.capturedPhotos.count,
-        onBack: onBack,
-        onContext: { presentContextEditor() },
-        onDetails: { presentDetailsEditor() }
+        onBack: onBack
       )
-      .padding(.top, 4)
+
+      CameraContextStrip(
+        storeName: appState.captureStoreName,
+        storeShortCode: appState.captureStoreShortCode,
+        batchName: appState.captureBatchName,
+        itemNumber: appState.currentItemNumber,
+        onStoreBatchTap: { presentContextEditor() },
+        onItemTap: { presentDetailsEditor() }
+      )
+      .padding(.horizontal, 16)
 
       Group {
         if isEditingOverlayPresented {
@@ -811,7 +968,10 @@ private struct CameraSessionView: View {
             cameraService: cameraService,
             cameraPreferences: cameraPreferences,
             pinchStartZoom: $pinchStartZoom,
-            thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
+            canUndo: !appState.capturedPhotos.isEmpty,
+            onUndo: {
+              appState.undoLastCapture()
+            },
             onSelectLens: { lens in
               cameraPreferences.preferredLens = lens
               cameraPreferences.switchingMode = .locked
@@ -825,7 +985,16 @@ private struct CameraSessionView: View {
         }
       }
       .frame(maxHeight: .infinity)
-      .padding(.top, 4)
+      .padding(.horizontal, 16)
+
+      CameraMetadataTray(
+        sku: appState.currentItemSku,
+        weight: appState.currentItemWeight,
+        dimensions: appState.currentItemDimensions,
+        notes: appState.currentItemNotes,
+        onEditDetails: { presentDetailsEditor() }
+      )
+      .padding(.horizontal, 16)
 
       ZoomControlRow(
         currentZoom: cameraService.currentZoom,
@@ -842,11 +1011,9 @@ private struct CameraSessionView: View {
       )
 
       CameraActionBar(
-        canUndo: !appState.capturedPhotos.isEmpty,
+        thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
+        photoCount: appState.capturedPhotos.count,
         canCapture: cameraService.canCapture || (isCaptureLoopRunning && pendingCaptureCount < maxPendingCaptures),
-        onUndo: {
-          appState.undoLastCapture()
-        },
         onCapture: {
           if !isCaptureLoopRunning {
             startCaptureLoop()
@@ -862,7 +1029,7 @@ private struct CameraSessionView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(Color.black.ignoresSafeArea())
-    .padding(.bottom, 6)
+    .padding(.bottom, 10)
     .onAppear {
       startCamera()
     }
