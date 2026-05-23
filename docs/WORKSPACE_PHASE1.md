@@ -1,7 +1,7 @@
 # Workspace Phase 1 (Dev)
 
-**Status:** Implemented  
-**Last updated:** 05/22/2026 (RLS membership hardening)  
+**Status:** Phase 1 + 1.5 implemented  
+**Last updated:** 05/22/2026 (parent/child workspace integrity)  
 **North star:** [`PUBLISHABLE_MVP_FOUNDATION.md`](PUBLISHABLE_MVP_FOUNDATION.md)
 
 ## What shipped
@@ -13,6 +13,11 @@
   - Membership RLS (replaces permissive authenticated policies)
   - `provision_user_workspace()` RPC + signup trigger
 - Follow-up migration [`20260522100000_workspace_rls_membership_hardening.sql`](../supabase/migrations/20260522100000_workspace_rls_membership_hardening.sql): no direct client INSERT on `workspaces` or `workspace_members` (provisioning only via security-definer RPCs)
+- Phase 1.5 migration [`20260522110000_workspace_parent_child_integrity.sql`](../supabase/migrations/20260522110000_workspace_parent_child_integrity.sql):
+  - Repairs denormalized `workspace_id` / parent ids from parent chain before constraints
+  - `UNIQUE (id, workspace_id)` on `stores`, `batches`, `items`, `photos`
+  - Composite FKs: child `(parent_id, workspace_id)` → parent `(id, workspace_id)` for batches, items, photos, `photo_variants`, `upload_jobs`
+  - Migration fails if cross-workspace mismatches remain after repair
 - Web: [`src/adapters/workspaceContext.ts`](../src/adapters/workspaceContext.ts), workspace-scoped import/upload in [`remoteImport.ts`](../src/adapters/remoteImport.ts) and [`supabaseUpload.ts`](../src/adapters/supabaseUpload.ts)
 - iOS: workspace provisioning + scoped REST in [`SupabaseService.swift`](../ios/EbayPhotoApp/Services/SupabaseService.swift)
 - Storage paths unchanged (`{storeId}/batches/...`) — bucket policies still allow authenticated access to `photo-assets`
@@ -43,7 +48,7 @@ Then sign in once per dev account so `provision_user_workspace()` creates member
 Apply both workspace migrations if upgrading an existing DB:
 
 ```bash
-supabase db push   # includes 20260522000000 + 20260522100000
+supabase db push   # includes 20260522000000 + 20260522100000 + 20260522110000
 ```
 
 ## Dev data options
@@ -80,41 +85,25 @@ After `supabase db push` or `supabase db reset`:
 4. Second test user — cannot read User A’s stores/items (RLS).
 5. **Negative test (after hardening migration):** as User B, attempt `INSERT` into `workspace_members` with User A’s `workspace_id` — must **fail** (no direct membership insert policy).
 6. **Negative test:** as User B, attempt `INSERT` into `workspaces` — must **fail** (no direct workspace create policy).
+7. **Integrity test:** attempt to insert a batch with valid `store_id` but wrong `workspace_id` — must **fail** (composite FK after Phase 1.5).
 
-## Phase 1.5 follow-up (before tombstones / delete)
+## Phase 1.5 — parent/child integrity (implemented)
 
-**Same-workspace parent/child integrity** — RLS checks `workspace_id` on each row but does not yet prevent mismatched FKs (e.g. batch in workspace A pointing at store in workspace B).
+Database enforces that child rows reference parents in the **same** `workspace_id`:
 
-Target (composite unique + FK):
+| Child | Composite FK |
+| --- | --- |
+| `batches` | `(store_id, workspace_id)` → `stores` |
+| `items` | `(batch_id, workspace_id)` → `batches`; `(store_id, workspace_id)` → `stores` |
+| `photos` | `(item_id, workspace_id)` → `items`; also batch/store composite FKs |
+| `photo_variants` | `(photo_id, workspace_id)` → `photos` |
+| `upload_jobs` | `(photo_id, workspace_id)` → `photos` |
 
-```sql
--- Parent tables
-alter table stores add unique (id, workspace_id);
-alter table batches add unique (id, workspace_id);
-alter table items add unique (id, workspace_id);
-alter table photos add unique (id, workspace_id);
+Migration repairs mismatched denormalized columns from the parent chain, then aborts if any cross-workspace rows remain.
 
--- Child FKs include workspace_id
-alter table batches
-  add foreign key (store_id, workspace_id)
-  references stores (id, workspace_id);
+## Before public release (still open)
 
-alter table items
-  add foreign key (batch_id, workspace_id)
-  references batches (id, workspace_id);
-
-alter table photos
-  add foreign key (item_id, workspace_id)
-  references items (id, workspace_id);
-
-alter table photo_variants
-  add foreign key (photo_id, workspace_id)
-  references photos (id, workspace_id);
-```
-
-Alternatively: `BEFORE INSERT OR UPDATE` triggers on child tables that assert `parent.workspace_id = NEW.workspace_id`.
-
-**Storage RLS** — before public release, scope `storage.objects` policies to workspace membership + path prefix (`workspaces/{workspaceId}/...`), not bucket-wide authenticated access.
+**Storage RLS** — scope `storage.objects` policies to workspace membership + path prefix (`workspaces/{workspaceId}/...`), not bucket-wide authenticated access.
 
 ## Security model (membership)
 
