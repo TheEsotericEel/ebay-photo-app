@@ -595,6 +595,35 @@ final class SupabaseService: ObservableObject {
         )
         AppLog.upload.debug("Variant upsert success variant=thumbnail photoId=\(remotePhotoId, privacy: .public)")
 
+        if let original = photo.original {
+          let originalKey = storagePath(
+            storeId: storeId,
+            batchId: batchId,
+            itemId: itemId,
+            photoId: remotePhotoId,
+            variant: "original"
+          )
+          currentStage = "upload_original_\(photo.orderIndex)"
+          AppLog.upload.debug("Storage upload start variant=original order=\(photo.orderIndex, privacy: .public) bytes=\(original.bytes.count, privacy: .public)")
+          try await uploadVariantToStorage(
+            config: config,
+            session: session,
+            key: originalKey,
+            bytes: original.bytes,
+            mimeType: original.mimeType
+          )
+          currentStage = "upsert_variant_original_\(photo.orderIndex)"
+          try await upsertPhotoVariant(
+            config: config,
+            session: session,
+            photoId: remotePhotoId,
+            variantType: "original",
+            storageKey: originalKey,
+            payload: original
+          )
+          AppLog.upload.debug("Variant upsert success variant=original photoId=\(remotePhotoId, privacy: .public)")
+        }
+
         currentStage = "finalize_photo_\(photo.orderIndex)"
         try await finalizePhotoUpload(
           config: config,

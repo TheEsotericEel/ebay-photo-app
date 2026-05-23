@@ -15,20 +15,21 @@ struct GuideToggleRow: View {
       }
       Spacer()
       if showsTapToFocusHint {
-        Text("Tap to focus")
+        Text("Tap focus")
           .font(.caption2)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.secondary.opacity(0.85))
       }
     }
     .padding(.horizontal, 16)
+    .padding(.vertical, 1)
   }
 
   private func guideChip(_ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Text(title)
         .font(.caption2.weight(.semibold))
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
         .background {
           Capsule(style: .continuous)
             .fill(isOn ? Color.white : Color.white.opacity(0.08))

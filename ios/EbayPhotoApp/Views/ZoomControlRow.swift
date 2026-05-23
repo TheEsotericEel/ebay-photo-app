@@ -8,17 +8,7 @@ struct ZoomControlRow: View {
   let formatZoom: (Double) -> String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack {
-        Text("Zoom")
-          .font(.caption2.weight(.semibold))
-          .foregroundStyle(.secondary)
-        Spacer()
-        Text(formatZoom(currentZoom))
-          .font(.caption2.weight(.semibold))
-          .foregroundStyle(.secondary)
-      }
-
+    HStack(spacing: 10) {
       if maxZoom > minZoom + 0.01 {
         Slider(
           value: Binding(
@@ -34,8 +24,16 @@ struct ZoomControlRow: View {
         Text("Zoom unavailable")
           .font(.caption2)
           .foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
+
+      Text(formatZoom(currentZoom))
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .monospacedDigit()
+        .frame(minWidth: 36, alignment: .trailing)
     }
-    .padding(.horizontal, 16)
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
   }
 }

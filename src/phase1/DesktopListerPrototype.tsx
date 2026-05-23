@@ -50,8 +50,7 @@ type ImportStatus = {
 
 function buildObjectUrlMap(photos: StoredPhoto[]): Record<string, string> {
   return photos.reduce<Record<string, string>>((acc, photo) => {
-    const blob = photo.thumbnailBlob ?? photo.blob
-    acc[photo.id] = URL.createObjectURL(blob)
+    acc[photo.id] = URL.createObjectURL(photo.blob)
     return acc
   }, {})
 }
@@ -1021,7 +1020,7 @@ function StackedPreview({ photos }: { photos: string[] }) {
       {third ? <img style={styles.previewThird} src={third} alt="" /> : null}
       {second ? <img style={styles.previewSecond} src={second} alt="" /> : null}
       {front ? (
-        <img style={styles.previewFront} src={front} alt="Item thumbnail" />
+        <img style={styles.previewFront} src={front} alt="Item photo" />
       ) : (
         <div style={styles.previewPlaceholder}>No photo</div>
       )}

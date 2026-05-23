@@ -64,7 +64,7 @@ interface RemotePhotoRow {
 
 interface RemoteVariantRow {
   photo_id: string
-  variant_type: 'thumbnail' | 'listing'
+  variant_type: 'thumbnail' | 'listing' | 'original'
   storage_bucket: string
   storage_key: string
   width: number | null
@@ -222,7 +222,7 @@ async function downloadVariant(
   client: SupabaseClient,
   photo: RemotePhotoRow,
   variantsByPhotoId: Map<string, RemoteVariantRow[]>,
-  variantType: 'thumbnail' | 'listing',
+  variantType: 'thumbnail' | 'listing' | 'original',
 ): Promise<{ blob: Blob; variant: RemoteVariantRow | null; error: string | null }> {
   const variants = variantsByPhotoId.get(photo.id) || []
   const variant = variants.find((entry) => entry.variant_type === variantType) || null
@@ -253,6 +253,30 @@ async function downloadVariant(
     variant,
     error: null,
   }
+}
+
+function isThumbnailOnlyLocalBlob(photo: StoredPhoto): boolean {
+  if (!photo.thumbnailBlob) {
+    return false
+  }
+  return photo.blob.size <= photo.thumbnailBlob.size
+}
+
+function pickPrimaryImportBlob(
+  originalDownload: { blob: Blob; variant: RemoteVariantRow | null },
+  listingDownload: { blob: Blob; variant: RemoteVariantRow | null },
+  thumbnailDownload: { blob: Blob; variant: RemoteVariantRow | null },
+): { blob: Blob; variant: RemoteVariantRow | null } {
+  if (originalDownload.variant && originalDownload.blob.size > 0) {
+    return { blob: originalDownload.blob, variant: originalDownload.variant }
+  }
+  if (listingDownload.variant && listingDownload.blob.size > 0) {
+    return { blob: listingDownload.blob, variant: listingDownload.variant }
+  }
+  if (thumbnailDownload.variant && thumbnailDownload.blob.size > 0) {
+    return { blob: thumbnailDownload.blob, variant: thumbnailDownload.variant }
+  }
+  return { blob: new Blob([]), variant: null }
 }
 
 export async function importRemoteBatchToLocal(options: RemoteImportOptions): Promise<RemoteImportSummary> {
@@ -365,7 +389,7 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
       .from('photo_variants')
       .select('photo_id, variant_type, storage_bucket, storage_key, width, height, bytes, mime_type')
       .in('photo_id', remotePhotoIds)
-      .in('variant_type', ['thumbnail', 'listing'])
+      .in('variant_type', ['thumbnail', 'listing', 'original'])
       .returns<RemoteVariantRow[]>()
 
     if (error) {
@@ -422,14 +446,24 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
 
     for (const remotePhoto of itemPhotos) {
       const existingLocalPhoto = localPhotoByRemoteId.get(remotePhoto.id)
-      if (existingLocalPhoto) {
+      const shouldUpgradeListingBlob = Boolean(
+        existingLocalPhoto
+        && upsertExisting
+        && isThumbnailOnlyLocalBlob(existingLocalPhoto),
+      )
+
+      if (existingLocalPhoto && !shouldUpgradeListingBlob) {
         itemLocalPhotoIds.push(existingLocalPhoto.id)
         continue
       }
 
+      const originalDownload = await downloadVariant(client, remotePhoto, variantsByPhotoId, 'original')
       const listingDownload = await downloadVariant(client, remotePhoto, variantsByPhotoId, 'listing')
       const thumbnailDownload = await downloadVariant(client, remotePhoto, variantsByPhotoId, 'thumbnail')
 
+      if (originalDownload.error) {
+        summary.errors.push(originalDownload.error)
+      }
       if (listingDownload.error) {
         summary.errors.push(listingDownload.error)
       }
@@ -437,9 +471,35 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
         summary.errors.push(thumbnailDownload.error)
       }
 
-      const blob = listingDownload.variant ? listingDownload.blob : thumbnailDownload.blob
-      const mimeType = listingDownload.variant?.mime_type || thumbnailDownload.variant?.mime_type || blob.type || 'image/jpeg'
+      const primary = pickPrimaryImportBlob(originalDownload, listingDownload, thumbnailDownload)
+      const blob = primary.blob
+      const mimeType = primary.variant?.mime_type || listingDownload.variant?.mime_type || thumbnailDownload.variant?.mime_type || blob.type || 'image/jpeg'
       const thumbnailBlob = thumbnailDownload.variant ? thumbnailDownload.blob : undefined
+
+      if (shouldUpgradeListingBlob && existingLocalPhoto) {
+        if (primary.variant && blob.size > 0) {
+          try {
+            await photoStore.updatePhoto(existingLocalPhoto.id, {
+              blob,
+              mimeType,
+              size: blob.size,
+              thumbnailBlob,
+              thumbnailSize: thumbnailBlob?.size || undefined,
+              thumbnailWidth: thumbnailDownload.variant?.width || undefined,
+              thumbnailHeight: thumbnailDownload.variant?.height || undefined,
+              outputWidth: primary.variant?.width || listingDownload.variant?.width || undefined,
+              outputHeight: primary.variant?.height || listingDownload.variant?.height || undefined,
+            })
+            summary.updatedItems += 1
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error)
+            summary.errors.push(`Local photo upgrade failed (${remotePhoto.id}): ${msg}`)
+          }
+        }
+        itemLocalPhotoIds.push(existingLocalPhoto.id)
+        continue
+      }
+
       const localPhotoId = makeLocalId('photo', remotePhoto.id, localPhotoIds)
       const uploadedAt = remotePhoto.captured_at || new Date().toISOString()
       const storedPhotoInput: Omit<StoredPhoto, 'savedAt'> = {
@@ -459,8 +519,8 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
         thumbnailSize: thumbnailBlob?.size || undefined,
         thumbnailWidth: thumbnailDownload.variant?.width || undefined,
         thumbnailHeight: thumbnailDownload.variant?.height || undefined,
-        outputWidth: listingDownload.variant?.width || thumbnailDownload.variant?.width || undefined,
-        outputHeight: listingDownload.variant?.height || thumbnailDownload.variant?.height || undefined,
+        outputWidth: primary.variant?.width || listingDownload.variant?.width || thumbnailDownload.variant?.width || undefined,
+        outputHeight: primary.variant?.height || listingDownload.variant?.height || thumbnailDownload.variant?.height || undefined,
       }
 
       try {

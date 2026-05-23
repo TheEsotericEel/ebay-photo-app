@@ -11,13 +11,14 @@ struct CameraPreviewArea: View {
   let onUndo: () -> Void
   let onSelectLens: (CameraLensPreset) -> Void
   let onSelectAuto: () -> Void
-  private let cornerRadius: CGFloat = 28
+  private let cornerRadius: CGFloat = 22
 
   var body: some View {
     GeometryReader { geo in
       let squareSide = max(min(geo.size.width, geo.size.height), 120)
       squarePreview(side: squareSide)
-        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(width: squareSide, height: squareSide)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
   }
 

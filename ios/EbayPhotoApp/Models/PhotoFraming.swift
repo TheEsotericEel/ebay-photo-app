@@ -3,7 +3,7 @@ import UIKit
 enum PhotoFraming {
   // Configurable quality targets for eBay product photos.
   // 0.88 offers a modest quality bump over 0.82 with minimal speed/size impact.
-  static let deliverableJPEGQuality: CGFloat = 0.88
+  static let deliverableJPEGQuality: CGFloat = 0.95
   static let thumbnailJPEGQuality: CGFloat = 0.8
   static let defaultThumbnailMaxDimension: CGFloat = 160
 

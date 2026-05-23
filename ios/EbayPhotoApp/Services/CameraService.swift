@@ -417,6 +417,26 @@ final class CameraService: NSObject, ObservableObject {
             }
             deliverableData = result.jpeg
             preview = result.thumbnail
+            let nativeOriginal = PhotoFraming.nativeDeliverableAndThumbnail(from: cgImage)?.jpeg
+            timer.mark("image processing done (crop+thumb)")
+            Task { @MainActor in
+              timer.mark("MainActor task started")
+              self.captureInFlight = false
+              self.captureDelegate = nil
+              let capturedPhoto = CapturedPhoto(
+                data: deliverableData,
+                thumbnailData: preview,
+                originalData: nativeOriginal,
+                lensLabel: self.activeLensState.preferredLens.rawValue,
+                capturedAt: .now
+              )
+              self.captureContinuation?.resume(returning: capturedPhoto)
+              self.captureContinuation = nil
+              timer.mark("continuation resumed — capture complete")
+              self.canCapture = true
+              AppLog.camera.info("Capture completed aspect=\(aspectMode.rawValue, privacy: .public) bytes=\(deliverableData.count, privacy: .public)")
+            }
+            return
           case .native:
             guard let result = PhotoFraming.nativeDeliverableAndThumbnail(from: cgImage) else {
               self.captureInFlight = false

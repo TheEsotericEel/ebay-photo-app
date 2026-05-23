@@ -50,8 +50,8 @@ function PhotoThumb({ photo, onClick }: { photo: StoredPhoto; onClick?: (photo: 
   const [isHovered, setIsHovered] = useState(false)
 
   useEffect(() => {
-    // Prefer thumbnail if available, otherwise use main blob
-    const blobToUse = photo.thumbnailBlob || photo.blob
+    // Prefer full listing blob for display; thumbnail is for lightweight previews only.
+    const blobToUse = photo.blob
     const objectUrl = URL.createObjectURL(blobToUse)
     setUrl(objectUrl)
     return () => URL.revokeObjectURL(objectUrl)

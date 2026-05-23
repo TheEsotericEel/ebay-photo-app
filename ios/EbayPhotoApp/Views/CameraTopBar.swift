@@ -6,12 +6,12 @@ struct CameraTopBar: View {
   let onBack: () -> Void
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: 10) {
       Button(action: onBack) {
         Image(systemName: "chevron.left")
-          .font(.system(size: 16, weight: .semibold))
+          .font(.system(size: 15, weight: .semibold))
           .foregroundStyle(.white)
-          .frame(width: 36, height: 36)
+          .frame(width: 32, height: 32)
           .background {
             Circle()
               .fill(.white.opacity(0.12))
@@ -24,25 +24,20 @@ struct CameraTopBar: View {
       .buttonStyle(.plain)
       .accessibilityLabel("Back")
 
-      VStack(spacing: 2) {
-        Text(title)
-          .font(.headline.weight(.semibold))
-          .foregroundStyle(.white)
-          .lineLimit(1)
-          .minimumScaleFactor(0.85)
+      Text(title)
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.white)
+        .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .frame(maxWidth: .infinity, alignment: .leading)
 
-        Text("Camera-first capture")
-          .font(.caption2.weight(.medium))
-          .foregroundStyle(.secondary)
-      }
-      .frame(maxWidth: .infinity)
-
-      Text("\(photoCount) photo\(photoCount == 1 ? "" : "s")")
+      Text("\(photoCount)")
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
-        .frame(minWidth: 64, alignment: .trailing)
+        .monospacedDigit()
+        .accessibilityLabel("\(photoCount) photos captured")
     }
     .padding(.horizontal, 16)
-    .padding(.top, 2)
+    .padding(.vertical, 2)
   }
 }

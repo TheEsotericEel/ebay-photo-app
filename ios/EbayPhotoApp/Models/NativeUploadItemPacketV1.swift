@@ -40,6 +40,7 @@ struct NativeUploadItemPacketV1 {
     let capturedAtISO8601: String
     let listing: VariantPayload
     let thumbnail: VariantPayload
+    let original: VariantPayload?
   }
 
   let store: Store

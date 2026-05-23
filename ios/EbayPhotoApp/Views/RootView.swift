@@ -286,76 +286,71 @@ private struct CameraContextStrip: View {
   let onItemTap: () -> Void
 
   var body: some View {
-    HStack(spacing: 8) {
-      contextChip(
-        title: "Store",
-        value: storeShortCode,
-        subtitle: storeName,
+    HStack(spacing: 6) {
+      contextSegment(
         icon: "storefront",
+        value: storeShortCode,
+        accessibilityLabel: "Store \(storeShortCode), \(storeName). Edit store or batch.",
         action: onStoreBatchTap
       )
 
-      contextChip(
-        title: "Batch",
-        value: batchName,
-        subtitle: "Current set",
+      contextDivider
+
+      contextSegment(
         icon: "folder",
+        value: batchName,
+        accessibilityLabel: "Batch \(batchName). Edit store or batch.",
         action: onStoreBatchTap
       )
 
-      contextChip(
-        title: "Item",
-        value: "\(itemNumber)",
-        subtitle: "Active packet",
+      contextDivider
+
+      contextSegment(
         icon: "tag",
+        value: "Item \(itemNumber)",
+        accessibilityLabel: "Item \(itemNumber). Edit item details.",
         action: onItemTap
       )
     }
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background {
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(.white.opacity(0.08))
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .stroke(.white.opacity(0.1), lineWidth: 1)
+    }
   }
 
-  private func contextChip(
-    title: String,
-    value: String,
-    subtitle: String,
+  private var contextDivider: some View {
+    Text("·")
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(.secondary.opacity(0.7))
+  }
+
+  private func contextSegment(
     icon: String,
+    value: String,
+    accessibilityLabel: String,
     action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
-      HStack(alignment: .center, spacing: 10) {
+      HStack(spacing: 5) {
         Image(systemName: icon)
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundStyle(.white.opacity(0.9))
-          .frame(width: 22)
-
-        VStack(alignment: .leading, spacing: 1) {
-          Text(title)
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(.secondary)
-          Text(value)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
-            .lineLimit(1)
-          Text(subtitle)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
-
-        Spacer(minLength: 0)
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundStyle(.white.opacity(0.85))
+        Text(value)
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.white)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
-      .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-      .background {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-          .fill(.white.opacity(0.08))
-      }
-      .overlay {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-          .stroke(.white.opacity(0.12), lineWidth: 1)
-      }
+      .frame(maxWidth: .infinity)
     }
     .buttonStyle(.plain)
+    .accessibilityLabel(accessibilityLabel)
   }
 }
 
@@ -367,63 +362,47 @@ private struct CameraMetadataTray: View {
   let onEditDetails: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Label("Item Details", systemImage: "doc.text")
-          .font(.subheadline.weight(.semibold))
-          .foregroundStyle(.white)
-        Spacer()
-        Button("Edit", action: onEditDetails)
-          .font(.caption.weight(.semibold))
-          .buttonStyle(.bordered)
-          .tint(.white)
-      }
+    HStack(spacing: 8) {
+      metadataSummary("SKU", sku)
+      metadataSummary("Wt", weight)
+      metadataSummary("Dim", dimensions)
+      metadataSummary("Note", notes)
 
-      VStack(spacing: 10) {
-        HStack(spacing: 10) {
-          metadataCell(title: "SKU", value: sku)
-          metadataCell(title: "Weight", value: weight)
-        }
+      Spacer(minLength: 0)
 
-        HStack(spacing: 10) {
-          metadataCell(title: "Dimensions", value: dimensions)
-          metadataCell(title: "Notes", value: notes, isWide: true)
-        }
-      }
+      Button("Edit", action: onEditDetails)
+        .font(.caption.weight(.semibold))
+        .buttonStyle(.bordered)
+        .tint(.white)
+        .controlSize(.small)
     }
-    .padding(12)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 7)
     .background {
-      RoundedRectangle(cornerRadius: 22, style: .continuous)
-        .fill(.white.opacity(0.08))
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(.white.opacity(0.06))
     }
     .overlay {
-      RoundedRectangle(cornerRadius: 22, style: .continuous)
-        .stroke(.white.opacity(0.12), lineWidth: 1)
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .stroke(.white.opacity(0.1), lineWidth: 1)
     }
   }
 
-  private func metadataCell(title: String, value: String, isWide: Bool = false) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(title)
+  private func metadataSummary(_ label: String, _ value: String) -> some View {
+    HStack(spacing: 3) {
+      Text(label)
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
-      Text(value.isEmpty ? "Tap Edit to add" : value)
-        .font(.subheadline.weight(.medium))
+      Text(displayValue(value))
+        .font(.caption.weight(.medium))
         .foregroundStyle(value.isEmpty ? Color.secondary : Color.white)
-        .lineLimit(isWide ? 2 : 1)
-        .minimumScaleFactor(0.85)
+        .lineLimit(1)
     }
-    .frame(maxWidth: .infinity, minHeight: isWide ? 48 : 42, alignment: .leading)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
-    .background {
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .fill(.black.opacity(0.28))
-    }
-    .overlay {
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .stroke(.white.opacity(0.08), lineWidth: 1)
-    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func displayValue(_ value: String) -> String {
+    value.isEmpty ? "—" : value
   }
 }
 
@@ -468,7 +447,8 @@ private enum DebugFixtureBuilder {
           mimeType: "image/jpeg",
           width: pixelWidth(from: thumbnailImage),
           height: pixelHeight(from: thumbnailImage)
-        )
+        ),
+        original: nil
       )
     }
 
@@ -942,13 +922,12 @@ private struct CameraSessionView: View {
   }
 
   var body: some View {
-    VStack(spacing: 8) {
+    VStack(spacing: 4) {
       CameraTopBar(
-        title: "Current Batch · Item \(appState.currentItemNumber)",
+        title: "Item \(appState.currentItemNumber)",
         photoCount: appState.capturedPhotos.count,
         onBack: onBack
       )
-      .padding(.top, 2)
 
       CameraContextStrip(
         storeName: appState.captureStoreName,
@@ -958,36 +937,47 @@ private struct CameraSessionView: View {
         onStoreBatchTap: { presentContextEditor() },
         onItemTap: { presentDetailsEditor() }
       )
-      .padding(.horizontal, 16)
+      .padding(.horizontal, 12)
       .layoutPriority(0)
 
       Group {
         if isEditingOverlayPresented {
           cameraPreviewPlaceholder
         } else {
-          CameraPreviewArea(
-            session: cameraService.session,
-            cameraService: cameraService,
-            cameraPreferences: cameraPreferences,
-            pinchStartZoom: $pinchStartZoom,
-            canUndo: !appState.capturedPhotos.isEmpty,
-            onUndo: {
-              appState.undoLastCapture()
-            },
-            onSelectLens: { lens in
-              cameraPreferences.preferredLens = lens
-              cameraPreferences.switchingMode = .locked
-              reconfigureCamera()
-            },
-            onSelectAuto: {
-              cameraPreferences.switchingMode = .auto
-              reconfigureCamera()
-            }
-          )
+          VStack(spacing: 4) {
+            CameraPreviewArea(
+              session: cameraService.session,
+              cameraService: cameraService,
+              cameraPreferences: cameraPreferences,
+              pinchStartZoom: $pinchStartZoom,
+              canUndo: !appState.capturedPhotos.isEmpty,
+              onUndo: {
+                appState.undoLastCapture()
+              },
+              onSelectLens: { lens in
+                cameraPreferences.preferredLens = lens
+                cameraPreferences.switchingMode = .locked
+                reconfigureCamera()
+              },
+              onSelectAuto: {
+                cameraPreferences.switchingMode = .auto
+                reconfigureCamera()
+              }
+            )
+            .layoutPriority(1)
+
+            ZoomControlRow(
+              currentZoom: cameraService.currentZoom,
+              minZoom: cameraService.minZoom,
+              maxZoom: cameraService.userFacingMaxZoom,
+              onZoomChange: updateZoom,
+              formatZoom: formatZoom
+            )
+          }
         }
       }
       .frame(maxHeight: .infinity)
-      .padding(.horizontal, 16)
+      .padding(.horizontal, 12)
       .layoutPriority(1)
 
       CameraMetadataTray(
@@ -997,24 +987,14 @@ private struct CameraSessionView: View {
         notes: appState.currentItemNotes,
         onEditDetails: { presentDetailsEditor() }
       )
-      .padding(.horizontal, 16)
+      .padding(.horizontal, 12)
       .layoutPriority(0)
 
-      VStack(spacing: 6) {
-        ZoomControlRow(
-          currentZoom: cameraService.currentZoom,
-          minZoom: cameraService.minZoom,
-          maxZoom: cameraService.userFacingMaxZoom,
-          onZoomChange: updateZoom,
-          formatZoom: formatZoom
-        )
-
-        GuideToggleRow(
-          gridEnabled: $cameraPreferences.gridEnabled,
-          horizonGuideEnabled: $cameraPreferences.horizonGuideEnabled,
-          showsTapToFocusHint: cameraService.supportsFocusPoint || cameraService.supportsExposurePoint
-        )
-      }
+      GuideToggleRow(
+        gridEnabled: $cameraPreferences.gridEnabled,
+        horizonGuideEnabled: $cameraPreferences.horizonGuideEnabled,
+        showsTapToFocusHint: cameraService.supportsFocusPoint || cameraService.supportsExposurePoint
+      )
       .layoutPriority(0)
 
       CameraActionBar(
@@ -1037,7 +1017,7 @@ private struct CameraSessionView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(Color.black.ignoresSafeArea())
-    .padding(.bottom, 10)
+    .padding(.bottom, 6)
     .onAppear {
       startCamera()
     }

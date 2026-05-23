@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import ImageIO
 
 private struct PersistedCaptureContext: Codable {
   var captureStoreName: String
@@ -41,6 +42,7 @@ final class AppState: ObservableObject {
     let id: UUID
     let fileName: String
     let thumbnailFileName: String?
+    let originalFileName: String?
     let lensLabel: String
     let capturedAt: Date
     var remotePhotoId: String?
@@ -52,6 +54,7 @@ final class AppState: ObservableObject {
       id: UUID,
       fileName: String,
       thumbnailFileName: String?,
+      originalFileName: String? = nil,
       lensLabel: String,
       capturedAt: Date,
       remotePhotoId: String? = nil,
@@ -62,6 +65,7 @@ final class AppState: ObservableObject {
       self.id = id
       self.fileName = fileName
       self.thumbnailFileName = thumbnailFileName
+      self.originalFileName = originalFileName
       self.lensLabel = lensLabel
       self.capturedAt = capturedAt
       self.remotePhotoId = remotePhotoId
@@ -74,6 +78,7 @@ final class AppState: ObservableObject {
       case id
       case fileName
       case thumbnailFileName
+      case originalFileName
       case lensLabel
       case capturedAt
       case remotePhotoId
@@ -87,6 +92,7 @@ final class AppState: ObservableObject {
       id = try container.decode(UUID.self, forKey: .id)
       fileName = try container.decode(String.self, forKey: .fileName)
       thumbnailFileName = try container.decodeIfPresent(String.self, forKey: .thumbnailFileName)
+      originalFileName = try container.decodeIfPresent(String.self, forKey: .originalFileName)
       lensLabel = try container.decodeIfPresent(String.self, forKey: .lensLabel) ?? "Camera"
       capturedAt = try container.decodeIfPresent(Date.self, forKey: .capturedAt) ?? Date()
       remotePhotoId = try container.decodeIfPresent(String.self, forKey: .remotePhotoId)
@@ -433,6 +439,7 @@ final class AppState: ObservableObject {
         id: photo.id,
         fileName: listingFileName(for: photo.id),
         thumbnailFileName: photo.thumbnailData == nil ? nil : thumbnailFileName(for: photo.id),
+        originalFileName: photo.originalData == nil ? nil : originalFileName(for: photo.id),
         lensLabel: photo.lensLabel,
         capturedAt: photo.capturedAt
       )
@@ -698,12 +705,30 @@ final class AppState: ObservableObject {
 
     let photos = try queuedItem.photos.enumerated().map { index, photo in
       let listingBytes = try loadPhotoBytes(fileName: photo.fileName)
+      let listingSize = jpegPixelSize(listingBytes)
       let thumbnailBytes: Data
       if let thumbnailFileName = photo.thumbnailFileName {
         thumbnailBytes = (try? loadPhotoBytes(fileName: thumbnailFileName)) ?? listingBytes
       } else {
         thumbnailBytes = listingBytes
       }
+      let thumbnailSize = jpegPixelSize(thumbnailBytes)
+      let originalBytes: Data?
+      if let originalFileName = photo.originalFileName {
+        originalBytes = try? loadPhotoBytes(fileName: originalFileName)
+      } else {
+        originalBytes = nil
+      }
+      let originalSize = originalBytes.flatMap { jpegPixelSize($0) }
+      let originalPayload: NativeUploadItemPacketV1.VariantPayload? = {
+        guard let originalBytes, originalBytes.count > listingBytes.count else { return nil }
+        return .init(
+          bytes: originalBytes,
+          mimeType: "image/jpeg",
+          width: originalSize?.width,
+          height: originalSize?.height
+        )
+      }()
 
       return NativeUploadItemPacketV1.Photo(
         localPhotoId: photo.id.uuidString,
@@ -713,15 +738,16 @@ final class AppState: ObservableObject {
         listing: .init(
           bytes: listingBytes,
           mimeType: "image/jpeg",
-          width: nil,
-          height: nil
+          width: listingSize?.width,
+          height: listingSize?.height
         ),
         thumbnail: .init(
           bytes: thumbnailBytes,
           mimeType: "image/jpeg",
-          width: nil,
-          height: nil
-        )
+          width: thumbnailSize?.width,
+          height: thumbnailSize?.height
+        ),
+        original: originalPayload
       )
     }
 
@@ -806,6 +832,7 @@ final class AppState: ObservableObject {
               id: photo.id,
               fileName: listingFileName(for: photo.id),
               thumbnailFileName: photo.thumbnailData == nil ? nil : thumbnailFileName(for: photo.id),
+              originalFileName: photo.originalData == nil ? nil : originalFileName(for: photo.id),
               lensLabel: photo.lensLabel,
               capturedAt: photo.capturedAt
             )
@@ -842,6 +869,7 @@ final class AppState: ObservableObject {
       id: persisted.id,
       data: listingData,
       thumbnailData: thumbData,
+      originalData: persisted.originalFileName.flatMap { try? loadPhotoBytes(fileName: $0) },
       lensLabel: persisted.lensLabel,
       capturedAt: persisted.capturedAt
     )
@@ -855,6 +883,10 @@ final class AppState: ObservableObject {
       let thumbURL = directory.appendingPathComponent(thumbnailFileName(for: photo.id))
       try thumbnailData.write(to: thumbURL, options: .atomic)
     }
+    if let originalData = photo.originalData {
+      let originalURL = directory.appendingPathComponent(originalFileName(for: photo.id))
+      try originalData.write(to: originalURL, options: .atomic)
+    }
   }
 
   private func deletePhotoAssetFiles(for photoId: UUID) {
@@ -862,11 +894,15 @@ final class AppState: ObservableObject {
     guard let directory = try? queuePhotosDirectoryURL() else { return }
     let listingURL = directory.appendingPathComponent(listingFileName(for: photoId))
     let thumbURL = directory.appendingPathComponent(thumbnailFileName(for: photoId))
+    let originalURL = directory.appendingPathComponent(originalFileName(for: photoId))
     if fm.fileExists(atPath: listingURL.path) {
       try? fm.removeItem(at: listingURL)
     }
     if fm.fileExists(atPath: thumbURL.path) {
       try? fm.removeItem(at: thumbURL)
+    }
+    if fm.fileExists(atPath: originalURL.path) {
+      try? fm.removeItem(at: originalURL)
     }
   }
 
@@ -904,6 +940,20 @@ final class AppState: ObservableObject {
 
   private func thumbnailFileName(for photoId: UUID) -> String {
     "\(photoId.uuidString.lowercased())-thumb.jpg"
+  }
+
+  private func originalFileName(for photoId: UUID) -> String {
+    "\(photoId.uuidString.lowercased())-original.jpg"
+  }
+
+  private func jpegPixelSize(_ data: Data) -> (width: Int, height: Int)? {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+          let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+          let width = properties[kCGImagePropertyPixelWidth] as? Int,
+          let height = properties[kCGImagePropertyPixelHeight] as? Int else {
+      return nil
+    }
+    return (width, height)
   }
 
   private func persistCaptureContextIfNeeded() {
