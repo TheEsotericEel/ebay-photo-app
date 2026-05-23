@@ -99,6 +99,7 @@ That is publishable — not necessarily feature-complete, but **real**.
 - [ ] Delete/archive of submitted items uses tombstones; other devices do not resurrect deleted rows
 - [ ] RLS prevents cross-account access to rows and storage objects
 - [ ] Demo account or seeded demo workspace exists for App Store review (Phase 5)
+- [ ] In-app account deletion path before App Store submission if the app supports account creation (Phase 5)
 
 ---
 
@@ -229,6 +230,17 @@ Device B comes online and resurrects stale local data.
 
 Hard-delete mechanics (storage key removal, cascade deletes) remain useful for **purge**, not default user delete.
 
+**Hard-purge eligibility:** Do not hard-purge tombstones until the tombstone has been retained long enough for stale/offline clients to sync, or until the sync model can prove the deletion will not be resurrected. Phase 3 (sync correctness) is a prerequisite gate for enabling automated hard purge in production.
+
+Failure mode if purge runs too early:
+
+```text
+Device A deletes item (tombstone set).
+Device B is offline longer than the purge window.
+Server hard-purges the tombstone and storage.
+Device B comes online with stale local cache and may resurrect or diverge.
+```
+
 ### 4.6 Billing shape (deferred implementation)
 
 Do **not** ship full subscriptions before the app is useful. Do create room for:
@@ -248,6 +260,8 @@ features enabled manually
 Stripe / App Store billing integration deferred
 ```
 
+When billing becomes implementation work, **native iOS monetization must be reviewed separately** from Stripe alone. In-app purchase requirements can apply depending on what is sold and where; do not assume a web/Stripe subscription path satisfies the iOS app without an explicit product decision ([App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)).
+
 Reference: [Stripe subscriptions overview](https://docs.stripe.com/billing/subscriptions/overview).
 
 ### 4.7 App Store review readiness (planned early)
@@ -260,7 +274,7 @@ Plan for:
 - Stable production backend environment
 - Privacy policy URL
 - Support URL
-- Account deletion path (can follow initial release if architecture does not block it)
+- **Account deletion path before App Store submission** if the app supports account creation (in-app request/path required by App Review; full automated data purge can still be phased, but the user-facing deletion flow must exist)
 
 ---
 
@@ -414,6 +428,15 @@ and must not upsert local rows over a remote tombstone without an explicit confl
 
 Patterns in [`remoteCleanup.ts`](../src/adapters/remoteCleanup.ts) and legacy [`Phase1Screen.tsx`](../src/phase1/Phase1Screen.tsx) hard-delete handlers are appropriate for **purge jobs**, not default product delete.
 
+### Hard purge eligibility (sync safety)
+
+Do not hard-purge tombstones until:
+
+1. The tombstone has been retained long enough for stale/offline clients to observe the delete via sync, **or**
+2. The sync model can prove the deletion will not be resurrected (see Phase 3).
+
+Tie purge job configuration (minimum tombstone age, retention window) directly to Phase 3 acceptance tests. Automated hard purge in production should not ship before sync correctness is proven.
+
 ---
 
 ## 9. Sync rules (MVP)
@@ -482,12 +505,13 @@ Deletes use tombstones first.
 - Workspace snapshot / cursor poll
 - Filter tombstones on import
 - Prove offline device does not resurrect deleted items
+- Define minimum tombstone retention / sync window before any automated hard purge is allowed
 
 ### Phase 4 — Tombstone item delete
 
 - User delete sets `deleted_at` remotely
 - Hide in UI on all clients
-- Defer storage hard purge to cleanup job
+- Defer storage hard purge to cleanup job (purge jobs gated by Phase 3 sync-safety rules)
 
 ### Phase 5 — Publish-readiness pass
 
@@ -495,11 +519,12 @@ Deletes use tombstones first.
 - Privacy policy, support link
 - Basic onboarding copy
 - Production env checks
+- In-app account deletion path (required before App Store submission if account creation is supported)
 - App Store review notes
 
 ### Phase 6 — Billing / entitlements
 
-- Stripe or App Store subscription path after core loop is valuable
+- Stripe or App Store subscription path after core loop is valuable (review native iOS IAP requirements before choosing implementation)
 - Webhook-driven entitlement updates
 
 ---
