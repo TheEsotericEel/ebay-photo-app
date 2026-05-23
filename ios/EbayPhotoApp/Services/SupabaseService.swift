@@ -137,6 +137,7 @@ final class SupabaseService: ObservableObject {
   private let userDefaults: UserDefaults
   private let urlSession: URLSession
   private var cachedSession: Session?
+  private var cachedWorkspaceId: String?
 
   var hasPersistedSession: Bool {
     cachedSession != nil
@@ -302,6 +303,7 @@ final class SupabaseService: ObservableObject {
 
   func signOut() {
     cachedSession = nil
+    cachedWorkspaceId = nil
     userDefaults.removeObject(forKey: sessionStoreKey)
     AppLog.auth.info("Session cleared via sign out")
   }
@@ -316,12 +318,13 @@ final class SupabaseService: ObservableObject {
   func fetchWorkspaceSnapshot() async throws -> WorkspaceSnapshot {
     let config = try loadConfig()
     let session = try await requireValidSession()
+    let workspaceId = try await ensureActiveWorkspaceId(config: config, session: session)
 
     let storesData = try await performAuthedRequest(
       config: config,
       session: session,
       method: "GET",
-      pathWithQuery: "/rest/v1/stores?select=id,name,short_code,updated_at&order=updated_at.desc",
+      pathWithQuery: "/rest/v1/stores?workspace_id=eq.\(urlEncoded(workspaceId))&select=id,name,short_code,updated_at&order=updated_at.desc",
       body: nil,
       additionalHeaders: [:]
     )
@@ -331,7 +334,7 @@ final class SupabaseService: ObservableObject {
       config: config,
       session: session,
       method: "GET",
-      pathWithQuery: "/rest/v1/batches?select=id,store_id,name,status,remote_retention_mode,updated_at&order=updated_at.desc",
+      pathWithQuery: "/rest/v1/batches?workspace_id=eq.\(urlEncoded(workspaceId))&select=id,store_id,name,status,remote_retention_mode,updated_at&order=updated_at.desc",
       body: nil,
       additionalHeaders: [:]
     )
@@ -370,9 +373,11 @@ final class SupabaseService: ObservableObject {
   ) async throws -> WorkspaceSyncResult {
     let config = try loadConfig()
     let session = try await requireValidSession()
+    let workspaceId = try await ensureActiveWorkspaceId(config: config, session: session)
     let storeId = try await upsertWorkspaceStore(
       config: config,
       session: session,
+      workspaceId: workspaceId,
       storeName: storeName,
       storeShortCode: storeShortCode,
       remoteStoreId: storeRemoteId
@@ -380,6 +385,7 @@ final class SupabaseService: ObservableObject {
     let batchId = try await upsertWorkspaceBatch(
       config: config,
       session: session,
+      workspaceId: workspaceId,
       storeId: storeId,
       batchName: batchName,
       batchRemoteId: batchRemoteId
@@ -447,6 +453,7 @@ final class SupabaseService: ObservableObject {
 
     let config = try loadConfig()
     let session = try await requireValidSession()
+    let workspaceId = try await ensureActiveWorkspaceId(config: config, session: session)
     var batchIdForFailure: String?
     var preUploadedPhotoIdForFailure: String?
     var successfulPhotoUploadCount = 0
@@ -459,6 +466,7 @@ final class SupabaseService: ObservableObject {
       let storeId = try await upsertWorkspaceStore(
         config: config,
         session: session,
+        workspaceId: workspaceId,
         storeName: packet.store.name,
         storeShortCode: packet.store.shortCode,
         remoteStoreId: packet.store.remoteId
@@ -470,6 +478,7 @@ final class SupabaseService: ObservableObject {
       let batchId = try await upsertWorkspaceBatch(
         config: config,
         session: session,
+        workspaceId: workspaceId,
         storeId: storeId,
         batchName: packet.batch.name,
         batchRemoteId: packet.batch.remoteId
@@ -481,6 +490,7 @@ final class SupabaseService: ObservableObject {
       let itemId = try await upsertItem(
         config: config,
         session: session,
+        workspaceId: workspaceId,
         storeId: storeId,
         batchId: batchId,
         item: packet.item
@@ -526,6 +536,7 @@ final class SupabaseService: ObservableObject {
         try await upsertPhotoPreUpload(
           config: config,
           session: session,
+          workspaceId: workspaceId,
           photoId: remotePhotoId,
           storeId: storeId,
           batchId: batchId,
@@ -577,6 +588,7 @@ final class SupabaseService: ObservableObject {
         try await upsertPhotoVariant(
           config: config,
           session: session,
+          workspaceId: workspaceId,
           photoId: remotePhotoId,
           variantType: "listing",
           storageKey: listingKey,
@@ -588,6 +600,7 @@ final class SupabaseService: ObservableObject {
         try await upsertPhotoVariant(
           config: config,
           session: session,
+          workspaceId: workspaceId,
           photoId: remotePhotoId,
           variantType: "thumbnail",
           storageKey: thumbnailKey,
@@ -616,6 +629,7 @@ final class SupabaseService: ObservableObject {
           try await upsertPhotoVariant(
             config: config,
             session: session,
+            workspaceId: workspaceId,
             photoId: remotePhotoId,
             variantType: "original",
             storageKey: originalKey,
@@ -708,9 +722,36 @@ final class SupabaseService: ObservableObject {
 
   // MARK: - Internal REST operations
 
+  private func ensureActiveWorkspaceId(config: Config, session: Session) async throws -> String {
+    if let cachedWorkspaceId {
+      return cachedWorkspaceId
+    }
+
+    let data = try await performAuthedRequest(
+      config: config,
+      session: session,
+      method: "POST",
+      pathWithQuery: "/rest/v1/rpc/provision_user_workspace",
+      body: [:] as [String: String],
+      additionalHeaders: [:]
+    )
+
+    let raw = String(data: data, encoding: .utf8)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let workspaceId = raw
+      .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+    guard !workspaceId.isEmpty else {
+      throw AppServiceError.server("provision_user_workspace returned no workspace id.")
+    }
+
+    cachedWorkspaceId = workspaceId
+    return workspaceId
+  }
+
   private func upsertWorkspaceStore(
     config: Config,
     session: Session,
+    workspaceId: String,
     storeName: String,
     storeShortCode: String,
     remoteStoreId: String?
@@ -741,7 +782,7 @@ final class SupabaseService: ObservableObject {
       config: config,
       session: session,
       method: "GET",
-      pathWithQuery: "/rest/v1/stores?short_code=eq.\(escapedShortCode)&select=id&limit=1",
+      pathWithQuery: "/rest/v1/stores?workspace_id=eq.\(urlEncoded(workspaceId))&short_code=eq.\(escapedShortCode)&select=id&limit=1",
       body: nil,
       additionalHeaders: [:]
     )
@@ -771,6 +812,7 @@ final class SupabaseService: ObservableObject {
     let body: [[String: String]] = [[
       "name": storeName,
       "short_code": storeShortCode,
+      "workspace_id": workspaceId,
     ]]
     let createData = try await performAuthedRequest(
       config: config,
@@ -792,6 +834,7 @@ final class SupabaseService: ObservableObject {
   private func upsertWorkspaceBatch(
     config: Config,
     session: Session,
+    workspaceId: String,
     storeId: String,
     batchName: String,
     batchRemoteId: String?
@@ -820,7 +863,7 @@ final class SupabaseService: ObservableObject {
       }
     }
 
-    let queryPath = "/rest/v1/batches?store_id=eq.\(urlEncoded(storeId))&name=eq.\(urlEncoded(batchName))&select=id&limit=1"
+    let queryPath = "/rest/v1/batches?workspace_id=eq.\(urlEncoded(workspaceId))&store_id=eq.\(urlEncoded(storeId))&name=eq.\(urlEncoded(batchName))&select=id&limit=1"
     let existingData = try await performAuthedRequest(
       config: config,
       session: session,
@@ -861,6 +904,7 @@ final class SupabaseService: ObservableObject {
       "status": "active",
       "upload_status": "local",
       "remote_retention_mode": "delete_7d_after_listed",
+      "workspace_id": workspaceId,
     ]]
     let createData = try await performAuthedRequest(
       config: config,
@@ -882,6 +926,7 @@ final class SupabaseService: ObservableObject {
   private func upsertItem(
     config: Config,
     session: Session,
+    workspaceId: String,
     storeId: String,
     batchId: String,
     item: NativeUploadItemPacketV1.Item
@@ -903,6 +948,7 @@ final class SupabaseService: ObservableObject {
     var payload: [String: Any] = [
       "store_id": storeId,
       "batch_id": batchId,
+      "workspace_id": workspaceId,
       "sequence": item.sequence,
       "status": item.status,
       "sku": jsonOrNull(item.sku),
@@ -1005,6 +1051,7 @@ final class SupabaseService: ObservableObject {
   private func upsertPhotoPreUpload(
     config: Config,
     session: Session,
+    workspaceId: String,
     photoId: String,
     storeId: String,
     batchId: String,
@@ -1022,6 +1069,7 @@ final class SupabaseService: ObservableObject {
       "store_id": storeId,
       "batch_id": batchId,
       "item_id": itemId,
+      "workspace_id": workspaceId,
       "order_index": orderIndex,
       "local_status": "present",
       "upload_status": "uploading",
@@ -1047,6 +1095,7 @@ final class SupabaseService: ObservableObject {
   private func upsertPhotoVariant(
     config: Config,
     session: Session,
+    workspaceId: String,
     photoId: String,
     variantType: String,
     storageKey: String,
@@ -1055,6 +1104,7 @@ final class SupabaseService: ObservableObject {
     let now = ISO8601DateFormatter().string(from: Date())
     let body: [[String: Any]] = [[
       "photo_id": photoId,
+      "workspace_id": workspaceId,
       "variant_type": variantType,
       "storage_bucket": config.bucket,
       "storage_key": storageKey,

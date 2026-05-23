@@ -6,6 +6,7 @@ import { IndexedDbPhotoStore } from './localPhotoStore'
 import { IndexedDbWorkflowStore } from './workflowStore'
 import { importRemoteBatchToLocal, syncRemoteBatchDeltaToLocal } from './remoteImport'
 
+const TEST_WORKSPACE_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const REMOTE_STORE_ID = '11111111-1111-1111-1111-111111111111'
 const REMOTE_BATCH_ID = '22222222-2222-2222-2222-222222222222'
 const REMOTE_ITEM_ID = '21f0a8ff-b339-49b5-bbb6-e054527494c1'
@@ -173,6 +174,12 @@ function createMockClient(itemStatus: RemoteItemStatus = 'new') {
   return {
     from,
     storage: { from: storageFrom },
+    rpc: vi.fn(async (fn: string) => {
+      if (fn === 'provision_user_workspace') {
+        return { data: TEST_WORKSPACE_ID, error: null }
+      }
+      return { data: null, error: null }
+    }),
     thumbnailBlob,
     listingBlob,
   }
@@ -264,6 +271,12 @@ function createMockDeltaClient(itemStatus: RemoteItemStatus) {
         })),
       })),
     },
+    rpc: vi.fn(async (fn: string) => {
+      if (fn === 'provision_user_workspace') {
+        return { data: TEST_WORKSPACE_ID, error: null }
+      }
+      return { data: null, error: null }
+    }),
     thumbnailBlob,
     listingBlob,
   }

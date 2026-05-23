@@ -4,6 +4,7 @@ import { IndexedDbItemPacketStore, ItemPacket } from './itemPacket'
 import { IndexedDbPhotoStore, StoredPhoto } from './localPhotoStore'
 import { BatchRecord, StoreRecord } from './workflowStore'
 import { calculateRetentionWindow } from './retention'
+import { ensureActiveWorkspaceId } from './workspaceContext'
 
 export type BatchUploadStage =
   | 'idle'
@@ -72,10 +73,12 @@ function storageBasePath(storeShortCode: string, batchId: string, itemId: string
 async function resolveRemoteStore(
   client: SupabaseClient,
   store: StoreRecord,
+  workspaceId: string,
 ): Promise<RemoteReference> {
   const { data: existing, error: existingError } = await client
     .from('stores')
     .select('id')
+    .eq('workspace_id', workspaceId)
     .eq('short_code', store.shortCode)
     .maybeSingle()
 
@@ -94,6 +97,7 @@ async function resolveRemoteStore(
       id: remoteId,
       name: store.name,
       short_code: store.shortCode,
+      workspace_id: workspaceId,
     })
     .select('id')
     .single()
@@ -109,10 +113,12 @@ async function resolveRemoteBatch(
   client: SupabaseClient,
   storeId: string,
   batch: BatchRecord,
+  workspaceId: string,
 ): Promise<RemoteReference> {
   const { data: existing, error: existingError } = await client
     .from('batches')
     .select('id')
+    .eq('workspace_id', workspaceId)
     .eq('store_id', storeId)
     .eq('name', batch.name)
     .maybeSingle()
@@ -135,6 +141,7 @@ async function resolveRemoteBatch(
       status: batch.status,
       upload_status: 'local',
       remote_retention_mode: 'delete_7d_after_listed',
+      workspace_id: workspaceId,
     })
     .select('id')
     .single()
@@ -151,6 +158,7 @@ async function resolveRemoteItem(
   storeId: string,
   batchId: string,
   item: ItemPacket,
+  workspaceId: string,
 ): Promise<RemoteReference> {
   const { data: existing, error: existingError } = await client
     .from('items')
@@ -171,6 +179,7 @@ async function resolveRemoteItem(
             id: remoteId,
             store_id: storeId,
             batch_id: batchId,
+            workspace_id: workspaceId,
             sequence: item.itemNumber,
             status: item.listingStatus || 'new',
             sku: item.sku || null,
@@ -195,6 +204,7 @@ async function resolveRemoteItem(
 async function uploadPhotoVariants(
   client: SupabaseClient,
   bucket: string,
+  workspaceId: string,
   remoteStoreId: string,
   remoteBatchId: string,
   remoteItemId: string,
@@ -246,6 +256,7 @@ async function uploadPhotoVariants(
       .upsert(
         {
           photo_id: remotePhotoId,
+          workspace_id: workspaceId,
           variant_type: upload.variant,
           storage_bucket: bucket,
           storage_key: upload.storageKey,
@@ -289,19 +300,21 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
   let skippedItems = 0
   let skippedPhotos = 0
 
+  const workspaceId = await ensureActiveWorkspaceId(client)
+
   onProgress?.({
     stage: 'resolving_store',
     message: `Resolving remote store for ${store.name}`,
     itemCount: relevantItems.length,
   })
-  const remoteStore = await resolveRemoteStore(client, store)
+  const remoteStore = await resolveRemoteStore(client, store, workspaceId)
 
   onProgress?.({
     stage: 'resolving_batch',
     message: `Resolving remote batch ${batch.name}`,
     itemCount: relevantItems.length,
   })
-  const remoteBatch = await resolveRemoteBatch(client, remoteStore.id, batch)
+  const remoteBatch = await resolveRemoteBatch(client, remoteStore.id, batch, workspaceId)
 
   for (let index = 0; index < relevantItems.length; index += 1) {
     const item = relevantItems[index]
@@ -323,7 +336,7 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
         itemId: item.id,
       })
 
-      const remoteItem = await resolveRemoteItem(client, remoteStore.id, remoteBatch.id, item)
+      const remoteItem = await resolveRemoteItem(client, remoteStore.id, remoteBatch.id, item, workspaceId)
       const remotePhotoIdByLocalId = new Map<string, string>()
       const pendingPhotos = itemPhotos.filter((photo) => photo.uploadStatus !== 'verified' || photo.remoteStatus !== 'verified')
       const retentionWindow = calculateRetentionWindow(item.listedAt, batch.remoteRetentionMode)
@@ -414,6 +427,7 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
               store_id: remoteStore.id,
               batch_id: remoteBatch.id,
               item_id: remoteItem.id,
+              workspace_id: workspaceId,
               order_index: photoIndex,
               local_status: 'present',
               upload_status: 'uploading',
@@ -430,7 +444,16 @@ export async function syncBatchToSupabase(options: BatchUploadOptions): Promise<
           throw photoInsertError
         }
 
-        await uploadPhotoVariants(client, bucket, remoteStore.id, remoteBatch.id, remoteItem.id, localPhoto, remotePhotoId)
+        await uploadPhotoVariants(
+          client,
+          bucket,
+          workspaceId,
+          remoteStore.id,
+          remoteBatch.id,
+          remoteItem.id,
+          localPhoto,
+          remotePhotoId,
+        )
 
         const finalizedAt = nowIso()
         const { error: photoFinalizeError } = await client

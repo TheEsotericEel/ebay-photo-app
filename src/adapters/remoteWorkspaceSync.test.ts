@@ -6,6 +6,7 @@ import { IndexedDbPhotoStore } from './localPhotoStore'
 import { IndexedDbWorkflowStore } from './workflowStore'
 import { syncRemoteWorkspaceToLocal } from './remoteImport'
 
+const TEST_WORKSPACE_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const REMOTE_STORE_ID = '11111111-1111-1111-1111-111111111111'
 const REMOTE_BATCH_ID = '22222222-2222-2222-2222-222222222222'
 const REMOTE_ITEM_ID = '33333333-3333-3333-3333-333333333333'
@@ -193,6 +194,12 @@ function createMockClient() {
   return {
     from,
     storage: { from: storageFrom },
+    rpc: vi.fn(async (fn: string) => {
+      if (fn === 'provision_user_workspace') {
+        return { data: TEST_WORKSPACE_ID, error: null }
+      }
+      return { data: null, error: null }
+    }),
   }
 }
 

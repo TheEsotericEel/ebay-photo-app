@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { IndexedDbItemPacketStore, ItemPacket, ListingStatus } from './itemPacket'
 import { IndexedDbPhotoStore, StoredPhoto } from './localPhotoStore'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from './workflowStore'
+import { ensureActiveWorkspaceId } from './workspaceContext'
 
 type RemoteItemStatus = 'new' | 'listed' | 'hold' | 'needs_retake'
 type RemotePhotoUploadStatus = 'local' | 'uploading' | 'uploaded' | 'failed'
@@ -303,9 +304,12 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
     upsertExisting = false,
   } = options
 
+  const workspaceId = await ensureActiveWorkspaceId(client)
+
   const { data: remoteStore, error: storeError } = await client
     .from('stores')
     .select('id')
+    .eq('workspace_id', workspaceId)
     .eq('short_code', store.shortCode)
     .maybeSingle<RemoteStoreRow>()
 
@@ -735,6 +739,7 @@ async function resolveRemoteStoreForLocal(
   client: SupabaseClient,
   workflowStore: IndexedDbWorkflowStore,
   store: StoreRecord,
+  workspaceId: string,
 ): Promise<{ remoteId: string; store: StoreRecord; created: boolean }> {
   const remoteId = store.remoteId
   if (remoteId) {
@@ -743,8 +748,10 @@ async function resolveRemoteStoreForLocal(
       .update({
         name: store.name,
         short_code: store.shortCode,
+        workspace_id: workspaceId,
       })
       .eq('id', remoteId)
+      .eq('workspace_id', workspaceId)
       .select('id')
       .maybeSingle()
 
@@ -763,6 +770,7 @@ async function resolveRemoteStoreForLocal(
   const { data: existing, error: existingError } = await client
     .from('stores')
     .select('id')
+    .eq('workspace_id', workspaceId)
     .eq('short_code', store.shortCode)
     .maybeSingle()
 
@@ -776,8 +784,10 @@ async function resolveRemoteStoreForLocal(
       .update({
         name: store.name,
         short_code: store.shortCode,
+        workspace_id: workspaceId,
       })
       .eq('id', existing.id as string)
+      .eq('workspace_id', workspaceId)
       .select('id')
       .maybeSingle()
 
@@ -800,6 +810,7 @@ async function resolveRemoteStoreForLocal(
       id: createdId,
       name: store.name,
       short_code: store.shortCode,
+      workspace_id: workspaceId,
     })
     .select('id')
     .single()
@@ -820,6 +831,7 @@ async function resolveRemoteBatchForLocal(
   workflowStore: IndexedDbWorkflowStore,
   storeRemoteId: string,
   batch: BatchRecord,
+  workspaceId: string,
 ): Promise<{ remoteId: string; batch: BatchRecord; created: boolean }> {
   const remoteId = batch.remoteId
   if (remoteId) {
@@ -830,8 +842,10 @@ async function resolveRemoteBatchForLocal(
         name: batch.name,
         status: batch.status,
         remote_retention_mode: batch.remoteRetentionMode || 'delete_7d_after_listed',
+        workspace_id: workspaceId,
       })
       .eq('id', remoteId)
+      .eq('workspace_id', workspaceId)
       .select('id')
       .maybeSingle()
 
@@ -850,6 +864,7 @@ async function resolveRemoteBatchForLocal(
   const { data: existing, error: existingError } = await client
     .from('batches')
     .select('id')
+    .eq('workspace_id', workspaceId)
     .eq('store_id', storeRemoteId)
     .eq('name', batch.name)
     .maybeSingle()
@@ -866,8 +881,10 @@ async function resolveRemoteBatchForLocal(
         name: batch.name,
         status: batch.status,
         remote_retention_mode: batch.remoteRetentionMode || 'delete_7d_after_listed',
+        workspace_id: workspaceId,
       })
       .eq('id', existing.id as string)
+      .eq('workspace_id', workspaceId)
       .select('id')
       .maybeSingle()
 
@@ -893,6 +910,7 @@ async function resolveRemoteBatchForLocal(
       status: batch.status,
       upload_status: batch.uploadStatus || 'local',
       remote_retention_mode: batch.remoteRetentionMode || 'delete_7d_after_listed',
+      workspace_id: workspaceId,
     })
     .select('id')
     .single()
@@ -918,11 +936,12 @@ export async function syncLocalWorkspaceToRemote(
   }
 
   const { client, workflowStore } = options
+  const workspaceId = await ensureActiveWorkspaceId(client)
   const localStores = await workflowStore.getAllStores()
 
   for (const store of localStores) {
     try {
-      const remoteStore = await resolveRemoteStoreForLocal(client, workflowStore, store)
+      const remoteStore = await resolveRemoteStoreForLocal(client, workflowStore, store, workspaceId)
       if (remoteStore.created) {
         summary.pushedStores += 1
       }
@@ -934,6 +953,7 @@ export async function syncLocalWorkspaceToRemote(
           workflowStore,
           remoteStore.remoteId,
           batch,
+          workspaceId,
         )
         if (remoteBatch.created) {
           summary.pushedBatches += 1
@@ -964,9 +984,12 @@ export async function syncRemoteWorkspaceToLocal(
 
   const { client, workflowStore, itemStore, photoStore } = options
 
+  const workspaceId = await ensureActiveWorkspaceId(client)
+
   const { data: remoteStores, error: storesError } = await client
     .from('stores')
     .select('id, name, short_code, created_at, updated_at')
+    .eq('workspace_id', workspaceId)
     .returns<RemoteWorkspaceStoreRow[]>()
 
   if (storesError) {
