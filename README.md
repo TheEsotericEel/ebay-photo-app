@@ -64,6 +64,7 @@ The repo includes a linked Supabase project and migrations in `supabase/`.
 See:
 
 - [`docs/SUPABASE_SSOT.md`](docs/SUPABASE_SSOT.md) — architecture and data-ownership reference (must-read)
+- [`docs/PUBLISHABLE_MVP_FOUNDATION.md`](docs/PUBLISHABLE_MVP_FOUNDATION.md) — publishable MVP direction (workspace ownership, RLS, tombstone deletes)
 - [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
 - [`.env.example`](.env.example)
 
