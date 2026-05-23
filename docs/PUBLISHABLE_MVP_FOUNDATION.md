@@ -313,7 +313,7 @@ Factual snapshot of **today** vs **publishable target**. Implementation surfaces
 | Surface | Path | Notes |
 | --- | --- | --- |
 | Desktop lister (primary UI) | [`src/phase1/DesktopListerPrototype.tsx`](../src/phase1/DesktopListerPrototype.tsx) | No delete UX on item cards yet |
-| Legacy workspace | [`src/phase1/Phase1Screen.tsx`](../src/phase1/Phase1Screen.tsx) | Dev-only hard delete (`import.meta.env.DEV`); useful reference for **purge** mechanics |
+| Legacy workspace | Retired legacy `Phase1Screen` runtime surface | Dev-only hard delete handlers were a useful reference for **purge** mechanics before retirement |
 | Remote import | [`src/adapters/remoteImport.ts`](../src/adapters/remoteImport.ts) | Must gain tombstone filtering |
 | Remote cleanup | [`src/adapters/remoteCleanup.ts`](../src/adapters/remoteCleanup.ts) | Retention / `remote_deleted_at` on photos |
 | Local stores | [`src/adapters/workflowStore.ts`](../src/adapters/workflowStore.ts), [`src/adapters/itemPacket.ts`](../src/adapters/itemPacket.ts) | `ensureDefaultStore()` pattern for min-one-store |
@@ -426,7 +426,7 @@ and must not upsert local rows over a remote tombstone without an explicit confl
 
 ### Hard purge reuse
 
-Patterns in [`remoteCleanup.ts`](../src/adapters/remoteCleanup.ts) and legacy [`Phase1Screen.tsx`](../src/phase1/Phase1Screen.tsx) hard-delete handlers are appropriate for **purge jobs**, not default product delete.
+Patterns in [`remoteCleanup.ts`](../src/adapters/remoteCleanup.ts) and the retired legacy workspace hard-delete handlers are appropriate for **purge jobs**, not default product delete.
 
 ### Hard purge eligibility (sync safety)
 
@@ -531,7 +531,7 @@ Deletes use tombstones first.
 
 ## 11. Relationship to lister and delete UI work
 
-**Do not prioritize** batch/store delete UI or spreading dev hard-delete from legacy [`Phase1Screen.tsx`](../src/phase1/Phase1Screen.tsx) into [`DesktopListerPrototype.tsx`](../src/phase1/DesktopListerPrototype.tsx) **until Phases 1–4** are in place.
+**Do not prioritize** batch/store delete UI or spreading dev hard-delete from the retired legacy workspace into [`DesktopListerPrototype.tsx`](../src/phase1/DesktopListerPrototype.tsx) **until Phases 1–4** are in place.
 
 When delete UX is built:
 

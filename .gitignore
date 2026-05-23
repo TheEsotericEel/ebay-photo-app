@@ -5,3 +5,6 @@ dist/
 .vercel
 ios/EbayPhotoApp/Config/Secrets.xcconfig
 logs/
+supabase/.temp/
+ios/**/xcuserdata/
+*.xcuserstate

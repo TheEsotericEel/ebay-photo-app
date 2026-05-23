@@ -1,15 +1,7 @@
 import { useEffect } from 'react'
-import { CameraLab } from './phase0/CameraLab'
 import { DesktopListerPrototype } from './phase1/DesktopListerPrototype'
-import { WorkspaceScreen } from './phase1/Phase1Screen'
-import { useIsMobile } from './lib/useViewportMode'
 
 export function App() {
-  const isMobile = useIsMobile()
-  const query = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-  const isLabView = !isMobile && query?.get('lab') === '1'
-  const isLegacyWorkspace = !isMobile && query?.get('legacy') === '1'
-
   useEffect(() => {
     if (typeof document === 'undefined') return
 
@@ -32,14 +24,6 @@ export function App() {
       body.style.overscrollBehavior = previousBodyOverscroll
     }
   }, [])
-
-  if (isLabView) {
-    return <CameraLab />
-  }
-
-  if (isLegacyWorkspace) {
-    return <WorkspaceScreen />
-  }
 
   return <DesktopListerPrototype />
 }

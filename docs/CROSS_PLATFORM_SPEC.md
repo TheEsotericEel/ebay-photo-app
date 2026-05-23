@@ -3,6 +3,7 @@
 **Status**: Planning document (not yet approved for implementation)
 **Created**: May 19, 2026
 **Related**: `ebay-photo-handoff-camera-app-official-spec.md` (current PWA spec, preserved as historical context)
+**Archive note**: This is a legacy cross-platform planning document preserved for historical reference. The current implementation authority is `README.md`, `docs/SUPABASE_SSOT.md`, `docs/BACKEND_CONTRACT_V1.md`, and `docs/CROSS_PLATFORM_SYNC_CONTRACT.md`.
 
 ---
 

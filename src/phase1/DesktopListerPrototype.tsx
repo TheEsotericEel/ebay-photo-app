@@ -807,9 +807,6 @@ export function DesktopListerPrototype() {
           {authError ? <p style={styles.errorText}>{authError}</p> : null}
           {loginError ? <p style={styles.errorText}>{loginError}</p> : null}
           {loginMessage ? <p style={styles.infoText}>{loginMessage}</p> : null}
-          <div style={styles.footerRow}>
-            <a href="/?legacy=1" style={styles.footerLink}>Open legacy workspace</a>
-          </div>
         </div>
       </div>
     )
@@ -888,9 +885,6 @@ export function DesktopListerPrototype() {
           </section>
         )}
 
-        <footer style={styles.footerRow}>
-          <a href="/?legacy=1" style={styles.footerLink}>Open legacy workspace</a>
-        </footer>
       </div>
     )
   }
@@ -1002,10 +996,6 @@ export function DesktopListerPrototype() {
           onChangeStatus={(nextStatus) => void updateItemListingStatus(selectedItem.packet, nextStatus)}
         />
       ) : null}
-
-      <footer style={styles.footerRow}>
-        <a href="/?legacy=1" style={styles.footerLink}>Open legacy workspace</a>
-      </footer>
     </div>
   )
 }
@@ -1961,15 +1951,5 @@ const styles: Record<string, CSSProperties> = {
     width: '34px',
     height: '34px',
     cursor: 'pointer',
-  },
-  footerRow: {
-    marginTop: '16px',
-    display: 'flex',
-    justifyContent: 'flex-end',
-  },
-  footerLink: {
-    color: '#5e6b84',
-    fontSize: '12px',
-    textDecoration: 'none',
   },
 }

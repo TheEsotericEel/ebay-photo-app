@@ -6,6 +6,8 @@ Once the user accepts camera access, the app remembers it in the browser and can
 The app also remembers the last desktop tab and the selected store and batch.
 The mobile capture flow now keeps the live preview on screen while SKU, weight, and dimensions are edited in an overlay.
 
+> Historical note: the old browser-session/Phase 1 runtime surface has been retired. Keep this file as planning context only; it is not implementation authority.
+
 ## Mobile direction update
 
 The current mobile product direction is now:

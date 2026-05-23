@@ -35,7 +35,7 @@ The desktop web app should answer:
 
 ## 2. Current Repo State
 
-The current web app already contains a `WorkspaceScreen` with:
+The current web app already contained a legacy `WorkspaceScreen` during migration with:
 
 - mobile and desktop mode split
 - local stores/batches/items/photos via IndexedDB
