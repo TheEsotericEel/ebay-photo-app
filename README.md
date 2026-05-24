@@ -2,13 +2,26 @@
 
 Cross-platform eBay photo workflow with a native iPhone capture app, a desktop listing site, and a shared Supabase backend.
 
+## Documentation Authority
+Read these docs first:
+
+1. [`README.md`](README.md) - repo entrypoint and doc map.
+2. [`docs/ARCHITECTURE_SNAPSHOT.md`](docs/ARCHITECTURE_SNAPSHOT.md) - current app, platform, and backend architecture.
+3. [`docs/FEATURE_SCOPE_LEDGER.md`](docs/FEATURE_SCOPE_LEDGER.md) - feature status, MVP boundaries, future features, and agent scope rules.
+4. [`docs/SUPABASE_SSOT.md`](docs/SUPABASE_SSOT.md) - source-of-truth and data ownership rules.
+5. [`docs/BACKEND_CONTRACT_V1.md`](docs/BACKEND_CONTRACT_V1.md) - current submit, upload, and import backend contract.
+6. [`docs/CROSS_PLATFORM_SYNC_CONTRACT.md`](docs/CROSS_PLATFORM_SYNC_CONTRACT.md) - cross-platform sync ownership and field responsibilities.
+7. [`docs/WORKSPACE_PHASE1.md`](docs/WORKSPACE_PHASE1.md) - implemented workspace/RLS slice record.
+
+Historical planning docs are preserved for context only. They must not be treated as current implementation authority unless one of the active docs explicitly points to them.
+
 ## Current state
 
 - The repo contains both the desktop site and the native iPhone app.
 - The desktop site is the listing and workspace management surface.
 - The iPhone app is being aligned to a capture-first, lightweight local queue workflow.
 - Supabase is linked and seeded for shared auth, remote records, and storage.
-- The workspace includes desktop store/batch/item queue functionality, item detail, and manual checkoff for one shared account.
+- The workspace includes desktop store/batch/item queue functionality, item detail, and manual checkoff for the single-user workspace MVP.
 - The workspace shows photo retention dates and supports remote cleanup for listed items.
 - The desktop shell uses a compact workspace status strip plus lifecycle chips instead of repeating upload/cleanup summaries in multiple panels.
 - The mobile shell is moving toward a local multi-item capture queue that hands work off to desktop through explicit submit/upload.
@@ -69,7 +82,7 @@ See:
 - [`.env.example`](.env.example)
 
 The app uses Supabase Auth and syncs item/photo handoff data into the remote `stores`, `batches`, `items`, `photos`, and `photo_variants` tables.
-The same account is intended for both phone capture and desktop management.
+The same signed-in user/account is used for both phone capture and desktop management in the MVP workspace model.
 
 ### Current mobile direction
 

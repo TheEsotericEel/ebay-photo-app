@@ -300,13 +300,13 @@ Factual snapshot of **today** vs **publishable target**. Implementation surfaces
 
 | Area | Current state | Publishable target |
 | --- | --- | --- |
-| **Ownership** | Docs and RLS: any authenticated user can manage all rows (`"Authenticated users can manage stores"` etc. in [`supabase/migrations/20260518000000_initial_phase1_schema.sql`](../supabase/migrations/20260518000000_initial_phase1_schema.sql)) | Workspace membership check on every table |
+| **Ownership** | Docs and RLS: workspace membership RLS and workspace-owned rows | Workspace membership check on every table |
 | **`workspace_id`** | Not on `stores`, `batches`, `items`, `photos` | Required on all synced business rows |
 | **Storage path** | `{storeId}/batches/...` per V1 contract | `workspaces/{workspaceId}/stores/...` |
 | **Delete** | `remote_deleted_at` on photos/variants for retention cleanup; no entity-level `deleted_at` on items/stores | Tombstone on items/batches/stores; hard purge as async cleanup |
 | **Desktop** | IndexedDB bridge + import per [`SUPABASE_SSOT.md`](SUPABASE_SSOT.md) | Same bridge acceptable; import must filter `deleted_at` and never resurrect tombstones |
 | **Auth** | Supabase OTP exists | Auto-create default workspace + store + batch on signup |
-| **V1 docs** | “One shared account”; owner-scoped RLS deferred ([`BACKEND_CONTRACT_V1.md`](BACKEND_CONTRACT_V1.md), migration package index) | Single-user **workspace** per account; RLS required |
+| **V1 docs** | Historical shared-account wording; owner-scoped RLS now implemented in the active docs ([`BACKEND_CONTRACT_V1.md`](BACKEND_CONTRACT_V1.md), migration package index) | Single-user **workspace** per account; RLS required |
 
 ### Key implementation surfaces (today)
 

@@ -1,6 +1,23 @@
+> [!WARNING]
+> Historical / superseded planning document.
+>
+> This file is preserved for context only. It is not current implementation authority.
+>
+> Current authority starts with:
+>
+> 1. `README.md`
+> 2. `docs/ARCHITECTURE_SNAPSHOT.md`
+> 3. `docs/FEATURE_SCOPE_LEDGER.md`
+> 4. `docs/SUPABASE_SSOT.md`
+> 5. `docs/BACKEND_CONTRACT_V1.md`
+> 6. `docs/CROSS_PLATFORM_SYNC_CONTRACT.md`
+> 7. `docs/WORKSPACE_PHASE1.md`
+>
+> Do not use this document to override current code, migrations, or active docs.
+
 # eBay Photo App — Updated Project Spec
 
-**Status:** source-of-truth product spec for the current iPhone migration direction  
+**Status:** historical product spec for the native iPhone migration direction
 **Current direction:** native iPhone capture app + web desktop management app + shared Supabase backend  
 **Primary goal:** replace the Telegram-based photo handoff workflow with a fast, item-aware capture flow and desktop listing queue  
 **Primary non-goal:** this is not an eBay automation platform, AI listing writer, pricing tool, permanent inventory system, or SaaS-first product
@@ -101,11 +118,11 @@ Locked product-level defaults:
 - The first native slice is iPhone-only and portrait-first.
 - Manual submit/upload is the MVP default.
 
-Current implementation defaults pending confirmation:
+Historical implementation defaults pending confirmation:
 
 - Native iPhone local state uses Application Support files plus SQLite metadata.
-- Owner-scoped schema/path migration is deferred unless explicitly scheduled as backend work.
-- Owner-scoped records and stricter multi-user RLS are deferred future hardening for the current single-account MVP.
+- Owner-scoped schema/path migration was deferred unless explicitly scheduled as backend work.
+- Owner-scoped records and stricter multi-user RLS were deferred future hardening for the earlier single-account MVP slice.
 
 ---
 

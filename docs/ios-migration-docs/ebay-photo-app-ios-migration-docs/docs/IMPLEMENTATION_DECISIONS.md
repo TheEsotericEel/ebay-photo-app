@@ -14,6 +14,8 @@
 - **Web previews:** the desktop web app should use private Supabase storage with signed URLs or authenticated downloads. Signed URLs are preferred for queue and detail views.
 - **Browser fallback:** PWA/browser camera remains fallback and diagnostic only. It is not the primary production capture path.
 - **MVP operating shape:** iPhone only, portrait first, single account, manual foreground submit/upload only.
+- **Capture orientation (MVP):** iOS capture is portrait-first. `AVCaptureConnection.videoRotationAngle` aligns photo output with portrait preview. Software processing bakes orientation into JPEG pixels with EXIF orientation = 1. Stale rotation metadata is ignored when pixels are already portrait-shaped (avoids double-rotation). Landscape-shaped deliverables are force-rotated once to portrait. Intentional landscape product capture is not supported in MVP.
+- **Desktop import orientation:** browser import re-bakes downloaded listing/thumbnail blobs so IndexedDB `outputWidth`/`outputHeight` match upright pixels for drag/export to eBay.
 - **Mobile queue shape:** the iPhone app uses a real local multi-item queue built around item packets.
 - **Item boundary:** `Next` is the official item boundary.
 - **Store assignment:** store is a property of each item packet, not only of the whole local queue.

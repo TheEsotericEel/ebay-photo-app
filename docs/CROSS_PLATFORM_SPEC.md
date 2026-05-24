@@ -1,24 +1,41 @@
+> [!WARNING]
+> Historical / superseded planning document.
+>
+> This file is preserved for context only. It is not current implementation authority.
+>
+> Current authority starts with:
+>
+> 1. `README.md`
+> 2. `docs/ARCHITECTURE_SNAPSHOT.md`
+> 3. `docs/FEATURE_SCOPE_LEDGER.md`
+> 4. `docs/SUPABASE_SSOT.md`
+> 5. `docs/BACKEND_CONTRACT_V1.md`
+> 6. `docs/CROSS_PLATFORM_SYNC_CONTRACT.md`
+> 7. `docs/WORKSPACE_PHASE1.md`
+>
+> Do not use this document to override current code, migrations, or active docs.
+
 # eBay Photo Handoff App — Cross-Platform Spec
 
 **Status**: Planning document (not yet approved for implementation)
 **Created**: May 19, 2026
-**Related**: `ebay-photo-handoff-camera-app-official-spec.md` (current PWA spec, preserved as historical context)
-**Archive note**: This is a legacy cross-platform planning document preserved for historical reference. The current implementation authority is `README.md`, `docs/SUPABASE_SSOT.md`, `docs/BACKEND_CONTRACT_V1.md`, and `docs/CROSS_PLATFORM_SYNC_CONTRACT.md`.
+**Related**: `ebay-photo-handoff-camera-app-official-spec.md` (historical PWA spec, preserved as reference)
+**Archive note**: This is a legacy cross-platform planning document preserved for historical reference.
 
 ---
 
 ## 1. Product Direction
 
-### 1.1 Current State
+### 1.1 Historical State
 
-The current implementation is a **PWA-first web application** that provides:
+The earlier implementation was a **PWA-first web application** that provided:
 - iPhone Safari camera capture with browser MediaStreamTrack/ImageCapture APIs
 - Desktop browser listing queue for managing captured items
 - Supabase backend for auth, data, and storage
 - IndexedDB for local pending photo queue
-- Single shared account model (one account used on both phone and desktop)
+- Single shared account model used on both phone and desktop
 
-This is documented in `ebay-photo-handoff-camera-app-official-spec.md` and is currently in Phase 1 (end-to-end vertical slice partially complete).
+This was documented in `ebay-photo-handoff-camera-app-official-spec.md` and was the earlier Phase 1 vertical slice.
 
 ### 1.2 Future Direction
 

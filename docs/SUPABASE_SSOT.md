@@ -38,18 +38,25 @@ Local copies may remain as cache, retry state, or retained working files, but ot
 - IndexedDB is a **synchronized working copy** (import bridge + local edits + flush), **not** cross-device SSOT.
 - **Remote-first** desktop queue reads (UI reads Supabase directly) are **deferred** in V1.
 
-See [`docs/ios-migration-docs/ebay-photo-app-ios-migration-docs/docs/WEB_DESKTOP_APP_SPEC.md`](ios-migration-docs/ebay-photo-app-ios-migration-docs/docs/WEB_DESKTOP_APP_SPEC.md) for the later migration target; V1 behavior follows this hub and [`docs/BACKEND_CONTRACT_V1.md`](BACKEND_CONTRACT_V1.md).
+Historical note: the [`docs/ios-migration-docs/`](ios-migration-docs/ebay-photo-app-ios-migration-docs/docs) package captured an earlier migration plan. It is useful for context but is not current implementation authority.
+
+V1 behavior follows this hub, [`docs/ARCHITECTURE_SNAPSHOT.md`](ARCHITECTURE_SNAPSHOT.md), and [`docs/BACKEND_CONTRACT_V1.md`](BACKEND_CONTRACT_V1.md).
 
 ---
 
 ## 4. Normative hierarchy
 
-Read in this order when definitions conflict:
+Use this hierarchy when docs disagree:
 
-1. **`supabase/migrations/`** — schema, tables, checks, RLS, storage buckets (change here first for structural truth).
-2. **[`docs/BACKEND_CONTRACT_V1.md`](BACKEND_CONTRACT_V1.md)** — V1 submit/upload shape, required variants (`listing` + `thumbnail`), storage paths, status values, remote ID rules.
-3. **[`docs/CROSS_PLATFORM_SYNC_CONTRACT.md`](CROSS_PLATFORM_SYNC_CONTRACT.md)** — sync tiers, field ownership, conflict behavior between platforms.
-4. **[`docs/ios-migration-docs/ebay-photo-app-ios-migration-docs/docs/BACKEND_CONTRACT.md`](ios-migration-docs/ebay-photo-app-ios-migration-docs/docs/BACKEND_CONTRACT.md)** — **Reference only** (future-safe / post-V1); **not** V1 implementation authority.
+1. **`supabase/migrations/`** - backend schema, RLS, constraints, and actual database behavior.
+2. **[`docs/ARCHITECTURE_SNAPSHOT.md`](ARCHITECTURE_SNAPSHOT.md)** - current app, platform, and backend architecture.
+3. **[`docs/FEATURE_SCOPE_LEDGER.md`](FEATURE_SCOPE_LEDGER.md)** - feature status, MVP boundaries, and future-scope rules.
+4. **[`docs/SUPABASE_SSOT.md`](SUPABASE_SSOT.md)** - source-of-truth and data-ownership model.
+5. **[`docs/BACKEND_CONTRACT_V1.md`](BACKEND_CONTRACT_V1.md)** - submit, upload, and import backend contract.
+6. **[`docs/CROSS_PLATFORM_SYNC_CONTRACT.md`](CROSS_PLATFORM_SYNC_CONTRACT.md)** - sync and field-ownership behavior.
+7. **[`docs/WORKSPACE_PHASE1.md`](WORKSPACE_PHASE1.md)** - implemented workspace and RLS slice history.
+
+Older migration-package docs and Phase 0 / Phase 1 planning docs are historical reference only. They must not override current migrations, code, or the active docs above.
 
 Supporting setup: [`docs/SUPABASE_SETUP.md`](SUPABASE_SETUP.md), [`.env.example`](../.env.example).
 

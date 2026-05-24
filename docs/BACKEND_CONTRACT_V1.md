@@ -1,46 +1,115 @@
-# Backend Contract V1: Native iOS Submit + Desktop Import
+# Backend Contract V1
+**Status:** Current backend contract
+**Last updated:** 2026-05-23
+**Purpose:** Define the current submit, upload, and import contract between native iOS, desktop web, and Supabase.
 
-Last updated: 05/21/2026
-
-## Scope
-
-This V1 contract defines the smallest reliable handoff between:
-
-- **Capture client:** native iOS app
-- **Queue/listing client:** desktop web app
-- **Shared backend:** Supabase (Postgres + Storage)
-
-This is a contract/spec document only. It does not change code or schema.
-
-## Core decisions
-
-- Native iOS is the primary capture/submit client.
-- Desktop web remains local IndexedDB-driven for queue/listing/checkoff.
-- Desktop should **import remote rows into local IndexedDB** (bridge), not rewrite queue UI to remote-first in V1.
-- Required image variants for MVP: **`listing` + `thumbnail`**.
-- `original` variant is deferred.
-- Supabase email OTP code entry is the MVP auth default.
-- Password sign-in may be used as a development fallback for email rate-limit recovery, but it is not the primary product auth flow.
-- Storage bucket: **`photo-assets`**.
-- Storage path format:
-  - `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}`
-- MVP uses one shared account and shared backend records/tables.
-- Owner-scoped records and stricter multi-user RLS are deferred future hardening.
-- Table graph:
-  - `stores -> batches -> items -> photos -> photo_variants`
-- `upload_jobs` is deferred for V1.
-- Native should write **`uploaded`** status unless it performs true verification.
-- Retention fields stay `null` until item is listed.
-
-Important terminology note:
-
-- On the iPhone app, the user-facing concept is a local capture workflow / queue made of item packets.
-- The exact mapping from that local queue to backend `batches` remains intentionally deferred.
-- This document only defines the minimum remote shape once an item packet is submitted.
+This document reflects the current workspace-owned backend model. It supersedes older shared-account wording.
 
 ---
 
-## 1) NativeSubmitItemPacketV1 shape
+## 1. Current Backend Model
+
+The backend uses:
+
+- Supabase Auth
+- single-user workspace provisioning for MVP
+- workspace-owned business rows
+- membership RLS
+- Supabase Storage for photo assets
+
+Current shared model:
+
+```txt
+workspace
+  store
+    batch
+      item
+        photo
+          photo_variant
+```
+
+The old global shared-account and global-row model is historical and must not be reintroduced.
+
+### Current workspace-owned tables
+
+- `stores`
+- `batches`
+- `items`
+- `photos`
+- `photo_variants`
+- `upload_jobs`
+
+### Current source-of-truth rule
+
+Before `Submit` or `flush`:
+
+- iOS local queue is authoritative for unsubmitted iOS captures.
+- Desktop IndexedDB may hold local working state and pending mutations.
+
+After `Submit` or `flush`:
+
+- Supabase rows and Storage objects are authoritative shared state.
+
+---
+
+## 2. Auth
+
+Current auth flows:
+
+- OTP is the default sign-in flow.
+- Password is a fallback and development-practical path.
+- The iOS app persists session state.
+- The desktop web app signs into Supabase.
+
+The MVP assumption is a single user using the same account and workspace across iOS and desktop.
+
+This is not the old global shared-account model.
+
+---
+
+## 3. Workspace Ownership
+
+All synced business records must be workspace-owned.
+
+Rules:
+
+- Do not reintroduce global shared records.
+- Do not reintroduce permissive authenticated-user access.
+- Preserve `workspace_id` on synced business rows.
+- Preserve workspace membership RLS.
+- Preserve parent/child workspace integrity.
+
+### Current backend reality
+
+- Supabase Auth is used.
+- Each user is provisioned into a workspace.
+- Workspace membership exists.
+- Synced business rows are workspace-owned.
+- Business tables include `workspace_id`.
+- Membership-based RLS exists.
+- Parent/child workspace integrity constraints exist.
+- Store short codes are scoped by workspace.
+- Default workspace, store, and batch provisioning exists.
+
+---
+
+## 4. Native iOS Submit Packet
+
+The V1 native submit packet contains:
+
+- store
+- batch
+- item
+- photos
+- listing variant
+- thumbnail variant
+- optional original variant
+
+`listing` and `thumbnail` are required for V1.
+
+`original` is optional and must not be required by desktop V1.
+
+### Packet shape
 
 ```ts
 type NativeSubmitItemPacketV1 = {
@@ -59,21 +128,27 @@ type NativeSubmitItemPacketV1 = {
     notes?: string
     weight?: string
     dimensions?: string
-    listedAt?: string // optional; null/omitted for normal capture flow
+    listedAt?: string
   }
   photos: Array<{
-    localPhotoId: string // client-local id for mapping/debug
+    localPhotoId: string
     orderIndex: number
     capturedAt: string
     listing: {
       bytes: ArrayBuffer | Blob
-      mimeType: string // usually image/jpeg
+      mimeType: string
       width?: number
       height?: number
     }
     thumbnail: {
       bytes: ArrayBuffer | Blob
-      mimeType: string // usually image/jpeg
+      mimeType: string
+      width?: number
+      height?: number
+    }
+    original?: {
+      bytes: ArrayBuffer | Blob
+      mimeType: string
       width?: number
       height?: number
     }
@@ -81,198 +156,108 @@ type NativeSubmitItemPacketV1 = {
 }
 ```
 
-Notes:
+---
 
-- `photos` must be in stable item order (`orderIndex` ascending).
-- `listedAt` is optional in V1; normal capture flow should leave item as `new`.
-- Each item packet may belong to a different store than the previous item in the same local mobile queue.
+## 5. Submit Behavior
 
-## 1.5 Source of Truth
+Submit should:
 
-Use this rule for V1 and future extensions unless a document explicitly says otherwise:
+1. resolve or provision workspace
+2. upsert store
+3. upsert batch
+4. upsert item
+5. upsert photo rows
+6. upload `listing` and `thumbnail` storage objects
+7. optionally upload `original`
+8. upsert photo variants
+9. finalize photo upload state
+10. update item main photo
+11. update batch counts and status
 
-- Supabase is the source of truth for shared, durable, cross-device workflow data.
-- Supabase Storage is the source of truth for uploaded photo objects.
-- IndexedDB is the local execution layer: it may temporarily own in-progress capture queues, unsynced edits, cached remote records, local photo blobs, sync cursors, and offline retry state.
-- React state is transient UI state only.
-
-Practical rule:
-
-- Before submit or flush, local queue or local edit state can be authoritative for that device.
-- After submit or flush, Supabase records and Storage objects are the canonical shared state for any other device or client.
-- Local copies may remain as cache, retry state, or retained working copies, but they are not the cross-device source of truth.
+Submit is explicit. The current model does not require every capture to upload immediately.
 
 ---
 
-## 2) Required table inserts/updates
+## 6. Desktop Import And Sync
 
-For one submitted item packet:
+Desktop may:
 
-1. Resolve/create `stores` by `short_code`.
-2. Resolve/create `batches` by `(store_id, name)`.
-3. Upsert `items` by `(batch_id, sequence)`.
-4. Insert/upsert one `photos` row per image.
-5. Insert/upsert two `photo_variants` rows per photo (`listing`, `thumbnail`).
-6. Update `items.main_photo_id` to first photo's remote id.
-7. Optionally update `batches.item_count` and `batches.photo_count` after item commit.
+- keep IndexedDB as a synchronized working copy and cache
+- push local stores and batches
+- pull remote stores, batches, items, and photos
+- import photo variants
+- queue item mutations
+- flush mutations to Supabase
 
-V1 can use row-level upserts where useful, but should avoid creating orphaned photos/variants.
+Desktop is not required to be purely remote-first in V1.
 
----
+Desktop item mutations may include:
 
-## 3) Required storage uploads
-
-Required uploads per photo:
-
-- `listing` variant
-- `thumbnail` variant
-
-Bucket and key:
-
-- bucket: `photo-assets`
-- keys:
-  - `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/listing`
-  - `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/thumbnail`
-
-No `original` upload in V1.
+- listing status
+- listed date
+- retention dates
+- SKU
+- notes
+- weight
+- dimensions
 
 ---
 
-## 4) Required vs optional metadata
+## 7. Storage Behavior
 
-### Required for remote compatibility
+Current storage path shape is still store, batch, item, and photo based:
 
-- `stores.short_code`, `stores.name`
-- `batches.store_id`, `batches.name`
-- `items.store_id`, `items.batch_id`, `items.sequence`, `items.status`
-- `photos.store_id`, `photos.batch_id`, `photos.item_id`, `photos.order_index`, `photos.captured_at`
-- `photo_variants.photo_id`, `variant_type`, `storage_bucket`, `storage_key`
+```txt
+{store-or-store-id}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}
+```
 
-### Strongly recommended
+Rows are workspace-owned, but storage paths are not fully workspace-prefixed yet.
 
-- `photo_variants.width`, `height`, `bytes`, `mime_type`
-- `photos.local_status`, `upload_status`, `remote_status`
-- `photos.upload_attempt_count`
+Workspace-prefixed storage paths and stricter storage path and RLS hardening are required before public release.
 
-### Optional in V1
-
-- `items.sku`, `notes`, `weight`, `dimensions`
-- `items.listed_at`
-- checksums and advanced diagnostics fields
+Do not document the current storage path shape as the final public-release security model.
 
 ---
 
-## 5) Status values native writes
+## 8. Photo Variants
 
-### `items.status`
+Current variant behavior:
 
-Write one of:
+- `listing` is required.
+- `thumbnail` is required.
+- `original` is optional.
 
-- `new` (default)
-- `listed`
-- `hold`
-- `needs_retake`
-
-For normal capture upload: write `new`.
-
-### `photos.upload_status`
-
-V1 native write pattern:
-
-- pre-upload row: `uploading`
-- after successful storage + variant row upsert: `uploaded`
-- failure: `failed`
-
-### `photos.remote_status`
-
-V1 native write pattern:
-
-- pre-upload row: `not_uploaded`
-- after successful upload commit: `uploaded`
-- failure: `failed`
-
-Use `verified` only if native performs explicit verification checks.
+The desktop V1 flow must work from listing-quality local or imported blobs and thumbnails. It must not require original assets.
 
 ---
 
-## 6) Remote-to-local status mapping (desktop import bridge)
+## 9. Cleanup And Delete Behavior
 
-Desktop import should map Supabase rows into existing local models (`ItemPacket`, `StoredPhoto`) without changing queue architecture.
+Current:
 
-### Item mapping
+- local safe cleanup exists
+- retention-based remote photo cleanup exists
+- eligible remote photo assets may be deleted
+- photo rows and variants are marked with remote deletion state
 
-- `items.id` -> `ItemPacket.remoteId`
-- `items.sequence` -> `ItemPacket.itemNumber`
-- `items.status` -> `ItemPacket.listingStatus`
-- derive `ItemPacket.uploadStatus` from child photos:
-  - any `failed` -> `failed`
-  - all `uploaded|verified|deleted` -> `uploaded` (or `verified` if all verified)
-  - otherwise `uploading`/`queued`/`local` based on photo set
+Not current yet:
 
-### Photo mapping
+- tombstone-first entity delete for stores, batches, items, and photos
+- production-safe delete lifecycle for all entities
 
-- `photos.id` -> `StoredPhoto.remoteId`
-- `photos.upload_status` -> `StoredPhoto.uploadStatus`
-- `photos.remote_status` -> `StoredPhoto.remoteStatus`
-- `photos.local_status` -> `StoredPhoto.localStatus`
-
-If local blob is missing (import-only record), keep metadata row and mark local state as non-present according to UI expectations.
+Before public release, storage hardening and delete behavior need explicit review.
 
 ---
 
-## 7) Remote IDs desktop must preserve locally
+## 10. Explicitly Superseded Assumptions
 
-Desktop IndexedDB records must preserve remote IDs for all future sync/cleanup actions:
+Do not use these assumptions:
 
-- store remote id (store mapping key)
-- batch remote id (batch mapping key)
-- `ItemPacket.remoteId` = `items.id`
-- `StoredPhoto.remoteId` = `photos.id`
+- one global shared account as the backend model
+- global authenticated-user access to rows
+- owner/workspace/RLS as purely future work
+- PWA/browser camera as the primary mobile submit path
+- `original` variant as required for V1
+- desktop as already fully remote-first
 
-Cleanup and remote updates must use remote IDs, never local-only ids.
-
----
-
-## 8) Cleanup/retention compatibility (V1)
-
-- On upload, leave retention fields `null` until listed:
-  - `photos.remote_delete_eligible_at = null`
-  - `photos.remote_expires_at = null`
-  - `items.photo_retention_until = null`
-- When desktop marks item `listed`, desktop remains responsible for setting retention-window fields.
-- Existing desktop cleanup logic should continue to gate deletion by listing + expiry rules.
-
----
-
-## 9) Practical implementation sequence
-
-1. Confirm this contract and freeze V1 fields/paths/statuses.
-2. Native auth/session (Supabase OTP/session).
-3. Native storage upload (`listing`, `thumbnail`).
-4. Native DB upserts for `stores/batches/items/photos/photo_variants`.
-5. Desktop remote-import bridge:
-   - fetch remote rows
-   - map into local IndexedDB objects
-   - preserve remote IDs
-6. Validate queue rendering + status chips + cleanup eligibility on imported items.
-
----
-
-## 10) Explicit defer list
-
-Defer in V1:
-
-- `original` variant upload requirement
-- `upload_jobs` table integration
-- owner-scoped schema/RLS rewrite
-- multi-user ownership and stricter per-user RLS hardening
-- remote-first desktop queue refactor
-- schema changes or migration rewrites
-- eBay automation and non-upload workflow expansions
-- multi-user permissions hardening beyond current authenticated baseline
-
----
-
-## V1 success definition
-
-V1 is successful when a native-captured item packet is submitted to Supabase and appears in desktop queue/checkoff after import, with correct ordering, thumbnail/listing variants, and compatible statuses/cleanup fields.
+If historical references to those assumptions remain elsewhere, they must be under a clear historical or superseded warning.

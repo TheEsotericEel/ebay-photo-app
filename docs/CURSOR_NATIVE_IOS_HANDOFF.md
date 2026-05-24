@@ -1,7 +1,24 @@
+> [!WARNING]
+> Historical / superseded planning document.
+>
+> This file is preserved for context only. It is not current implementation authority.
+>
+> Current authority starts with:
+>
+> 1. `README.md`
+> 2. `docs/ARCHITECTURE_SNAPSHOT.md`
+> 3. `docs/FEATURE_SCOPE_LEDGER.md`
+> 4. `docs/SUPABASE_SSOT.md`
+> 5. `docs/BACKEND_CONTRACT_V1.md`
+> 6. `docs/CROSS_PLATFORM_SYNC_CONTRACT.md`
+> 7. `docs/WORKSPACE_PHASE1.md`
+>
+> Do not use this document to override current code, migrations, or active docs.
+
 # Cursor Handoff: Native iOS Camera App
 
 ## Current Direction
-- The web camera work has been superseded by a native iOS app.
+- The web camera work was superseded by a native iOS app.
 - Work is happening in the `ios/` Xcode project on `main`.
 - The app is a SwiftUI + AVFoundation capture-first iPhone client for fast eBay item photo capture.
 - The app is a capture + lightweight queue tool, not the final listing workspace.

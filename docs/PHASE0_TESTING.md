@@ -1,3 +1,8 @@
+> [!WARNING]
+> Historical browser-camera diagnostic reference.
+>
+> This file may still be useful for browser or PWA camera testing, but it is not current product architecture. Native iOS is the primary capture path.
+
 # Phase 0 — iPhone Camera Testing Guide
 
 ## Why plain `http://LAN-IP` does not work

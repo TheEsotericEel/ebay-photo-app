@@ -62,12 +62,14 @@ supabase db push   # includes 20260522000000 + 20260522100000 + 20260522110000 +
 
 ## Dev data options
 
+The shared-account and legacy-backfill wording below describes the historical dev slice that preceded workspace ownership. It is not the current global backend model.
+
 | Option | When |
 | --- | --- |
 | **A — Reset** | Preferred; disposable test data |
 | **B — Push + provision** | Keep hosted DB; run migration; each user runs `provision_user_workspace` on login |
 
-Legacy rows without a member are backfilled to `Dev legacy workspace` only; users do not see them unless explicitly granted membership.
+Legacy rows without a member are backfilled to `Dev legacy workspace` only in that historical slice; users do not see them unless explicitly granted membership.
 
 ## Not in this slice
 

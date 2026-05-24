@@ -1,24 +1,41 @@
+> [!WARNING]
+> Historical / superseded planning document.
+>
+> This file is preserved for context only. It is not current implementation authority.
+>
+> Current authority starts with:
+>
+> 1. `README.md`
+> 2. `docs/ARCHITECTURE_SNAPSHOT.md`
+> 3. `docs/FEATURE_SCOPE_LEDGER.md`
+> 4. `docs/SUPABASE_SSOT.md`
+> 5. `docs/BACKEND_CONTRACT_V1.md`
+> 6. `docs/CROSS_PLATFORM_SYNC_CONTRACT.md`
+> 7. `docs/WORKSPACE_PHASE1.md`
+>
+> Do not use this document to override current code, migrations, or active docs.
+
 # eBay Photo App Migration Documentation Index
 
-**Status:** repo-ready planning package  
+**Status:** historical planning package
 **Generated:** 05/21/2026  
-**Purpose:** organize the migration from PWA-first capture to native iPhone capture + web desktop management.
+**Purpose:** organize the earlier migration from PWA-first capture to native iPhone capture + web desktop management.
 
 ---
 
-## Must Read Before Coding
+## Historical Reference Order
 
 | Document | Role |
 |---|---|
-| `docs/SUPABASE_SSOT.md` | Architecture and data-ownership reference: Supabase SSOT, local execution layers, handoff rules, V1 desktop bridge. |
-| `PROJECT_SPEC.md` | Product source-of-truth for current native iPhone + desktop handoff direction. |
+| `docs/SUPABASE_SSOT.md` | Architecture and data-ownership reference for the historical migration package. |
+| `PROJECT_SPEC.md` | Historical product spec for the native iPhone + desktop handoff direction. |
 | `IMPLEMENTATION_DECISIONS.md` | Locked product decisions plus implementation defaults pending confirmation. |
 | `FIRST_NATIVE_BUILD_HANDOFF.md` | Compact implementation handoff for the first native build loop. |
 | `IOS_CAPTURE_APP_SPEC.md` | Native iPhone capture requirements and MVP boundaries. |
 | `docs/BACKEND_CONTRACT_V1.md` | Canonical V1 submit/upload contract and remote shape. |
 | `MIGRATION_PLAN.md` | Ordered implementation sequence and acceptance criteria. |
 
-## Reference Docs
+## Historical Reference Docs
 
 | Document | Role |
 |---|---|
