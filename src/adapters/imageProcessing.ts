@@ -212,10 +212,50 @@ export async function cropSquareFromBitmap(
 }
 
 /**
+ * Re-encodes an image so pixels match what viewers show (EXIF orientation = upright).
+ * Use after remote import so drag/export to eBay does not depend on EXIF tags.
+ */
+export interface BakedImageBlob {
+  blob: Blob
+  width: number
+  height: number
+}
+
+export function canBakeImageOrientationInBrowser(): boolean {
+  return typeof createImageBitmap === 'function' && typeof document !== 'undefined'
+}
+
+/** JPEG EXIF orientation value for upright pixels (no viewer rotation). */
+export const JPEG_EXIF_ORIENTATION_UPRIGHT = 1
+
+export async function bakeImageOrientationIntoBlob(
+  source: Blob,
+  jpegQuality: number = LISTING_JPEG_QUALITY,
+): Promise<BakedImageBlob> {
+  if (!source.type.startsWith('image/')) {
+    return { blob: source, width: 0, height: 0 }
+  }
+  if (!canBakeImageOrientationInBrowser()) {
+    return { blob: source, width: 0, height: 0 }
+  }
+  const bitmap = await createImageBitmap(source)
+  try {
+    const blob = await copyBitmapToBlob(bitmap, jpegQuality)
+    return {
+      blob,
+      width: bitmap.width,
+      height: bitmap.height,
+    }
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
  * Copies a bitmap to a blob without any cropping or resizing.
  * Preserves full original resolution.
  */
-async function copyBitmapToBlob(bitmap: ImageBitmap, jpegQuality: number): Promise<Blob> {
+export async function copyBitmapToBlob(bitmap: ImageBitmap, jpegQuality: number): Promise<Blob> {
   const canvas = document.createElement('canvas')
   canvas.width = bitmap.width
   canvas.height = bitmap.height

@@ -264,4 +264,12 @@ export class IndexedDbWorkflowStore {
     }
     await this.tx(BATCH_STORE_NAME, 'readwrite', (dbStore) => dbStore.put(updated))
   }
+
+  async deleteBatch(batchId: string): Promise<void> {
+    await this.tx(BATCH_STORE_NAME, 'readwrite', (dbStore) => dbStore.delete(batchId))
+  }
+
+  async deleteStore(storeId: string): Promise<void> {
+    await this.tx(STORE_STORE_NAME, 'readwrite', (dbStore) => dbStore.delete(storeId))
+  }
 }

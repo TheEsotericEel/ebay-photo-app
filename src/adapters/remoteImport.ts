@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { bakeImageOrientationIntoBlob, canBakeImageOrientationInBrowser } from './imageProcessing'
 import { IndexedDbItemPacketStore, ItemPacket, ListingStatus } from './itemPacket'
 import { IndexedDbPhotoStore, StoredPhoto } from './localPhotoStore'
 import { BatchRecord, IndexedDbWorkflowStore, StoreRecord } from './workflowStore'
@@ -476,9 +477,17 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
       }
 
       const primary = pickPrimaryImportBlob(originalDownload, listingDownload, thumbnailDownload)
-      const blob = primary.blob
-      const mimeType = primary.variant?.mime_type || listingDownload.variant?.mime_type || thumbnailDownload.variant?.mime_type || blob.type || 'image/jpeg'
-      const thumbnailBlob = thumbnailDownload.variant ? thumbnailDownload.blob : undefined
+      const primaryMimeType = primary.variant?.mime_type || listingDownload.variant?.mime_type || thumbnailDownload.variant?.mime_type || primary.blob.type || 'image/jpeg'
+      const shouldBakeOrientation = canBakeImageOrientationInBrowser()
+      const bakedPrimary = shouldBakeOrientation && primary.blob.size > 0 && primaryMimeType.startsWith('image/')
+        ? await bakeImageOrientationIntoBlob(primary.blob)
+        : null
+      const blob = bakedPrimary?.blob ?? primary.blob
+      const mimeType = bakedPrimary ? 'image/jpeg' : primaryMimeType
+      const bakedThumbnail = shouldBakeOrientation && thumbnailDownload.variant && thumbnailDownload.blob.size > 0
+        ? await bakeImageOrientationIntoBlob(thumbnailDownload.blob)
+        : null
+      const thumbnailBlob = bakedThumbnail?.blob ?? (thumbnailDownload.variant ? thumbnailDownload.blob : undefined)
 
       if (shouldUpgradeListingBlob && existingLocalPhoto) {
         if (primary.variant && blob.size > 0) {
@@ -489,10 +498,10 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
               size: blob.size,
               thumbnailBlob,
               thumbnailSize: thumbnailBlob?.size || undefined,
-              thumbnailWidth: thumbnailDownload.variant?.width || undefined,
-              thumbnailHeight: thumbnailDownload.variant?.height || undefined,
-              outputWidth: primary.variant?.width || listingDownload.variant?.width || undefined,
-              outputHeight: primary.variant?.height || listingDownload.variant?.height || undefined,
+              thumbnailWidth: bakedThumbnail?.width || thumbnailDownload.variant?.width || undefined,
+              thumbnailHeight: bakedThumbnail?.height || thumbnailDownload.variant?.height || undefined,
+              outputWidth: bakedPrimary?.width || primary.variant?.width || listingDownload.variant?.width || undefined,
+              outputHeight: bakedPrimary?.height || primary.variant?.height || listingDownload.variant?.height || undefined,
             })
             summary.updatedItems += 1
           } catch (error) {
@@ -521,10 +530,10 @@ export async function importRemoteBatchToLocal(options: RemoteImportOptions): Pr
         remoteDeletedAt: remotePhoto.remote_deleted_at || undefined,
         thumbnailBlob,
         thumbnailSize: thumbnailBlob?.size || undefined,
-        thumbnailWidth: thumbnailDownload.variant?.width || undefined,
-        thumbnailHeight: thumbnailDownload.variant?.height || undefined,
-        outputWidth: primary.variant?.width || listingDownload.variant?.width || thumbnailDownload.variant?.width || undefined,
-        outputHeight: primary.variant?.height || listingDownload.variant?.height || thumbnailDownload.variant?.height || undefined,
+        thumbnailWidth: bakedThumbnail?.width || thumbnailDownload.variant?.width || undefined,
+        thumbnailHeight: bakedThumbnail?.height || thumbnailDownload.variant?.height || undefined,
+        outputWidth: bakedPrimary?.width || primary.variant?.width || listingDownload.variant?.width || thumbnailDownload.variant?.width || undefined,
+        outputHeight: bakedPrimary?.height || primary.variant?.height || listingDownload.variant?.height || thumbnailDownload.variant?.height || undefined,
       }
 
       try {
