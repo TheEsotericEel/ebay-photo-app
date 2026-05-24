@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct EbayPhotoAppApp: App {
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @StateObject private var appState = AppState()
   @StateObject private var supabase = SupabaseService()
 
@@ -10,6 +11,7 @@ struct EbayPhotoAppApp: App {
       RootView()
         .environmentObject(appState)
         .environmentObject(supabase)
+        .portraitLocked()
     }
   }
 }

@@ -401,15 +401,21 @@ final class CameraService: NSObject, ObservableObject {
         guard let self else { return }
 
         switch result {
-        case .success(let cgImage):
+        case .success(let capture):
           timer.mark("received uncompressed CGImage")
+          let cgImage = capture.cgImage
 
           let deliverableData: Data
           let preview: Data?
 
+          let exifOrientation = capture.exifOrientation
+
           switch aspectMode {
           case .square:
-            guard let result = PhotoFraming.squareDeliverableAndThumbnail(from: cgImage) else {
+            guard let result = PhotoFraming.squareDeliverableAndThumbnail(
+              from: cgImage,
+              exifOrientation: exifOrientation
+            ) else {
               self.captureInFlight = false
               self.captureDelegate = nil
               continuation.resume(throwing: CameraServiceError.imageProcessingFailed)
@@ -417,7 +423,10 @@ final class CameraService: NSObject, ObservableObject {
             }
             deliverableData = result.jpeg
             preview = result.thumbnail
-            let nativeOriginal = PhotoFraming.nativeDeliverableAndThumbnail(from: cgImage)?.jpeg
+            let nativeOriginal = PhotoFraming.nativeDeliverableAndThumbnail(
+              from: cgImage,
+              exifOrientation: exifOrientation
+            )?.jpeg
             timer.mark("image processing done (crop+thumb)")
             Task { @MainActor in
               timer.mark("MainActor task started")
@@ -438,7 +447,10 @@ final class CameraService: NSObject, ObservableObject {
             }
             return
           case .native:
-            guard let result = PhotoFraming.nativeDeliverableAndThumbnail(from: cgImage) else {
+            guard let result = PhotoFraming.nativeDeliverableAndThumbnail(
+              from: cgImage,
+              exifOrientation: exifOrientation
+            ) else {
               self.captureInFlight = false
               self.captureDelegate = nil
               continuation.resume(throwing: CameraServiceError.imageProcessingFailed)
@@ -617,6 +629,7 @@ final class CameraService: NSObject, ObservableObject {
     if session.outputs.contains(where: { $0 === photoOutput }) == false, session.canAddOutput(photoOutput) {
       session.addOutput(photoOutput)
     }
+    applyPortraitRotationToPhotoOutput()
 
     session.commitConfiguration()
 
@@ -911,6 +924,13 @@ final class CameraService: NSObject, ObservableObject {
     }
   }
 
+  private func applyPortraitRotationToPhotoOutput() {
+    guard let connection = photoOutput.connection(with: .video) else { return }
+    let portraitAngle: CGFloat = 90
+    guard connection.isVideoRotationAngleSupported(portraitAngle) else { return }
+    connection.videoRotationAngle = portraitAngle
+  }
+
   private func makeProbe(
     catalog: DeviceCatalog,
     device: AVCaptureDevice,
@@ -943,11 +963,16 @@ private struct DeviceCatalog {
   let virtualDevices: [AVCaptureDevice]
 }
 
+private struct ProcessedCapturePixels: Sendable {
+  let cgImage: CGImage
+  let exifOrientation: UIImage.Orientation
+}
+
 private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-  private var completion: ((Result<CGImage, Error>) -> Void)?
+  private var completion: ((Result<ProcessedCapturePixels, Error>) -> Void)?
   private var didComplete = false
 
-  init(completion: @escaping (Result<CGImage, Error>) -> Void) {
+  init(completion: @escaping (Result<ProcessedCapturePixels, Error>) -> Void) {
     self.completion = completion
   }
 
@@ -964,8 +989,7 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
       return
     }
 
-    // cgImageRepresentation() instantly wraps the uncompressed pixel buffer 
-    // and automatically applies the correct upright orientation.
+    // cgImageRepresentation() wraps the pixel buffer; metadata may still carry EXIF orientation.
     guard let cgImage = photo.cgImageRepresentation() else {
       didComplete = true
       completion?(.failure(NSError(domain: "CameraService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to get CGImage from photo."])))
@@ -974,7 +998,10 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
     }
 
     didComplete = true
-    completion?(.success(cgImage))
+    completion?(.success(ProcessedCapturePixels(
+      cgImage: cgImage,
+      exifOrientation: PhotoFraming.exifOrientation(from: photo)
+    )))
     completion = nil
   }
 

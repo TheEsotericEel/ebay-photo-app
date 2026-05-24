@@ -10,9 +10,12 @@
 		4AF21D4F2C2F4D5D8B900001 /* AppStateQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF21D4E2C2F4D5D8B900001 /* AppStateQueueTests.swift */; };
 		4AF21D4F2C2F4D5D8B900002 /* AppStatePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF21D4E2C2F4D5D8B900002 /* AppStatePersistenceTests.swift */; };
 		4AF21D4F2C2F4D5D8B900003 /* UploadIdempotencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF21D4E2C2F4D5D8B900003 /* UploadIdempotencyTests.swift */; };
+		4AF21D4F2C2F4D5D8B900004 /* PhotoFramingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF21D4E2C2F4D5D8B900004 /* PhotoFramingTests.swift */; };
 		4A8F1D4F2C2F4D5D8B900001 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */; };
 		4A8F1D4F2C2F4D5D8B900018 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90001A /* AppLog.swift */; };
 		4A8F1D4F2C2F4D5D8B900002 /* EbayPhotoAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */; };
+		4A8F1D4F2C2F4D5D8B900020 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900020 /* AppDelegate.swift */; };
+		4A8F1D4F2C2F4D5D8B900021 /* PortraitLockedModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900021 /* PortraitLockedModifier.swift */; };
 		4A8F1D4F2C2F4D5D8B900003 /* CapturedPhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900003 /* CapturedPhoto.swift */; };
 		4A8F1D4F2C2F4D5D8B900016 /* PhotoFraming.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900016 /* PhotoFraming.swift */; };
 		4A8F1D4F2C2F4D5D8B900017 /* NativeUploadItemPacketV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900017 /* NativeUploadItemPacketV1.swift */; };
@@ -50,10 +53,13 @@
 		4AF21D4E2C2F4D5D8B900001 /* AppStateQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateQueueTests.swift; sourceTree = "<group>"; };
 		4AF21D4E2C2F4D5D8B900002 /* AppStatePersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStatePersistenceTests.swift; sourceTree = "<group>"; };
 		4AF21D4E2C2F4D5D8B900003 /* UploadIdempotencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadIdempotencyTests.swift; sourceTree = "<group>"; };
+		4AF21D4E2C2F4D5D8B900004 /* PhotoFramingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFramingTests.swift; sourceTree = "<group>"; };
 		4AF21D4E2C2F4D5D8B90000D /* EbayPhotoAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EbayPhotoAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B90001A /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbayPhotoAppApp.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900020 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900021 /* PortraitLockedModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortraitLockedModifier.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900003 /* CapturedPhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedPhoto.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900016 /* PhotoFraming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFraming.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900017 /* NativeUploadItemPacketV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeUploadItemPacketV1.swift; sourceTree = "<group>"; };
@@ -119,6 +125,7 @@
 				4AF21D4E2C2F4D5D8B900001 /* AppStateQueueTests.swift */,
 				4AF21D4E2C2F4D5D8B900002 /* AppStatePersistenceTests.swift */,
 				4AF21D4E2C2F4D5D8B900003 /* UploadIdempotencyTests.swift */,
+				4AF21D4E2C2F4D5D8B900004 /* PhotoFramingTests.swift */,
 			);
 			path = EbayPhotoAppTests;
 			sourceTree = "<group>";
@@ -142,6 +149,7 @@
 				4A8F1D4E2C2F4D5D8B900001 /* AppState.swift */,
 				4A8F1D4E2C2F4D5D8B90001A /* AppLog.swift */,
 				4A8F1D4E2C2F4D5D8B900002 /* EbayPhotoAppApp.swift */,
+				4A8F1D4E2C2F4D5D8B900020 /* AppDelegate.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -197,6 +205,7 @@
 				4A8F1D4E2C2F4D5D8B90001D /* LabeledTextField.swift */,
 				4A8F1D4E2C2F4D5D8B90001E /* TextInputLabView.swift */,
 				4A8F1D4E2C2F4D5D8B900007 /* RootView.swift */,
+				4A8F1D4E2C2F4D5D8B900021 /* PortraitLockedModifier.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -322,6 +331,7 @@
 				4AF21D4F2C2F4D5D8B900001 /* AppStateQueueTests.swift in Sources */,
 				4AF21D4F2C2F4D5D8B900002 /* AppStatePersistenceTests.swift in Sources */,
 				4AF21D4F2C2F4D5D8B900003 /* UploadIdempotencyTests.swift in Sources */,
+				4AF21D4F2C2F4D5D8B900004 /* PhotoFramingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -332,6 +342,7 @@
 				4A8F1D4F2C2F4D5D8B900001 /* AppState.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900018 /* AppLog.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900002 /* EbayPhotoAppApp.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900020 /* AppDelegate.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900003 /* CapturedPhoto.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900016 /* PhotoFraming.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900017 /* NativeUploadItemPacketV1.swift in Sources */,
@@ -349,6 +360,7 @@
 				4A8F1D4F2C2F4D5D8B90001D /* LabeledTextField.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B90001E /* TextInputLabView.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900007 /* RootView.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900021 /* PortraitLockedModifier.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
