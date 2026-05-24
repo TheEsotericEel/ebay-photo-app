@@ -355,26 +355,40 @@ private struct CameraContextStrip: View {
 }
 
 private struct CameraMetadataTray: View {
-  let sku: String
-  let weight: String
-  let dimensions: String
-  let notes: String
-  let onEditDetails: () -> Void
+  @Binding var sku: String
+  @Binding var weight: String
+  @Binding var dimensions: String
+  @Binding var notes: String
 
   var body: some View {
-    HStack(spacing: 8) {
-      metadataSummary("SKU", sku)
-      metadataSummary("Wt", weight)
-      metadataSummary("Dim", dimensions)
-      metadataSummary("Note", notes)
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        InlineMetadataField(
+          title: "SKU",
+          text: $sku,
+          autocapitalize: .characters,
+          autocorrectDisabled: true
+        )
 
-      Spacer(minLength: 0)
+        InlineMetadataField(
+          title: "Wt",
+          text: $weight,
+          autocorrectDisabled: true
+        )
+      }
 
-      Button("Edit", action: onEditDetails)
-        .font(.caption.weight(.semibold))
-        .buttonStyle(.bordered)
-        .tint(.white)
-        .controlSize(.small)
+      HStack(spacing: 8) {
+        InlineMetadataField(
+          title: "Dim",
+          text: $dimensions,
+          autocorrectDisabled: true
+        )
+
+        InlineMetadataField(
+          title: "Note",
+          text: $notes
+        )
+      }
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 7)
@@ -387,22 +401,41 @@ private struct CameraMetadataTray: View {
         .stroke(.white.opacity(0.1), lineWidth: 1)
     }
   }
+}
 
-  private func metadataSummary(_ label: String, _ value: String) -> some View {
-    HStack(spacing: 3) {
-      Text(label)
+private struct InlineMetadataField: View {
+  let title: String
+  @Binding var text: String
+  var autocapitalize: TextInputAutocapitalization?
+  var autocorrectDisabled = false
+  var keyboardType: UIKeyboardType = .default
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(title)
         .font(.caption2.weight(.semibold))
         .foregroundStyle(.secondary)
-      Text(displayValue(value))
+
+      TextField(title, text: $text)
         .font(.caption.weight(.medium))
-        .foregroundStyle(value.isEmpty ? Color.secondary : Color.white)
-        .lineLimit(1)
+        .textFieldStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(.white.opacity(0.07))
+        }
+        .overlay {
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+        .keyboardType(keyboardType)
+        .modifier(OptionalAutocapitalize(autocapitalize: autocapitalize))
+        .autocorrectionDisabled(autocorrectDisabled)
+        .tint(.white)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
-  private func displayValue(_ value: String) -> String {
-    value.isEmpty ? "—" : value
   }
 }
 
@@ -605,93 +638,439 @@ private struct CaptureHomeView: View {
   let onOpenInputLab: (() -> Void)?
   @EnvironmentObject private var appState: AppState
 
+  private var sortedQueuedItems: [AppState.LocalQueueItemPacket] {
+    appState.queuedItemPackets.sorted(by: { $0.itemNumber < $1.itemNumber })
+  }
+
   var body: some View {
     NavigationStack {
-      List {
-        Section("Active Batch") {
-          LabeledContent("Store", value: appState.captureStoreName)
-          LabeledContent("Short code", value: appState.captureStoreShortCode)
-          LabeledContent("Batch", value: appState.captureBatchName)
-          LabeledContent("Item", value: "\(appState.currentItemNumber)")
-          LabeledContent("Draft photos", value: "\(appState.capturedPhotos.count)")
-          LabeledContent("Queued items", value: "\(appState.queuedItemPackets.count)")
-        }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          homeHeader
 
-        Section("Local Queue") {
-          if appState.queuedItemPackets.isEmpty {
-            Text("No queued items yet. Capture photos and tap Next to add item packets.")
-              .foregroundStyle(.secondary)
-          } else {
-            ForEach(appState.queuedItemPackets.sorted(by: { $0.itemNumber < $1.itemNumber })) { item in
-              VStack(alignment: .leading, spacing: 4) {
-                Text("Item \(item.itemNumber) · \(item.photos.count) photo(s)")
-                  .font(.subheadline.weight(.semibold))
-                Text("\(item.storeShortCode) · \(item.batchName)")
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                Text(queueStateText(item.submitState))
-                  .font(.footnote)
-                  .foregroundStyle(item.submitState == .failed ? .red : .secondary)
-                if let progress = appState.queueSubmitProgress, progress.itemId == item.id {
-                  Text(progress.message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+          CaptureHomeCard(title: "Capture Workflow") {
+            VStack(alignment: .leading, spacing: 12) {
+              Button(action: onOpenCamera) {
+                HStack(spacing: 10) {
+                  Image(systemName: "camera.fill")
+                    .font(.headline.weight(.semibold))
+                  Text("Open Camera")
+                    .font(.headline.weight(.semibold))
+                  Spacer(minLength: 0)
+                  Image(systemName: "arrow.right")
+                    .font(.subheadline.weight(.semibold))
                 }
-                if let error = item.lastSubmitError, !error.isEmpty {
-                  Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+              }
+              .buttonStyle(.plain)
+              .foregroundStyle(.black)
+              .background {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                  .fill(
+                    LinearGradient(
+                      colors: [Color.white, Color.white.opacity(0.88)],
+                      startPoint: .topLeading,
+                      endPoint: .bottomTrailing
+                    )
+                  )
+              }
+
+              HStack(spacing: 10) {
+                HomeActionButton(title: "Review Queue", systemImage: "tray.full", action: onReviewQueue)
+                HomeActionButton(title: "Upload Batch", systemImage: "arrow.up.circle", action: onUploadBatch)
+              }
+            }
+          }
+
+          CaptureHomeCard(title: "Active Batch") {
+            VStack(alignment: .leading, spacing: 12) {
+              Text(appState.captureBatchName)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+              Text("\(appState.captureStoreShortCode) · \(appState.captureStoreName)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+              HStack(spacing: 8) {
+                HomeMetricPill(label: "Item", value: "\(appState.currentItemNumber)")
+                HomeMetricPill(label: "Draft", value: "\(appState.capturedPhotos.count)")
+                HomeMetricPill(label: "Queued", value: "\(appState.queuedItemPackets.count)")
+              }
+            }
+          }
+
+          CaptureHomeCard(
+            title: "Queue Preview",
+            subtitle: appState.queuedItemPackets.isEmpty ? "No items queued yet." : "\(appState.queuedItemPackets.count) queued item(s)"
+          ) {
+            if sortedQueuedItems.isEmpty {
+              EmptyHomeState(
+                title: "Nothing queued yet",
+                message: "Capture photos and tap Next to create the first item packet."
+              )
+            } else {
+              VStack(spacing: 10) {
+                ForEach(sortedQueuedItems.prefix(4)) { item in
+                  QueuePreviewRow(
+                    item: item,
+                    progressMessage: appState.queueSubmitProgress?.itemId == item.id ? appState.queueSubmitProgress?.message : nil
+                  )
+                }
+
+                if sortedQueuedItems.count > 4 {
+                  Text("+\(sortedQueuedItems.count - 4) more item(s)")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+              }
+            }
+
+            if let item = sortedQueuedItems.first, let error = item.lastSubmitError, !error.isEmpty {
+              Text(error)
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .lineLimit(2)
+                .padding(.top, 2)
+            }
+          }
+
+          CaptureHomeCard(title: "Status") {
+            VStack(alignment: .leading, spacing: 10) {
+              Text(appState.statusMessage)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+              if !appState.uploadMessage.isEmpty {
+                Text(appState.uploadMessage)
+                  .font(.footnote)
+                  .foregroundStyle(.secondary)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+
+              if let progress = appState.queueSubmitProgress {
+                VStack(alignment: .leading, spacing: 4) {
+                  Text(progress.message)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+                  if let photoIndex = progress.photoIndex, let photoCount = progress.photoCount {
+                    Text("Photo \(photoIndex) of \(photoCount)")
+                      .font(.caption)
+                      .foregroundStyle(.secondary.opacity(0.8))
+                  }
                 }
               }
             }
           }
-        }
 
-        Section("Actions") {
-          Button("Open Camera", action: onOpenCamera)
-          Button("Review Queue", action: onReviewQueue)
-          Button("Upload Batch", action: onUploadBatch)
-          Button("Clear Safe Local Copies", action: onClearSafeLocalCopies)
-            .disabled(appState.safeLocalCleanupCandidates().isEmpty)
-          #if DEBUG
-          Button("Upload Debug Fixture", action: onUploadFixture)
-          if let onOpenInputLab {
-            Button("Open Text Input Lab", action: onOpenInputLab)
-          }
-          #endif
-          Button("Sign Out", role: .destructive, action: onSignOut)
-        }
+          CaptureHomeCard(title: "Utilities") {
+            VStack(alignment: .leading, spacing: 10) {
+              Button(action: onClearSafeLocalCopies) {
+                homeUtilityLabel(
+                  title: "Clear Safe Local Copies",
+                  subtitle: "Removes local photo duplicates that are safe to discard.",
+                  systemImage: "trash"
+                )
+              }
+              .buttonStyle(.plain)
+              .disabled(appState.safeLocalCleanupCandidates().isEmpty)
+              .opacity(appState.safeLocalCleanupCandidates().isEmpty ? 0.5 : 1)
 
-        Section("Status") {
-          Text(appState.statusMessage)
-          if !appState.uploadMessage.isEmpty {
-            Text(appState.uploadMessage)
-          }
-          if let progress = appState.queueSubmitProgress {
-            Text(progress.message)
-            if let photoIndex = progress.photoIndex, let photoCount = progress.photoCount {
-              Text("Photo \(photoIndex) of \(photoCount)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+              #if DEBUG
+              Button(action: onUploadFixture) {
+                homeUtilityLabel(
+                  title: "Upload Debug Fixture",
+                  subtitle: "Creates a synthetic upload packet for validation.",
+                  systemImage: "hammer"
+                )
+              }
+              .buttonStyle(.plain)
+
+              if let onOpenInputLab {
+                Button(action: onOpenInputLab) {
+                  homeUtilityLabel(
+                    title: "Open Text Input Lab",
+                    subtitle: "Developer-only input testing screen.",
+                    systemImage: "keyboard"
+                  )
+                }
+                .buttonStyle(.plain)
+              }
+              #endif
+
+              Button(role: .destructive, action: onSignOut) {
+                homeUtilityLabel(
+                  title: "Sign Out",
+                  subtitle: "Ends the current session on this device.",
+                  systemImage: "person.crop.circle.badge.xmark"
+                )
+              }
+              .buttonStyle(.plain)
             }
           }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
       }
       .navigationTitle("Capture Home")
+      .navigationBarTitleDisplayMode(.inline)
+      .background {
+        LinearGradient(
+          colors: [
+            Color(red: 0.06, green: 0.07, blue: 0.09),
+            Color.black
+          ],
+          startPoint: .top,
+          endPoint: .bottom
+        )
+        .ignoresSafeArea()
+      }
     }
+  }
+
+  @ViewBuilder
+  private var homeHeader: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Capture Home")
+        .font(.largeTitle.weight(.bold))
+        .foregroundStyle(.white)
+
+      Text("Keep the workflow moving without putting editing noise in the way.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.bottom, 2)
+  }
+
+  private func homeUtilityLabel(title: String, subtitle: String, systemImage: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: systemImage)
+        .font(.headline.weight(.semibold))
+        .foregroundStyle(.white)
+        .frame(width: 24, height: 24)
+        .padding(8)
+        .background {
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(.white.opacity(0.08))
+        }
+
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title)
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(.white)
+        Text(subtitle)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Spacer(minLength: 0)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(Rectangle())
   }
 
   private func queueStateText(_ state: AppState.QueueItemSubmitState) -> String {
     switch state {
     case .local:
-      return "Local (not submitted)"
+      return "Local"
     case .submitting:
-      return "Submitting…"
+      return "Submitting"
     case .submitted:
       return "Submitted"
     case .failed:
       return "Failed"
+    }
+  }
+}
+
+private struct CaptureHomeCard<Content: View>: View {
+  let title: String
+  let subtitle: String?
+  let content: Content
+
+  init(title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
+    self.title = title
+    self.subtitle = subtitle
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(title)
+          .font(.headline.weight(.semibold))
+          .foregroundStyle(.white)
+        if let subtitle {
+          Text(subtitle)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+      }
+
+      content
+    }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background {
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .fill(.white.opacity(0.06))
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .stroke(.white.opacity(0.1), lineWidth: 1)
+    }
+  }
+}
+
+private struct HomeActionButton: View {
+  let title: String
+  let systemImage: String
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 8) {
+        Image(systemName: systemImage)
+          .font(.subheadline.weight(.semibold))
+        Text(title)
+          .font(.subheadline.weight(.semibold))
+        Spacer(minLength: 0)
+      }
+      .padding(.vertical, 12)
+      .padding(.horizontal, 14)
+      .frame(maxWidth: .infinity)
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(.white)
+    .background {
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(.white.opacity(0.08))
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .stroke(.white.opacity(0.08), lineWidth: 1)
+    }
+  }
+}
+
+private struct HomeMetricPill: View {
+  let label: String
+  let value: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(label)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+      Text(value)
+        .font(.headline.weight(.semibold))
+        .foregroundStyle(.white)
+        .lineLimit(1)
+    }
+    .padding(.vertical, 10)
+    .padding(.horizontal, 12)
+    .background {
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .fill(.white.opacity(0.08))
+    }
+  }
+}
+
+private struct EmptyHomeState: View {
+  let title: String
+  let message: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(title)
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.white)
+      Text(message)
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(14)
+    .background {
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(.white.opacity(0.04))
+    }
+  }
+}
+
+private struct QueuePreviewRow: View {
+  let item: AppState.LocalQueueItemPacket
+  let progressMessage: String?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(alignment: .firstTextBaseline, spacing: 10) {
+        Text("Item \(item.itemNumber)")
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(.white)
+        Spacer(minLength: 0)
+        Text(submitStateText(item.submitState))
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(submitStateColor(item.submitState))
+      }
+
+      Text("\(item.storeShortCode) · \(item.batchName)")
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+
+      HStack(spacing: 8) {
+        HomeMetricPill(label: "Photos", value: "\(item.photos.count)")
+        HomeMetricPill(label: "SKU", value: item.sku.isEmpty ? "—" : item.sku)
+      }
+      .padding(.top, 2)
+
+      if let progressMessage, !progressMessage.isEmpty {
+        Text(progressMessage)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .lineLimit(2)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(14)
+    .background {
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(.white.opacity(0.05))
+    }
+  }
+
+  private func submitStateText(_ state: AppState.QueueItemSubmitState) -> String {
+    switch state {
+    case .local:
+      return "Local"
+    case .submitting:
+      return "Submitting"
+    case .submitted:
+      return "Submitted"
+    case .failed:
+      return "Failed"
+    }
+  }
+
+  private func submitStateColor(_ state: AppState.QueueItemSubmitState) -> Color {
+    switch state {
+    case .local, .submitted:
+      return .secondary
+    case .submitting:
+      return .orange
+    case .failed:
+      return .red
     }
   }
 }
@@ -981,11 +1360,10 @@ private struct CameraSessionView: View {
       .layoutPriority(1)
 
       CameraMetadataTray(
-        sku: appState.currentItemSku,
-        weight: appState.currentItemWeight,
-        dimensions: appState.currentItemDimensions,
-        notes: appState.currentItemNotes,
-        onEditDetails: { presentDetailsEditor() }
+        sku: currentItemBinding(\.currentItemSku),
+        weight: currentItemBinding(\.currentItemWeight),
+        dimensions: currentItemBinding(\.currentItemDimensions),
+        notes: currentItemBinding(\.currentItemNotes)
       )
       .padding(.horizontal, 12)
       .layoutPriority(0)
@@ -1057,6 +1435,13 @@ private struct CameraSessionView: View {
     withTransaction(transaction) {
       showingDetails = true
     }
+  }
+
+  private func currentItemBinding(_ keyPath: ReferenceWritableKeyPath<AppState, String>) -> Binding<String> {
+    Binding(
+      get: { appState[keyPath: keyPath] },
+      set: { appState[keyPath: keyPath] = $0 }
+    )
   }
 
   private func startCaptureLoop() {
