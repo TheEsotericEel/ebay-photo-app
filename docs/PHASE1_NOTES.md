@@ -32,10 +32,12 @@ The current mobile product direction is now:
 - mobile is the iPhone app
 - the iPhone app is a capture + lightweight queue tool
 - it should use a real local multi-item queue
-- `Next` is the official item boundary
-- `Submit` is the deliberate upload/handoff action in MVP
+- `Next / Finish Item` is the official item boundary checkpoint
+- `Queue & Continue` finalizes the current draft into a queued item packet
+- if the current draft has captured photos, `Done` routes through the same checkpoint so the user can choose `Queue & Exit` or return to camera
+- `Submit` is the deliberate upload/handoff action in MVP for finalized queued item packets
 - store is an item-level property, so one local queue may contain items for multiple stores
-- exact `Done` behavior and exact backend batch mapping remain intentionally deferred
+- exact backend batch mapping remains intentionally deferred
 
 Some Phase 1 implementation language in this repo still reflects older browser-session wording. Treat this note as historical slice context, not current authority.
 

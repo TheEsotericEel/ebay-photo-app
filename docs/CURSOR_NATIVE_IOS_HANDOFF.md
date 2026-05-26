@@ -62,11 +62,13 @@
 - The camera stays central during capture.
 - The app should use a real local multi-item queue.
 - The camera screen edits the currently active item packet.
-- `Next` is the official item boundary.
-- `Submit` is the deliberate MVP upload/handoff action.
+- `Next / Finish Item` is the official item boundary checkpoint.
+- `Queue & Continue` finalizes the current draft into a queued item packet.
+- If the current draft has captured photos, `Done` routes through the same checkpoint so the user can choose `Queue & Exit` or return to camera.
+- `Submit` is the deliberate MVP upload/handoff action for finalized queued item packets.
 - The queue may contain items from multiple stores.
 - Photos should remain app-local until upload/retention decisions are made.
-- Exact queue review UI, exact metadata fields, exact `Done` behavior, and exact backend batch mapping remain deferred.
+- Exact queue review UI, exact metadata fields, exact backend batch mapping, and detailed checkpoint styling remain deferred.
 
 ## Important Crash Fixes Already Made
 - Deprecated photo-resolution APIs were removed.

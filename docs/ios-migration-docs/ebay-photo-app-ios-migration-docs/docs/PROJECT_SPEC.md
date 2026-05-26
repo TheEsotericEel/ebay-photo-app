@@ -33,6 +33,7 @@ The system should:
 - capture item photos into item packets
 - optionally attach lightweight per-item metadata
 - keep work in a local iPhone queue until the user deliberately submits it
+- use a lightweight Finish Item checkpoint before queueing captured photos
 - upload submitted work to temporary remote storage
 - give the desktop lister a clean queue for manual eBay listing and checkoff
 
@@ -83,6 +84,7 @@ Needs:
 - capture multiple photos per item
 - move to the next item with almost no friction
 - optionally enter lightweight item metadata
+- use a lightweight Finish Item checkpoint before queueing
 - review/edit queued items before submit
 - submit work deliberately
 - clear local phone files only after upload is safely confirmed
@@ -150,7 +152,9 @@ It should be built around:
 
 - The iPhone app should use a real local multi-item queue.
 - The camera should remain central during capture.
-- `Next` is the official item boundary.
+- `Next / Finish Item` opens a lightweight checkpoint before queueing.
+- `Queue & Continue` finalizes the current draft into a queued item packet and starts the next draft immediately.
+- `Done` routes through the same checkpoint when the current draft has photos; if there are no current draft photos, it exits directly.
 - The camera screen edits the currently active item packet.
 - Store is an item-level property, so one local queue may contain items for multiple stores.
 - Photos remain app-local until upload and retention decisions are made.
@@ -166,7 +170,6 @@ These remain intentionally deferred:
 - exact store-switch UI
 - exact metadata fields
 - SKU automation behavior
-- exact `Done` behavior
 - exact photo cleanup timing
 - exact upload confirmation standard
 - exact backend batch mapping
@@ -199,17 +202,21 @@ Open iPhone app
 → sign in if needed
 → choose or confirm capture context
 → open native camera
-→ capture photo(s) for current item packet
-→ optionally edit details
-→ tap Next
-→ current item packet is saved into local queue
+→ capture photo(s) for the current draft
+→ optionally edit quick details
+→ tap Next / Finish Item
+→ open lightweight Finish Item checkpoint
+→ tap Queue & Continue
+→ current draft is saved into the local queue as a queued item packet
 → repeat
 → review/edit queue if needed
-→ tap Submit
-→ app submits eligible unsubmitted item packets
+→ tap Upload Batch / Submit Queue
+→ app submits finalized queued item packets only
 → local files remain until upload is safely confirmed
 → local files become safe to clean up later
 ```
+
+The Finish Item sheet is a checkpoint for item boundaries and optional quick details, not a required listing form. The user must be able to queue a photo-only item.
 
 ### 7.2 Desktop Listing Workflow
 

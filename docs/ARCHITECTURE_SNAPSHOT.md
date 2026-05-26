@@ -28,12 +28,14 @@ Native iPhone capture app
 The primary workflow is:
 
 1. Capture item photos on iPhone.
-2. Group photos into item packets.
-3. Submit queued item packets to Supabase.
-4. Review and list items on desktop.
-5. Drag ordered photos and metadata into eBay.
-6. Mark item status on desktop.
-7. Clean up local and remote photo copies when safe.
+2. Keep the camera photo-first.
+3. Optionally enter quick metadata during capture.
+4. Tap `Next / Finish Item` to open a lightweight checkpoint before queueing.
+5. Queue the finalized item packet locally.
+6. Review and list items on desktop.
+7. Upload finalized queued item packets later from Capture Home.
+8. Mark item status on desktop.
+9. Clean up local and remote photo copies when safe.
 
 This app is a photo handoff and listing workflow tool, not a full eBay automation platform.
 
@@ -56,9 +58,11 @@ Current responsibilities:
 - Capture photos with the native camera.
 - Maintain the current draft item.
 - Save local photos and queue state to app storage.
-- Convert the current draft into a queued item when the user taps `Next`.
+- Keep metadata optional during capture.
+- Open a lightweight Finish Item checkpoint before queueing.
+- Convert the current draft into a queued item packet only when the user confirms queueing.
 - Allow queue review and edit before submit.
-- Submit eligible queued items to Supabase.
+- Submit eligible queued item packets to Supabase.
 - Mark local photos safe to clear after upload success.
 - Allow local cleanup of safe submitted photo copies.
 
@@ -131,6 +135,8 @@ Before `Submit`, the iOS app may hold:
 - local remote IDs from previous successful submits
 
 This is valid. The app should not require every capture to immediately hit Supabase.
+
+The current draft is not a remote item yet. It becomes a queued item packet only after the Finish Item checkpoint is confirmed.
 
 ### Desktop local state
 
@@ -275,6 +281,7 @@ Current variant types include:
 - original
 
 `listing` and `thumbnail` are required for the V1 handoff flow. `original` is optional.
+`Submit` / `Upload Batch` operates on finalized queued item packets only; current draft items are not remote items until they are explicitly finalized into the queue.
 
 ---
 
@@ -303,7 +310,8 @@ The native iOS app currently has:
   - notes
 - Store and batch context editing.
 - Item metadata editing.
-- Next item boundary.
+- Finish Item checkpoint before queueing.
+- `Done` routes through the same checkpoint when the current draft has captured photos.
 - Queue review.
 - Queue item editing.
 - Queue item deletion.

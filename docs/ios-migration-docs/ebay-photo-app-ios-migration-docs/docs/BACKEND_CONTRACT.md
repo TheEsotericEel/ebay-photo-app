@@ -36,6 +36,8 @@ However:
 - the iPhone user-facing concept is a local capture workflow / queue made of item packets
 - one local queue may contain items from multiple stores
 - the exact mapping from local queue/workflow to backend `batches` is intentionally deferred
+- the current draft becomes a queued item packet only after the Finish Item checkpoint is confirmed
+- `Upload Batch` / `Submit Queue` uploads finalized queued item packets only
 
 This contract defines the remote shape after submit/upload. It does not force the mobile UX to expose backend batch concepts directly.
 

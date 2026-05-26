@@ -22,6 +22,7 @@ The iPhone app should do the smallest set of native things that materially impro
 - local temporary file storage
 - foreground submit/upload to Supabase
 - safe local retention until upload safety conditions are met
+- lightweight Finish Item checkpoint before queueing captured photos
 
 The iPhone app should not become the final listing workspace.
 
@@ -101,6 +102,16 @@ The local working container for capture work.
 - may contain items for multiple stores
 - is the main local working object during capture
 
+### 4.1.1 Current draft / queued item / submitted remote item
+
+The mobile flow uses three distinct states:
+
+- current draft: the active in-camera item before queueing
+- queued item packet: a finalized local item ready for upload
+- submitted remote item: the Supabase row/photo state after upload
+
+The current draft is not a remote item yet. It becomes a queued item packet only after the Finish Item checkpoint is confirmed.
+
 ### 4.2 ItemPacket
 
 Represents one item being photographed/listed.
@@ -156,6 +167,7 @@ Required:
 - `Open Camera`
 - explicit submit/upload action
 - visible upload/safe-to-clear state
+- no heavy queue editing on the home screen
 
 Exact home layout remains deferred.
 
@@ -168,8 +180,8 @@ Required controls:
 - Back
 - current item number or item position
 - capture button
-- `Next`
-- details overlay or compact form
+- `Next / Finish Item`
+- lightweight Finish Item checkpoint
 - current photo count
 
 Optional metadata:
@@ -179,7 +191,9 @@ Optional metadata:
 - dimensions
 - notes
 
-`Next` is the official item boundary. Everything captured or entered since the previous boundary belongs to the current item. Tapping `Next` should save the current item packet into the local queue and immediately start a new item.
+`Next / Finish Item` opens the lightweight checkpoint that defines the current item boundary. Everything captured or entered since the previous boundary belongs to the current draft item. Tapping `Queue & Continue` should save the current draft into the local queue as a queued item packet and immediately start a new item.
+
+The Finish Item sheet is a checkpoint for item boundaries and optional quick details, not a required listing form. The user must be able to queue a photo-only item.
 
 ### 5.4 Local Queue Review
 
@@ -219,10 +233,12 @@ Open app
 → choose or confirm capture context
 → open camera
 → capture photo
-→ photo is added to current item packet
+→ photo is added to the current draft
 → capture more photos
-→ tap Next
-→ previous item packet is saved into the local queue
+→ tap Next / Finish Item
+→ open Finish Item checkpoint
+→ tap Queue & Continue
+→ previous draft is saved into the local queue as a queued item packet
 → new draft item packet starts immediately
 ```
 
@@ -240,7 +256,7 @@ Capture several items
 
 ```txt
 Tap Submit
-→ app submits all eligible unsubmitted item packets
+→ app submits all eligible queued item packets
 → successful packets are marked submitted
 → failed packets remain local
 → later Submit sends only new or still-unsubmitted work
@@ -254,7 +270,7 @@ Metadata can be edited:
 
 - before first photo
 - between photos
-- before `Next`
+- before `Next / Finish Item`
 - during queue review
 - before submit
 

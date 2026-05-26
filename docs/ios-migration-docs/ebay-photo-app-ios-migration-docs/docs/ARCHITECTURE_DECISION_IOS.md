@@ -72,7 +72,9 @@ That means:
 
 - the camera remains central during capture
 - the local queue is real and durable
-- `Next` is the item boundary
+- `Next / Finish Item` opens the lightweight checkpoint that defines the item boundary
+- `Queue & Continue` finalizes the current draft into a queued item packet
+- if the current draft has captured photos, `Done` routes through the same checkpoint so the user can choose `Queue & Exit` or return to camera
 - `Submit` is the deliberate MVP handoff action
 - the queue may contain items for multiple stores
 - the exact backend mapping from local queue to remote `batches` remains deferred

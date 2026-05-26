@@ -13,7 +13,7 @@ This contract is intentionally high-level. It should not be used to prematurely 
 - exact mobile queue UI
 - exact desktop workflow UI
 - exact backend batch mapping for the mobile local queue
-- exact `Done` semantics on mobile
+- exact `Done` semantics on mobile beyond the Finish Item checkpoint rule
 
 ## 0. Data Ownership Rule
 
@@ -67,6 +67,7 @@ This is the current proposed split.
 - Capture context editing
 - Camera capture
 - Local capture workflow / queue
+- Finish Item checkpoint for item boundaries
 - Current item packet editing
 - Photo upload initiation
 - Capture-side metadata entry
@@ -193,8 +194,10 @@ This is the practical division the code should move toward:
 For the current iPhone direction:
 
 - one mobile local queue may contain items from multiple stores
-- `Next` defines the item boundary locally
-- `Submit` is the deliberate handoff action for eligible unsubmitted items
+- `Next / Finish Item` opens the checkpoint that defines the item boundary locally
+- `Queue & Continue` finalizes the current draft into a queued item packet
+- `Done` routes through the same checkpoint when the current draft has captured photos
+- `Submit` is the deliberate handoff action for finalized queued item packets
 - mobile should not silently auto-submit by default in MVP
 
 That does not mean one platform is “master” for everything.

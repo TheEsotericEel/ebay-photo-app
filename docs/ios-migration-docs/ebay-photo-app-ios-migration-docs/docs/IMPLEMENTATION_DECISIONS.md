@@ -17,7 +17,10 @@
 - **Capture orientation (MVP):** iOS capture is portrait-first. `AVCaptureConnection.videoRotationAngle` aligns photo output with portrait preview. Software processing bakes orientation into JPEG pixels with EXIF orientation = 1. Stale rotation metadata is ignored when pixels are already portrait-shaped (avoids double-rotation). Landscape-shaped deliverables are force-rotated once to portrait. Intentional landscape product capture is not supported in MVP.
 - **Desktop import orientation:** browser import re-bakes downloaded listing/thumbnail blobs so IndexedDB `outputWidth`/`outputHeight` match upright pixels for drag/export to eBay.
 - **Mobile queue shape:** the iPhone app uses a real local multi-item queue built around item packets.
-- **Item boundary:** `Next` is the official item boundary.
+- **Item boundary:** `Next / Finish Item` opens the lightweight checkpoint that defines the item boundary.
+- **Queue confirmation:** `Queue & Continue` finalizes the current draft into a queued item packet and starts the next draft immediately.
+- **Done behavior:** if the current draft has captured photos, `Done` routes through the same Finish Item checkpoint so the user can choose `Queue & Exit` or return to camera. If there are no current draft photos, `Done` exits directly.
+- **Metadata scope:** SKU, weight, dimensions, and notes remain optional quick details, not a required listing form.
 - **Store assignment:** store is a property of each item packet, not only of the whole local queue.
 - **Backend ownership:** MVP uses one shared account and shared backend records/tables. Owner-scoped records and stricter multi-user RLS are deferred.
 - **Queue/batch mapping:** backend `batches` remain part of the shared remote schema, but exact local queue/workflow mapping is intentionally deferred.
@@ -37,7 +40,6 @@ These details remain deferred and should not be invented during implementation:
 - exact queue review UI
 - exact store-switch UI
 - exact metadata fields
-- exact `Done` behavior
 - exact photo cleanup timing
 - exact upload confirmation standard
 - exact backend batch mapping
@@ -51,10 +53,12 @@ The first useful native slice should prove only this loop:
 2. confirm capture context
 3. open camera
 4. capture
-5. `Next`
-6. local queue persistence
-7. review/edit if needed
-8. submit/upload
-9. desktop visibility
+5. `Next / Finish Item`
+6. optional quick metadata
+7. `Queue & Continue`
+8. local queue persistence
+9. review/edit if needed
+10. submit/upload finalized queued items
+11. desktop visibility
 
 Anything beyond that stays deferred until the capture-to-desktop handoff is proven.

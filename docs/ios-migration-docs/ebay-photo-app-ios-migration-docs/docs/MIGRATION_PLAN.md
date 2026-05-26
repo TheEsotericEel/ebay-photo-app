@@ -34,8 +34,10 @@ The migration now assumes:
 - MVP uses one shared account and shared backend records/tables
 - browser/PWA camera stays fallback and diagnostic only
 - the iPhone app uses a real local multi-item queue
-- `Next` is the item boundary
-- `Submit` is the deliberate MVP handoff action
+- `Next / Finish Item` is the item boundary checkpoint
+- `Queue & Continue` finalizes the current draft into a queued item packet
+- if the current draft has captured photos, `Done` routes through the same checkpoint so the user can choose `Queue & Exit` or return to camera
+- `Submit` is the deliberate MVP handoff action for finalized queued item packets
 - exact backend batch mapping remains deferred
 
 ---

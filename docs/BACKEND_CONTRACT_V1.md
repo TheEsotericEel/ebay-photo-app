@@ -50,6 +50,14 @@ After `Submit` or `flush`:
 
 - Supabase rows and Storage objects are authoritative shared state.
 
+The mobile capture workflow distinguishes three states:
+
+- current draft: the active in-camera item before queueing
+- queued item packet: a finalized local item ready for upload
+- submitted remote item: the Supabase row/photo state after upload
+
+Current draft items are not remote items yet. They become queued item packets only after the Finish Item checkpoint is confirmed.
+
 ---
 
 ## 2. Auth
@@ -175,6 +183,7 @@ Submit should:
 11. update batch counts and status
 
 Submit is explicit. The current model does not require every capture to upload immediately.
+`Upload Batch` / `Submit Queue` uploads finalized queued item packets only. Current draft items are not uploaded directly.
 
 ---
 

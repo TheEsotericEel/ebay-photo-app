@@ -350,8 +350,10 @@ The current iPhone workflow should align to these product rules:
 - It is not the final listing workspace.
 - It should use a real local multi-item capture queue.
 - The camera screen edits the currently active item packet.
-- `Next` is the official item boundary.
-- `Submit` is the explicit MVP handoff/upload action.
+- `Next / Finish Item` is the official item boundary checkpoint.
+- `Queue & Continue` finalizes the current draft into a queued item packet.
+- If the current draft has captured photos, `Done` routes through the same checkpoint so the user can choose `Queue & Exit` or return to camera.
+- `Submit` is the explicit MVP handoff/upload action for finalized queued item packets.
 - Store is an item-level property, so one queue may contain items from multiple stores.
 - Photos remain app-local until upload and retention decisions are made.
 - Photos should not be saved to the iPhone Camera Roll by default.

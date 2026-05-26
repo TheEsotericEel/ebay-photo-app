@@ -33,10 +33,13 @@ These assumptions are fixed for the current native build direction:
 - Browser/PWA capture remains fallback and diagnostic only.
 - The build is iPhone-only and portrait-first.
 - The iPhone app uses a real local multi-item queue.
-- `Next` is the official item boundary.
+- `Next / Finish Item` opens the lightweight checkpoint that defines the item boundary.
+- `Queue & Continue` finalizes the current draft into a queued item packet and starts the next draft immediately.
+- If the current draft has captured photos, `Done` routes through the same checkpoint so the user can choose `Queue & Exit` or return to camera. If there are no current draft photos, `Done` exits directly.
 - Submit/upload is deliberate in MVP.
 - Store is an item-level property, so one local queue may contain items for multiple stores.
-- Exact `Done` behavior and exact backend batch mapping remain deferred.
+- SKU, weight, dimensions, and notes remain optional quick details, not a required listing form.
+- Exact backend batch mapping remains deferred.
 
 ## 3. Non-Goals
 
@@ -126,6 +129,7 @@ The essential V1 rules are:
 - open camera
 - submit/upload action
 - safe-to-clear state
+- no heavy queue editing surface
 
 ### 7.3 Camera Session
 
@@ -134,8 +138,8 @@ Required:
 - back
 - current item number or position
 - capture
-- `Next`
-- details overlay
+- `Next / Finish Item`
+- lightweight Finish Item checkpoint
 - current photo count
 
 Optional:
@@ -178,10 +182,13 @@ open app
 → choose or confirm capture context
 → open camera
 → capture photo(s)
-→ Next
+→ optionally enter quick metadata
+→ Next / Finish Item
+→ Finish Item checkpoint
+→ Queue & Continue
 → repeat
 → review queue if needed
-→ Submit
+→ Upload Batch / Submit Queue
 → verify upload safety
 → allow local cleanup
 → desktop sees the same data

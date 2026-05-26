@@ -21,10 +21,10 @@ Canonical references:
 | --- | --- | --- |
 | OTP-first auth with password fallback | In progress | `ios/EbayPhotoApp/Views/RootView.swift`, `ios/EbayPhotoApp/Services/SupabaseService.swift` |
 | Real local multi-item queue | In progress | `ios/EbayPhotoApp/App/AppState.swift`, `ios/EbayPhotoApp/Views/RootView.swift` |
-| `Next` is item boundary | In progress | `ios/EbayPhotoApp/App/AppState.swift`, `ios/EbayPhotoApp/Views/RootView.swift` |
+| `Next / Finish Item` checkpoint defines item boundary | In progress | `ios/EbayPhotoApp/App/AppState.swift`, `ios/EbayPhotoApp/Views/RootView.swift` |
 | Queue survives app relaunch | In progress | `ios/EbayPhotoApp/App/AppState.swift` |
 | Review/edit before submit | In progress | `ios/EbayPhotoApp/Views/RootView.swift`, `ios/EbayPhotoApp/Views/ItemDetailsSheet.swift` |
-| Submit only eligible unsubmitted work | In progress | `ios/EbayPhotoApp/App/AppState.swift`, `ios/EbayPhotoApp/Views/RootView.swift` |
+| Submit only eligible finalized queued work | In progress | `ios/EbayPhotoApp/App/AppState.swift`, `ios/EbayPhotoApp/Views/RootView.swift` |
 | Retry without duplication, remote ID reuse | Planned | `ios/EbayPhotoApp/App/AppState.swift`, `ios/EbayPhotoApp/Services/SupabaseService.swift` |
 | Required variants `listing` + `thumbnail` only | In place | `ios/EbayPhotoApp/Models/NativeUploadItemPacketV1.swift`, `ios/EbayPhotoApp/Services/SupabaseService.swift`, `ios/EbayPhotoApp/Views/RootView.swift` |
 | V1 storage path/bucket contract | In place | `ios/EbayPhotoApp/Services/SupabaseService.swift` |
@@ -50,4 +50,3 @@ Canonical references:
 4. Submit/retry path idempotent (no duplicate remote photos/items on retry)
 5. Desktop visibility verified after submit
 6. Local cleanup safe and metadata-preserving
-

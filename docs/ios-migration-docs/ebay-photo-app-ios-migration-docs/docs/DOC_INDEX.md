@@ -72,8 +72,10 @@ The current mobile direction is:
 
 - iPhone app = capture + lightweight queue tool
 - real local multi-item queue
-- `Next` = official item boundary
-- `Submit` = deliberate MVP handoff/upload action
+- `Next / Finish Item` = official item boundary checkpoint
+- `Queue & Continue` finalizes the current draft into a queued item packet
+- if the current draft has captured photos, `Done` routes through the same checkpoint so the user can choose `Queue & Exit` or return to camera
+- `Submit` = deliberate MVP handoff/upload action for finalized queued item packets
 - store is an item-level property
 - one local queue may contain items from multiple stores
 - exact backend batch mapping remains deferred
@@ -86,4 +88,4 @@ These docs intentionally preserve desktop guidance where it does not conflict wi
 - MVP auth default: Supabase email OTP code entry; password sign-in is development fallback only for rate-limit recovery.
 - V1 storage path contract: `{storeId}/batches/{batchId}/items/{itemId}/photos/{photoId}/{variant}`.
 - MVP ownership model: one shared account and shared backend records/tables; owner-scoped records and stricter multi-user RLS are deferred.
-- Mobile model: local capture workflow/queue with item packets; backend `batches` remain remote schema records; exact local queue-to-batch mapping is deferred.
+- Mobile model: local capture workflow/queue with item packets; the Finish Item checkpoint defines item boundaries; backend `batches` remain remote schema records; exact local queue-to-batch mapping is deferred.
