@@ -33,6 +33,9 @@
 		4A8F1D4F2C2F4D5D8B90001C /* ItemDetailsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90001C /* ItemDetailsSheet.swift */; };
 		4A8F1D4F2C2F4D5D8B90001D /* LabeledTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90001D /* LabeledTextField.swift */; };
 		4A8F1D4F2C2F4D5D8B90001E /* TextInputLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90001E /* TextInputLabView.swift */; };
+		4A8F1D4F2C2F4D5D8B900022 /* CaptureCameraShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900022 /* CaptureCameraShell.swift */; };
+		4A8F1D4F2C2F4D5D8B900023 /* ItemDetailsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900023 /* ItemDetailsScreen.swift */; };
+		4A8F1D4F2C2F4D5D8B900024 /* MockIntakeFlowVisuals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900024 /* MockIntakeFlowVisuals.swift */; };
 		4A8F1D4F2C2F4D5D8B900008 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900008 /* AVFoundation.framework */; };
 		4A8F1D4F2C2F4D5D8B900009 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B900009 /* SwiftUI.framework */; };
 		4A8F1D4F2C2F4D5D8B90000A /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A8F1D4E2C2F4D5D8B90000A /* UIKit.framework */; };
@@ -77,6 +80,9 @@
 		4A8F1D4E2C2F4D5D8B90001C /* ItemDetailsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailsSheet.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B90001D /* LabeledTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabeledTextField.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B90001E /* TextInputLabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInputLabView.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900022 /* CaptureCameraShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCameraShell.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900023 /* ItemDetailsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailsScreen.swift; sourceTree = "<group>"; };
+		4A8F1D4E2C2F4D5D8B900024 /* MockIntakeFlowVisuals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockIntakeFlowVisuals.swift; sourceTree = "<group>"; };
 		4A8F1D4E2C2F4D5D8B900008 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		4A8F1D4E2C2F4D5D8B900009 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		4A8F1D4E2C2F4D5D8B90000A /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
@@ -204,6 +210,9 @@
 				4A8F1D4E2C2F4D5D8B90001C /* ItemDetailsSheet.swift */,
 				4A8F1D4E2C2F4D5D8B90001D /* LabeledTextField.swift */,
 				4A8F1D4E2C2F4D5D8B90001E /* TextInputLabView.swift */,
+				4A8F1D4E2C2F4D5D8B900022 /* CaptureCameraShell.swift */,
+				4A8F1D4E2C2F4D5D8B900023 /* ItemDetailsScreen.swift */,
+				4A8F1D4E2C2F4D5D8B900024 /* MockIntakeFlowVisuals.swift */,
 				4A8F1D4E2C2F4D5D8B900007 /* RootView.swift */,
 				4A8F1D4E2C2F4D5D8B900021 /* PortraitLockedModifier.swift */,
 			);
@@ -359,6 +368,9 @@
 				4A8F1D4F2C2F4D5D8B90001C /* ItemDetailsSheet.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B90001D /* LabeledTextField.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B90001E /* TextInputLabView.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900022 /* CaptureCameraShell.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900023 /* ItemDetailsScreen.swift in Sources */,
+				4A8F1D4F2C2F4D5D8B900024 /* MockIntakeFlowVisuals.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900007 /* RootView.swift in Sources */,
 				4A8F1D4F2C2F4D5D8B900021 /* PortraitLockedModifier.swift in Sources */,
 			);

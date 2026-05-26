@@ -1122,6 +1122,7 @@ private struct MockIntakeFlowView: View {
   @State private var currentNotes = ""
   @State private var latestPhotoSeed: Int? = 4
   @State private var mockSelectedLens = "1x"
+  @State private var didRunMockLaunchActions = false
   @State private var queuedItems: [MockQueuedItem] = [
     MockQueuedItem(itemNumber: 12, photoCount: 4, notes: "Small scratch on back cover."),
     MockQueuedItem(itemNumber: 13, photoCount: 3, notes: "Signed title page."),
@@ -1148,188 +1149,66 @@ private struct MockIntakeFlowView: View {
       }
       .toolbar {
         ToolbarItem(placement: .topBarLeading) {
-          Button(step == .queueReview ? "Close" : "Exit Preview") {
+          Button(step == .queueReview ? "Main Screen" : "Exit Preview") {
             dismiss()
           }
         }
       }
     }
+    .onAppear {
+      runMockLaunchActionsIfNeeded()
+    }
   }
 
   private var mockCameraScreen: some View {
-    GeometryReader { geometry in
-      VStack(alignment: .leading, spacing: 10) {
-        MockPreviewTopBar(
-          itemNumber: currentItemNumber,
-          photoCount: currentPhotoCount,
-          onExit: { dismiss() },
-          canUndo: currentPhotoCount > 0,
-          onUndo: undoMockPhoto,
-          onDone: finishMockCaptureSession
-        )
-
-        MockLivePreviewSurface(
+    CaptureCameraShell(
+      itemNumber: currentItemNumber,
+      photoCount: currentPhotoCount,
+      notes: $currentNotes,
+      canUndo: currentPhotoCount > 0,
+      onExit: { dismiss() },
+      onUndo: undoMockPhoto,
+      onCapture: captureMockPhoto,
+      onNext: openMockItemDetails,
+      onDone: finishMockCaptureSession,
+      previewContent: {
+        CaptureCameraPreviewSurface(
           photoCount: currentPhotoCount,
           seed: latestPhotoSeed,
           gridEnabled: true,
           levelEnabled: false,
           selectedLens: mockSelectedLens
         )
-          .frame(maxWidth: .infinity)
-
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Notes")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
-
-          TextField("Optional notes / SKU / damage...", text: $currentNotes, axis: .vertical)
-            .lineLimit(2 ... 3)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background {
-              RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.white.opacity(0.08))
-            }
-            .overlay {
-              RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
-            }
-            .foregroundStyle(.white)
-        }
-
-        Spacer(minLength: 0)
-
-        HStack(alignment: .bottom, spacing: 12) {
-          MockLatestPhotoPanel(seed: latestPhotoSeed, hasPhoto: currentPhotoCount > 0, photoCount: currentPhotoCount)
-            .frame(width: 84, alignment: .leading)
-
-          VStack(spacing: 8) {
-            Text("Capture")
-              .font(.headline.weight(.semibold))
-              .foregroundStyle(.white)
-
-            Button(action: captureMockPhoto) {
-              ZStack {
-                Circle()
-                  .fill(.white)
-                  .frame(width: 96, height: 96)
-                Circle()
-                  .stroke(.white.opacity(0.95), lineWidth: 5)
-                  .frame(width: 84, height: 84)
-              }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Capture")
-          }
-          .frame(maxWidth: .infinity)
-
-          Button(action: advanceMockItem) {
-            Text("Next")
-              .font(.headline.weight(.semibold))
-              .foregroundStyle(.black)
-              .padding(.horizontal, 24)
-              .padding(.vertical, 12)
-              .background {
-                Capsule(style: .continuous)
-                  .fill(currentPhotoCount > 0 ? .white : .white.opacity(0.28))
-              }
-          }
-          .buttonStyle(.plain)
-          .disabled(currentPhotoCount == 0)
-          .opacity(currentPhotoCount > 0 ? 1 : 0.6)
-          .frame(width: 92, alignment: .trailing)
-        }
+      },
+      thumbnailContent: {
+        CaptureCameraThumbnailPanel(
+          seed: latestPhotoSeed,
+          hasPhoto: currentPhotoCount > 0,
+          photoCount: currentPhotoCount
+        )
       }
-      .padding(.horizontal, 16)
-      .padding(.top, 6)
-      .padding(.bottom, max(geometry.safeAreaInsets.bottom, 10))
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-    .background(MockFlowBackground())
-    .toolbar(.hidden, for: .navigationBar)
+    )
   }
 
   private var mockIntakeScreen: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 18) {
-        MockFlowHero(
-          eyebrow: "Finish Item",
-          title: "Small checkpoint before queueing",
-          message: "For now this screen only asks for notes. It is intentionally not a listing form."
+    ItemDetailsScreen(
+      itemNumber: currentItemNumber,
+      photoCount: currentPhotoCount,
+      notes: $currentNotes,
+      onSubmit: submitCurrentMockItem,
+      onNextItem: continueToNextMockItem,
+      thumbnailContent: {
+        CaptureCameraThumbnailPanel(
+          seed: latestPhotoSeed,
+          hasPhoto: currentPhotoCount > 0,
+          photoCount: currentPhotoCount
         )
-
-        MockSurfaceCard {
-          VStack(alignment: .leading, spacing: 16) {
-            HStack {
-              VStack(alignment: .leading, spacing: 4) {
-                Text("Item \(currentItemNumber)")
-                  .font(.title3.weight(.semibold))
-                  .foregroundStyle(.white)
-                Text("\(currentPhotoCount) photo(s) ready to queue")
-                  .font(.subheadline)
-                  .foregroundStyle(.secondary)
-              }
-
-              Spacer(minLength: 0)
-
-              MockStatusChip(title: "Notes Only")
-            }
-
-            MockLatestPhotoPanel(
-              seed: latestPhotoSeed,
-              hasPhoto: currentPhotoCount > 0,
-              photoCount: currentPhotoCount
-            )
-
-            VStack(alignment: .leading, spacing: 8) {
-              Text("Notes")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.white)
-
-              TextField("Add optional notes for this item", text: $currentNotes, axis: .vertical)
-                .lineLimit(3 ... 7)
-                .padding(14)
-                .background {
-                  RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.white.opacity(0.08))
-                }
-                .overlay {
-                  RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(.white.opacity(0.08), lineWidth: 1)
-                }
-                .foregroundStyle(.white)
-            }
-
-            HStack(spacing: 10) {
-              Button("Done") {
-                queueCurrentMockItem()
-                step = .queueReview
-              }
-              .buttonStyle(.bordered)
-              .tint(.white)
-              .foregroundStyle(.white)
-
-              Button("Next Item") {
-                queueCurrentMockItem()
-                currentItemNumber += 1
-                currentNotes = ""
-                step = .camera
-              }
-              .buttonStyle(.borderedProminent)
-              .tint(.white)
-              .foregroundStyle(.black)
-            }
-          }
-        }
       }
-      .padding(16)
-    }
-    .background(MockFlowBackground())
-    .navigationTitle("Finish Item")
-    .navigationBarTitleDisplayMode(.inline)
+    )
   }
 
-  private func queueCurrentMockItem() {
+  private func finalizeCurrentMockItemIfNeeded() {
+    guard currentPhotoCount > 0 else { return }
     let trimmedNotes = currentNotes.trimmingCharacters(in: .whitespacesAndNewlines)
     let queuedItem = MockQueuedItem(
       itemNumber: currentItemNumber,
@@ -1345,8 +1224,12 @@ private struct MockIntakeFlowView: View {
     latestPhotoSeed = currentItemNumber + currentPhotoCount
   }
 
-  private func advanceMockItem() {
+  private func openMockItemDetails() {
     guard currentPhotoCount > 0 else { return }
+    step = .intake
+  }
+
+  private func advanceMockItem() {
     currentItemNumber += 1
     currentPhotoCount = 0
     currentNotes = ""
@@ -1361,8 +1244,50 @@ private struct MockIntakeFlowView: View {
 
   private func finishMockCaptureSession() {
     guard currentPhotoCount > 0 else { return }
-    queueCurrentMockItem()
+    step = .intake
+  }
+
+  private func submitCurrentMockItem() {
+    finalizeCurrentMockItemIfNeeded()
     step = .queueReview
+  }
+
+  private func continueToNextMockItem() {
+    finalizeCurrentMockItemIfNeeded()
+    advanceMockItem()
+    step = .camera
+  }
+
+  private func runMockLaunchActionsIfNeeded() {
+    #if DEBUG
+    guard !didRunMockLaunchActions else { return }
+    didRunMockLaunchActions = true
+
+    guard let actionIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "-mock-intake-actions"),
+          ProcessInfo.processInfo.arguments.indices.contains(actionIndex + 1)
+    else {
+      return
+    }
+
+    let actions = ProcessInfo.processInfo.arguments[actionIndex + 1]
+      .split(separator: ",")
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+
+    for action in actions {
+      switch action {
+      case "capture":
+        captureMockPhoto()
+      case "next":
+        openMockItemDetails()
+      case "next-item":
+        continueToNextMockItem()
+      case "submit":
+        submitCurrentMockItem()
+      default:
+        continue
+      }
+    }
+    #endif
   }
 }
 
@@ -1375,7 +1300,7 @@ private struct MockQueueReviewScreen: View {
         MockFlowHero(
           eyebrow: "Queue Review",
           title: "Finished item cards",
-          message: "This is the landing page after `Done`. Tap a card to inspect the item and its photos."
+          message: "This is the landing page after `Submit`. Tap a card to inspect the item and its photos."
         )
 
         Text("\(items.count) items")
