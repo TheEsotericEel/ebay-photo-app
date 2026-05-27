@@ -22,6 +22,13 @@ struct RootView: View {
     false
     #endif
   }
+  private var shouldOpenCaptureHomeOnLaunch: Bool {
+    #if DEBUG
+    ProcessInfo.processInfo.arguments.contains("-open-capture-home")
+    #else
+    false
+    #endif
+  }
   private var shouldOpenLiveCameraWithSeededPhotoOnLaunch: Bool {
     #if DEBUG
     ProcessInfo.processInfo.arguments.contains("-open-live-camera-with-seeded-photo")
@@ -196,6 +203,13 @@ struct RootView: View {
       guard !didRestoreSession else { return }
       didRestoreSession = true
       #if DEBUG
+      if shouldOpenCaptureHomeOnLaunch {
+        if !appState.isAuthenticated {
+          appState.isAuthenticated = true
+        }
+        appState.statusMessage = "Debug capture home route opened."
+        return
+      }
       if shouldOpenLiveCameraWithSeededPhotoOnLaunch {
         if !appState.isAuthenticated {
           appState.isAuthenticated = true

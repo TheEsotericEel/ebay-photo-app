@@ -34,6 +34,7 @@ Mock flow:
 Runtime verified:
 - `xcodebuild` for the iOS app succeeded.
 - Fresh normal launch on a clean simulator install opened `AuthView`, not `Capture Home`.
+- `-open-capture-home` opens `Capture Home` without seeding photos or fake persistence.
 - `-open-live-camera-with-seeded-photo` opened the live camera with a seeded draft photo.
 - The seeded live camera shows `Done` in the top bar and `Next` in the bottom action area.
 - `-open-mock-intake-flow` opened the mock prototype flow.
