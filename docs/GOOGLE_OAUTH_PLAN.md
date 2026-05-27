@@ -79,3 +79,8 @@ Recommended order:
 - Desktop Google OAuth button and helper: implemented.
 - Supabase/Google provider configuration: still required outside the repo.
 - iOS Google OAuth: future work only.
+- Verified desktop runtime on 2026-05-27:
+  - The button sends the browser to `https://wchoxagxpsejwrotvnsx.supabase.co/auth/v1/authorize?provider=google&redirect_to=http%3A%2F%2F127.0.0.1%3A4173`.
+  - Supabase returned `400` with `Unsupported provider: provider is not enabled`.
+  - This means the desktop code is wired correctly, but the Google provider is not enabled in the Supabase Auth dashboard for this project yet.
+  - The exact dashboard-side unblocker is to enable the Google provider in Supabase Auth and finish the Google OAuth client configuration there.
