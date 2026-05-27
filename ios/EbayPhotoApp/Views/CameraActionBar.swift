@@ -7,7 +7,6 @@ struct CameraActionBar: View {
   let canCapture: Bool
   let onCapture: () -> Void
   let onNextItem: () -> Void
-  let onDone: () -> Void
   private let captureButtonSize: CGFloat = 84
 
   var body: some View {
@@ -45,13 +44,9 @@ struct CameraActionBar: View {
 
       Spacer(minLength: 0)
 
-      VStack(spacing: 10) {
-        secondaryButton("Next", action: onNextItem)
-          .accessibilityIdentifier("liveCamera.next")
-        secondaryButton("Done", action: onDone)
-          .accessibilityIdentifier("liveCamera.done")
-      }
-      .frame(width: 108)
+      secondaryButton("Next", action: onNextItem)
+        .frame(width: 108)
+        .accessibilityIdentifier("liveCamera.next")
     }
     .padding(.horizontal, 16)
     .padding(.top, 2)
@@ -95,7 +90,7 @@ struct CameraActionBar: View {
         }
         .overlay {
           Capsule(style: .continuous)
-            .stroke(.white.opacity(title == "Done" ? 0.18 : 0.14), lineWidth: 1)
+            .stroke(.white.opacity(0.14), lineWidth: 1)
         }
     }
     .buttonStyle(.plain)

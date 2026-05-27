@@ -4,6 +4,7 @@ struct CameraTopBar: View {
   let title: String
   let photoCount: Int
   let onBack: () -> Void
+  let onDone: () -> Void
 
   var body: some View {
     HStack(spacing: 10) {
@@ -38,6 +39,24 @@ struct CameraTopBar: View {
         .monospacedDigit()
         .accessibilityLabel("\(photoCount) photos captured")
         .accessibilityIdentifier("liveCamera.photoCount")
+
+      Button(action: onDone) {
+        Text("Done")
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(.white)
+          .padding(.horizontal, 14)
+          .frame(height: 32)
+          .background {
+            Capsule(style: .continuous)
+              .fill(.white.opacity(0.12))
+          }
+          .overlay {
+            Capsule(style: .continuous)
+              .stroke(.white.opacity(0.18), lineWidth: 1)
+          }
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("liveCamera.done")
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 2)

@@ -2363,7 +2363,14 @@ private struct CameraSessionView: View {
       CameraTopBar(
         title: "Item \(appState.currentItemNumber)",
         photoCount: appState.capturedPhotos.count,
-        onBack: onBack
+        onBack: onBack,
+        onDone: {
+          guard !appState.capturedPhotos.isEmpty else {
+            onDone()
+            return
+          }
+          presentDetailsEditor()
+        }
       )
 
       CameraContextStrip(
@@ -2424,10 +2431,10 @@ private struct CameraSessionView: View {
       )
       .layoutPriority(0)
 
-        CameraActionBar(
-          thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
-          photoCount: appState.capturedPhotos.count,
-          canCapture: cameraService.canCapture || (isCaptureLoopRunning && pendingCaptureCount < maxPendingCaptures),
+      CameraActionBar(
+        thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
+        photoCount: appState.capturedPhotos.count,
+        canCapture: cameraService.canCapture || (isCaptureLoopRunning && pendingCaptureCount < maxPendingCaptures),
         onCapture: {
           if !isCaptureLoopRunning {
             startCaptureLoop()
@@ -2435,16 +2442,9 @@ private struct CameraSessionView: View {
             pendingCaptureCount += 1
           }
         },
-          onNextItem: {
-            guard !appState.capturedPhotos.isEmpty else {
-              appState.statusMessage = "Capture at least one photo before continuing."
-              return
-            }
-            presentDetailsEditor()
-          },
-        onDone: {
+        onNextItem: {
           guard !appState.capturedPhotos.isEmpty else {
-            onDone()
+            appState.statusMessage = "Capture at least one photo before continuing."
             return
           }
           presentDetailsEditor()
