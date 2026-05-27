@@ -296,19 +296,14 @@ export function DesktopListerPrototype() {
     session,
     loading: authLoading,
     error: authError,
-    sendOtp,
-    verifyOtp,
     signInWithPassword,
     signOut,
     configured: supabaseReady,
   } = useSupabaseSession()
   const [email, setEmail] = useState('')
-  const [authCode, setAuthCode] = useState('')
   const [password, setPassword] = useState('')
   const [loginMessage, setLoginMessage] = useState<string | null>(null)
   const [loginError, setLoginError] = useState<string | null>(null)
-  const [sendingOtp, setSendingOtp] = useState(false)
-  const [verifyingOtp, setVerifyingOtp] = useState(false)
   const [passwordSigningIn, setPasswordSigningIn] = useState(false)
 
   const [stores, setStores] = useState<StoreRecord[]>([])
@@ -688,41 +683,13 @@ export function DesktopListerPrototype() {
     }
   }, [batchesByStore, loadDesktopData, session, supabase])
 
-  const handleSendOtp = useCallback(async () => {
-    setSendingOtp(true)
-    setLoginError(null)
-    setLoginMessage(null)
-    try {
-      await sendOtp(email)
-      setLoginMessage('OTP code sent. Check your email.')
-    } catch (error) {
-      setLoginError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setSendingOtp(false)
-    }
-  }, [email, sendOtp])
-
-  const handleVerifyOtp = useCallback(async () => {
-    setVerifyingOtp(true)
-    setLoginError(null)
-    setLoginMessage(null)
-    try {
-      await verifyOtp(email, authCode)
-      setLoginMessage('Signed in with OTP.')
-    } catch (error) {
-      setLoginError(error instanceof Error ? error.message : String(error))
-    } finally {
-      setVerifyingOtp(false)
-    }
-  }, [authCode, email, verifyOtp])
-
   const handleSignInWithPassword = useCallback(async () => {
     setPasswordSigningIn(true)
     setLoginError(null)
     setLoginMessage(null)
     try {
       await signInWithPassword(email, password)
-      setLoginMessage('Signed in with password fallback.')
+      setLoginMessage('Signed in with password.')
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -748,7 +715,7 @@ export function DesktopListerPrototype() {
       <div style={styles.page}>
         <div style={styles.authCard}>
           <h1 style={styles.title}>Desktop Lister</h1>
-          <p style={styles.subtleText}>Sign in to continue (OTP is the default flow).</p>
+          <p style={styles.subtleText}>Sign in to continue. Google sign-in is planned soon.</p>
           <label style={styles.label} htmlFor="prototype-email-input">Email</label>
           <input
             id="prototype-email-input"
@@ -757,25 +724,6 @@ export function DesktopListerPrototype() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@example.com"
-          />
-          <div style={styles.headerActions}>
-            <button
-              type="button"
-              style={styles.primaryButton}
-              onClick={handleSendOtp}
-              disabled={sendingOtp || !email.trim()}
-            >
-              {sendingOtp ? 'Sending OTP...' : 'Send OTP code'}
-            </button>
-          </div>
-          <label style={styles.label} htmlFor="prototype-otp-input">OTP code</label>
-          <input
-            id="prototype-otp-input"
-            style={styles.input}
-            type="text"
-            value={authCode}
-            onChange={(event) => setAuthCode(event.target.value)}
-            placeholder="Enter code"
           />
           <label style={styles.label} htmlFor="prototype-password-input">Password</label>
           <input
@@ -790,20 +738,15 @@ export function DesktopListerPrototype() {
             <button
               type="button"
               style={styles.primaryButton}
-              onClick={handleVerifyOtp}
-              disabled={verifyingOtp || !email.trim() || !authCode.trim()}
-            >
-              {verifyingOtp ? 'Verifying...' : 'Sign in with OTP'}
-            </button>
-            <button
-              type="button"
-              style={styles.secondaryButton}
               onClick={handleSignInWithPassword}
               disabled={passwordSigningIn || !email.trim() || !password.trim()}
             >
-              {passwordSigningIn ? 'Signing in...' : 'Use password fallback'}
+              {passwordSigningIn ? 'Signing in...' : 'Sign In'}
             </button>
           </div>
+          <p style={styles.subtleText}>
+            App account creation is handled in iOS or Supabase Dashboard for now.
+          </p>
           {authError ? <p style={styles.errorText}>{authError}</p> : null}
           {loginError ? <p style={styles.errorText}>{loginError}</p> : null}
           {loginMessage ? <p style={styles.infoText}>{loginMessage}</p> : null}

@@ -2157,26 +2157,23 @@ private struct QueueReviewSheet: View {
             .foregroundStyle(.secondary)
         } else {
           ForEach(appState.queuedItemPackets.sorted(by: { $0.itemNumber < $1.itemNumber })) { item in
+            let progressMessage = appState.queueSubmitProgress?.itemId == item.id
+              ? appState.queueSubmitProgress?.message
+              : nil
+            let previewData = item.photos.first.flatMap { photo in
+              appState.queuedPhotoPreviewData(itemId: item.id, photoId: photo.id)
+            }
             NavigationLink {
               QueueItemEditorView(itemId: item.id, onOpenCamera: onOpenCamera)
                 .environmentObject(appState)
             } label: {
-              VStack(alignment: .leading, spacing: 4) {
-                Text("Item \(item.itemNumber)")
-                  .font(.headline)
-                Text("\(item.storeShortCode) · \(item.batchName)")
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                Text("\(item.photos.count) photo(s) · \(submitStateLabel(item.submitState))")
-                  .font(.footnote)
-                  .foregroundStyle(.secondary)
-                if let progress = appState.queueSubmitProgress, progress.itemId == item.id {
-                  Text(progress.message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-              }
+              QueueReviewItemRow(
+                item: item,
+                progressMessage: progressMessage,
+                previewData: previewData
+              )
             }
+            .accessibilityIdentifier("queueReview.itemRow.\(item.itemNumber)")
           }
         }
       }
@@ -2201,6 +2198,136 @@ private struct QueueReviewSheet: View {
       return "Submitted"
     case .failed:
       return "Failed"
+    }
+  }
+}
+
+private struct QueueReviewItemRow: View {
+  let item: AppState.LocalQueueItemPacket
+  let progressMessage: String?
+  let previewData: Data?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .top, spacing: 12) {
+        itemThumbnail
+
+        VStack(alignment: .leading, spacing: 6) {
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Item \(item.itemNumber)")
+              .font(.headline.weight(.semibold))
+              .foregroundStyle(.white)
+
+            Spacer(minLength: 0)
+
+            QueueStateBadge(state: item.submitState)
+          }
+
+          Text("\(item.photos.count) photo(s)")
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.secondary)
+
+          if !item.sku.isEmpty {
+            queueDetailLabel("SKU", value: item.sku)
+          }
+          if !item.weight.isEmpty {
+            queueDetailLabel("Weight", value: item.weight)
+          }
+          if !item.dimensions.isEmpty {
+            queueDetailLabel("Dimensions", value: item.dimensions)
+          }
+          if !item.notes.isEmpty {
+            queueDetailLabel("Notes", value: item.notes, limit: 2)
+          }
+
+          Text("\(item.storeShortCode) · \(item.batchName)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+          if let progressMessage, !progressMessage.isEmpty {
+            Text(progressMessage)
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+          }
+        }
+      }
+    }
+    .padding(.vertical, 4)
+  }
+
+  private var itemThumbnail: some View {
+    ZStack(alignment: .bottomTrailing) {
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(.white.opacity(0.08))
+        .frame(width: 72, height: 72)
+
+      if let previewData, let image = UIImage(data: previewData) {
+        Image(uiImage: image)
+          .resizable()
+          .scaledToFill()
+          .frame(width: 72, height: 72)
+          .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+      }
+
+      Text("\(item.photos.count)")
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(.black.opacity(0.6), in: Capsule())
+        .padding(6)
+    }
+  }
+
+  private func queueDetailLabel(_ label: String, value: String, limit: Int = 1) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 6) {
+      Text("\(label):")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+      Text(value)
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.white.opacity(0.92))
+        .lineLimit(limit)
+    }
+  }
+
+}
+
+private struct QueueStateBadge: View {
+  let state: AppState.QueueItemSubmitState
+
+  var body: some View {
+    Text(label)
+      .font(.caption2.weight(.semibold))
+      .foregroundStyle(color)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 4)
+      .background(color.opacity(0.12), in: Capsule())
+  }
+
+  private var label: String {
+    switch state {
+    case .local:
+      return "Local"
+    case .submitting:
+      return "Submitting"
+    case .submitted:
+      return "Submitted"
+    case .failed:
+      return "Error"
+    }
+  }
+
+  private var color: Color {
+    switch state {
+    case .local:
+      return .secondary
+    case .submitting:
+      return .yellow
+    case .submitted:
+      return .green
+    case .failed:
+      return .red
     }
   }
 }
