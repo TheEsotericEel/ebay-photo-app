@@ -297,6 +297,7 @@ export function DesktopListerPrototype() {
     loading: authLoading,
     error: authError,
     signInWithPassword,
+    signUpWithEmailPassword,
     signOut,
     configured: supabaseReady,
   } = useSupabaseSession()
@@ -305,6 +306,7 @@ export function DesktopListerPrototype() {
   const [loginMessage, setLoginMessage] = useState<string | null>(null)
   const [loginError, setLoginError] = useState<string | null>(null)
   const [passwordSigningIn, setPasswordSigningIn] = useState(false)
+  const [passwordSigningUp, setPasswordSigningUp] = useState(false)
 
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [items, setItems] = useState<ItemPacket[]>([])
@@ -688,14 +690,32 @@ export function DesktopListerPrototype() {
     setLoginError(null)
     setLoginMessage(null)
     try {
-      await signInWithPassword(email, password)
+      await signInWithPassword(email.trim(), password.trim())
       setLoginMessage('Signed in with password.')
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : String(error))
+      setLoginError('Sign in failed. Check your email and password.')
     } finally {
       setPasswordSigningIn(false)
     }
   }, [email, password, signInWithPassword])
+
+  const handleCreateAccount = useCallback(async () => {
+    setPasswordSigningUp(true)
+    setLoginError(null)
+    setLoginMessage(null)
+    try {
+      const signedIn = await signUpWithEmailPassword(email.trim(), password.trim())
+      if (signedIn) {
+        setLoginMessage('Account created and signed in.')
+      } else {
+        setLoginMessage('Account created. Check your email to confirm, then sign in.')
+      }
+    } catch (error) {
+      setLoginError('Account creation failed. Check your email, password, or Supabase settings.')
+    } finally {
+      setPasswordSigningUp(false)
+    }
+  }, [email, password, signUpWithEmailPassword])
 
   if (authLoading) {
     return <div style={styles.loadingState}>Loading authentication...</div>
@@ -711,6 +731,10 @@ export function DesktopListerPrototype() {
   }
 
   if (!session) {
+    const authStateError = authError
+      ? 'Unable to load authentication state. Check Supabase settings.'
+      : null
+
     return (
       <div style={styles.page}>
         <div style={styles.authCard}>
@@ -719,6 +743,7 @@ export function DesktopListerPrototype() {
           <label style={styles.label} htmlFor="prototype-email-input">Email</label>
           <input
             id="prototype-email-input"
+            data-testid="auth-email"
             style={styles.input}
             type="email"
             value={email}
@@ -728,6 +753,7 @@ export function DesktopListerPrototype() {
           <label style={styles.label} htmlFor="prototype-password-input">Password</label>
           <input
             id="prototype-password-input"
+            data-testid="auth-password"
             style={styles.input}
             type="password"
             value={password}
@@ -739,17 +765,30 @@ export function DesktopListerPrototype() {
               type="button"
               style={styles.primaryButton}
               onClick={handleSignInWithPassword}
-              disabled={passwordSigningIn || !email.trim() || !password.trim()}
+              data-testid="auth-sign-in"
+              disabled={passwordSigningIn || passwordSigningUp || !email.trim() || !password.trim()}
             >
               {passwordSigningIn ? 'Signing in...' : 'Sign In'}
             </button>
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={handleCreateAccount}
+              data-testid="auth-create-account"
+              disabled={passwordSigningIn || passwordSigningUp || !email.trim() || !password.trim()}
+            >
+              {passwordSigningUp ? 'Creating account...' : 'Create Account'}
+            </button>
           </div>
-          <p style={styles.subtleText}>
-            App account creation is handled in iOS or Supabase Dashboard for now.
-          </p>
-          {authError ? <p style={styles.errorText}>{authError}</p> : null}
-          {loginError ? <p style={styles.errorText}>{loginError}</p> : null}
-          {loginMessage ? <p style={styles.infoText}>{loginMessage}</p> : null}
+          {authStateError ? (
+            <p style={styles.errorText} data-testid="auth-state-error">{authStateError}</p>
+          ) : null}
+          {loginError ? (
+            <p style={styles.errorText} data-testid="auth-error">{loginError}</p>
+          ) : null}
+          {loginMessage ? (
+            <p style={styles.infoText} data-testid="auth-status">{loginMessage}</p>
+          ) : null}
         </div>
       </div>
     )

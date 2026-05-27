@@ -4,6 +4,7 @@
 
 - App login is email + password for now.
 - Google OAuth is planned and documented in [docs/GOOGLE_OAUTH_PLAN.md](./GOOGLE_OAUTH_PLAN.md), but not implemented yet.
+- Email/password verification steps live in [docs/EMAIL_PASSWORD_AUTH_VERIFICATION.md](./EMAIL_PASSWORD_AUTH_VERIFICATION.md).
 - iOS and desktop use the same Supabase app account and workspace session.
 
 ## Removed or deprecated from the product-facing flow

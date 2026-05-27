@@ -11,6 +11,7 @@ struct RootView: View {
   @State private var showingQueueReview = false
   @State private var showingMockIntakeFlow = false
   @State private var showingTextInputLab = false
+  @State private var isAuthenticating = false
   @State private var didRestoreSession = false
   @State private var didSeedLiveCameraDraft = false
 
@@ -110,6 +111,8 @@ struct RootView: View {
                 } else {
                   supabase.signOut()
                   appState.isAuthenticated = false
+                  appState.authEmail = ""
+                  appState.authPassword = ""
                   appState.authCode = ""
                   appState.authError = ""
                   appState.uploadMessage = ""
@@ -131,38 +134,60 @@ struct RootView: View {
             ),
             statusMessage: appState.statusMessage,
             errorMessage: appState.authError,
+            isAuthenticating: isAuthenticating,
             onSignInWithPassword: {
-              Task {
+              guard !isAuthenticating else { return }
+              isAuthenticating = true
+              appState.authError = ""
+              appState.statusMessage = "Signing in..."
+              Task { @MainActor in
+                defer { isAuthenticating = false }
+                let trimmedEmail = appState.authEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedPassword = appState.authPassword.trimmingCharacters(in: .whitespacesAndNewlines)
                 do {
                   try await supabase.signInWithPassword(
-                    email: appState.authEmail,
-                    password: appState.authPassword
+                    email: trimmedEmail,
+                    password: trimmedPassword
                   )
                   appState.isAuthenticated = true
+                  appState.authPassword = ""
+                  appState.authCode = ""
                   appState.authError = ""
-                  appState.statusMessage = "Signed in with password."
+                  appState.statusMessage = "Signed in."
                 } catch {
-                  appState.authError = error.localizedDescription
+                  appState.authError = "Sign in failed. Check your email and password."
+                  appState.statusMessage = "Sign in failed."
                 }
               }
             },
             onCreatePasswordAccount: {
-              Task {
+              guard !isAuthenticating else { return }
+              isAuthenticating = true
+              appState.authError = ""
+              appState.statusMessage = "Creating account..."
+              Task { @MainActor in
+                defer { isAuthenticating = false }
+                let trimmedEmail = appState.authEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedPassword = appState.authPassword.trimmingCharacters(in: .whitespacesAndNewlines)
                 do {
                   let signedIn = try await supabase.signUpWithEmailPassword(
-                    email: appState.authEmail,
-                    password: appState.authPassword
+                    email: trimmedEmail,
+                    password: trimmedPassword
                   )
                   if signedIn {
                     appState.isAuthenticated = true
+                    appState.authPassword = ""
+                    appState.authCode = ""
                     appState.authError = ""
                     appState.statusMessage = "Account created and signed in."
                   } else {
+                    appState.authPassword = ""
                     appState.authError = ""
                     appState.statusMessage = "Account created. Check email to confirm, then sign in."
                   }
                 } catch {
-                  appState.authError = error.localizedDescription
+                  appState.authError = "Account creation failed. Check your email, password, or Supabase settings."
+                  appState.statusMessage = "Account creation failed."
                 }
               }
             },
@@ -650,6 +675,7 @@ private struct AuthView: View {
   @Binding var password: String
   let statusMessage: String
   let errorMessage: String
+  let isAuthenticating: Bool
   let onSignInWithPassword: () -> Void
   let onCreatePasswordAccount: () -> Void
   let onOpenInputLab: (() -> Void)?
@@ -672,15 +698,31 @@ private struct AuthView: View {
               text: $email,
               autocapitalize: .never,
               autocorrectDisabled: true,
-              keyboardType: .emailAddress
+              keyboardType: .emailAddress,
+              accessibilityIdentifier: "auth.email"
             )
-            LabeledTextField(title: "Password", text: $password, isSecure: true)
+            LabeledTextField(
+              title: "Password",
+              text: $password,
+              isSecure: true,
+              accessibilityIdentifier: "auth.password"
+            )
 
             VStack(alignment: .leading, spacing: 10) {
               Button("Sign In", action: onSignInWithPassword)
+                .accessibilityIdentifier("auth.signIn")
+                .disabled(isAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .buttonStyle(.borderedProminent)
               Button("Create Account", action: onCreatePasswordAccount)
+                .accessibilityIdentifier("auth.createAccount")
+                .disabled(isAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .buttonStyle(.bordered)
+            }
+
+            if isAuthenticating {
+              ProgressView("Working...")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             }
           }
 
@@ -689,9 +731,11 @@ private struct AuthView: View {
               .font(.headline)
             Text(statusMessage)
               .foregroundStyle(.secondary)
+              .accessibilityIdentifier("auth.status")
             if !errorMessage.isEmpty {
               Text(errorMessage)
                 .foregroundStyle(.red)
+                .accessibilityIdentifier("auth.error")
             }
           }
 
@@ -2136,25 +2180,60 @@ private struct QueueReviewSheet: View {
   @Environment(\.dismiss) private var dismiss
   let onOpenCamera: () -> Void
   let onSubmit: () async -> Bool
+  @State private var isSubmitting = false
 
   var body: some View {
     NavigationStack {
       List {
         Section {
           Button("Submit") {
+            guard !isSubmitting else { return }
+            isSubmitting = true
             Task {
-              if await onSubmit() {
+              let succeeded = await onSubmit()
+              isSubmitting = false
+              if succeeded {
                 dismiss()
               }
             }
           }
-          .disabled(appState.queueEligibleForSubmit().isEmpty)
+          .disabled(isSubmitting || appState.queueEligibleForSubmit().isEmpty)
           .accessibilityIdentifier("queueReview.submit")
+
+          if isSubmitting || appState.queueSubmitProgress != nil {
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Submitting queued items…")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("queueReview.submitStatus")
+
+              if let progress = appState.queueSubmitProgress {
+                Text(progress.message)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+                if let photoIndex = progress.photoIndex, let photoCount = progress.photoCount {
+                  Text("Photo \(photoIndex) of \(photoCount)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary.opacity(0.8))
+                }
+              } else if !appState.uploadMessage.isEmpty {
+                Text(appState.uploadMessage)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          } else if !appState.uploadMessage.isEmpty {
+            Text(appState.uploadMessage)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .accessibilityIdentifier("queueReview.submitStatus")
+          }
         }
 
         if appState.queuedItemPackets.isEmpty {
           Text("Queue is empty. Capture photos and tap Next to create queued item packets.")
             .foregroundStyle(.secondary)
+            .accessibilityIdentifier("queueReview.emptyState")
         } else {
           ForEach(appState.queuedItemPackets.sorted(by: { $0.itemNumber < $1.itemNumber })) { item in
             let progressMessage = appState.queueSubmitProgress?.itemId == item.id

@@ -9,6 +9,7 @@ export interface SupabaseSessionState {
   sendOtp: (email: string) => Promise<void>
   verifyOtp: (email: string, code: string) => Promise<void>
   signInWithPassword: (email: string, password: string) => Promise<void>
+  signUpWithEmailPassword: (email: string, password: string) => Promise<boolean>
   signOut: () => Promise<void>
   configured: boolean
 }
@@ -132,6 +133,31 @@ export function useSupabaseSession(): SupabaseSessionState {
     }
   }, [])
 
+  const signUpWithEmailPassword = useCallback(async (email: string, password: string) => {
+    if (!supabase) {
+      throw new Error('Supabase client is not configured')
+    }
+
+    const trimmedEmail = email.trim()
+    const trimmedPassword = password.trim()
+    if (!trimmedEmail) {
+      throw new Error('Email address is required')
+    }
+    if (!trimmedPassword) {
+      throw new Error('Password is required')
+    }
+
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: trimmedEmail,
+      password: trimmedPassword,
+    })
+    if (signUpError) {
+      throw signUpError
+    }
+
+    return Boolean(data.session)
+  }, [])
+
   return {
     session,
     loading,
@@ -139,6 +165,7 @@ export function useSupabaseSession(): SupabaseSessionState {
     sendOtp,
     verifyOtp,
     signInWithPassword,
+    signUpWithEmailPassword,
     signOut,
     configured: supabaseConfig.ready,
   }
