@@ -37,3 +37,6 @@ This checklist is for confirming the current app auth path before Google OAuth i
 - Do not commit real credentials.
 - Do not store test passwords in docs.
 - DEBUG launch routes are for local testing only and do not prove real auth.
+- Verified manually against the real Supabase project on 2026-05-27:
+  - iOS invalid login, valid login, sign out, and relaunch restoration passed.
+  - Desktop invalid login, valid login, sign out, and session restore passed.
