@@ -56,6 +56,21 @@ This is only a simulator test path. It does not change the intended mobile produ
 
 This lets you validate auth + upload + storage + DB behavior in simulator without relying on physical camera capture.
 
+## Debug launch routes
+
+Use the route harness in:
+
+- `docs/DEBUG_LAUNCH_ROUTES.md`
+- `./scripts/verify-debug-launch-routes.sh`
+
+It covers the debug launch paths for:
+
+- clean normal launch
+- `-open-capture-home`
+- `-open-live-camera-with-seeded-photo`
+- `-open-mock-intake-flow`
+- `-open-input-lab`
+
 ## Auth rate limits (`429 over_email_send_rate_limit`)
 
 If OTP or account creation fails with email rate limit errors, see:
