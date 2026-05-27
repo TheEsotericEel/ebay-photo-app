@@ -3,6 +3,9 @@ import SwiftUI
 struct ItemDetailsScreen<ThumbnailContent: View>: View {
   let itemNumber: Int
   let photoCount: Int
+  @Binding var sku: String
+  @Binding var weight: String
+  @Binding var dimensions: String
   @Binding var notes: String
   let onCancel: () -> Void
   let onSubmit: () -> Void
@@ -15,7 +18,7 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
         CaptureFlowHero(
           eyebrow: "Finish Item",
           title: "Small checkpoint before queueing",
-          message: "For now this screen only asks for notes. It is intentionally not a listing form."
+          message: "Use this checkpoint for the current item's optional details before queueing."
         )
 
         CaptureSurfaceCard {
@@ -32,29 +35,50 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
 
               Spacer(minLength: 0)
 
-              CaptureStatusChip(title: "Notes Only")
+              CaptureStatusChip(title: "Optional Details")
             }
 
             thumbnailContent()
 
-            VStack(alignment: .leading, spacing: 8) {
-              Text("Notes")
+            VStack(alignment: .leading, spacing: 12) {
+              Text("Details")
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.white)
 
-              TextField("Add optional notes for this item", text: $notes, axis: .vertical)
-                .lineLimit(3 ... 7)
-                .padding(14)
-                .background {
-                  RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.white.opacity(0.08))
-                }
-                .overlay {
-                  RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(.white.opacity(0.08), lineWidth: 1)
-                }
-                .foregroundStyle(.white)
-                .accessibilityIdentifier("itemDetails.notes")
+      ItemDetailsField(
+        title: "SKU",
+        placeholder: "Optional SKU",
+        text: $sku,
+        accessibilityIdentifier: "itemDetails.sku",
+                autocapitalization: .characters,
+                autocorrectionDisabled: true
+              )
+
+        HStack(alignment: .top, spacing: 10) {
+          ItemDetailsField(
+            title: "Weight",
+            placeholder: "Optional weight",
+            text: $weight,
+                  accessibilityIdentifier: "itemDetails.weight",
+                  autocorrectionDisabled: true
+                )
+
+          ItemDetailsField(
+            title: "Dimensions",
+            placeholder: "Optional dimensions",
+            text: $dimensions,
+            accessibilityIdentifier: "itemDetails.dimensions",
+            autocorrectionDisabled: true
+          )
+        }
+
+              ItemDetailsField(
+                title: "Notes",
+                placeholder: "Optional notes for this item",
+                text: $notes,
+                accessibilityIdentifier: "itemDetails.notes",
+                isMultiline: true
+              )
             }
 
             HStack(spacing: 10) {
@@ -97,12 +121,18 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
 }
 
 private struct MockItemDetailsScreenPreview: View {
+  @State private var sku = "A-104"
+  @State private var weight = "2.4 lb"
+  @State private var dimensions = "8 x 10 in"
   @State private var notes = "Optional note for the lister."
 
   var body: some View {
     ItemDetailsScreen(
       itemNumber: 12,
       photoCount: 4,
+      sku: $sku,
+      weight: $weight,
+      dimensions: $dimensions,
       notes: $notes,
       onCancel: {},
       onSubmit: {},
@@ -111,5 +141,60 @@ private struct MockItemDetailsScreenPreview: View {
         CaptureCameraThumbnailPanel(seed: 4, hasPhoto: true, photoCount: 4)
       }
     )
+  }
+}
+
+private struct ItemDetailsField: View {
+  let title: String
+  let placeholder: String
+  @Binding var text: String
+  let accessibilityIdentifier: String
+  var isMultiline = false
+  var autocapitalization: TextInputAutocapitalization = .never
+  var autocorrectionDisabled = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title)
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(.white)
+
+      if isMultiline {
+        TextField(placeholder, text: $text, axis: .vertical)
+          .lineLimit(2 ... 4)
+          .padding(.horizontal, 14)
+          .padding(.vertical, 11)
+          .background {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+              .fill(.white.opacity(0.08))
+          }
+          .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+              .stroke(.white.opacity(0.08), lineWidth: 1)
+          }
+          .foregroundStyle(.white)
+          .textInputAutocapitalization(autocapitalization)
+          .autocorrectionDisabled(autocorrectionDisabled)
+          .accessibilityIdentifier(accessibilityIdentifier)
+      } else {
+        TextField(placeholder, text: $text)
+          .lineLimit(1)
+          .padding(.horizontal, 14)
+          .padding(.vertical, 11)
+          .background {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+              .fill(.white.opacity(0.08))
+          }
+          .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+              .stroke(.white.opacity(0.08), lineWidth: 1)
+          }
+          .foregroundStyle(.white)
+          .textInputAutocapitalization(autocapitalization)
+          .autocorrectionDisabled(autocorrectionDisabled)
+          .accessibilityIdentifier(accessibilityIdentifier)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }

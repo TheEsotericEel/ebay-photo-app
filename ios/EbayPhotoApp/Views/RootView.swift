@@ -125,39 +125,12 @@ struct RootView: View {
               get: { appState.authEmail },
               set: { appState.authEmail = $0 }
             ),
-            code: Binding(
-              get: { appState.authCode },
-              set: { appState.authCode = $0 }
-            ),
             password: Binding(
               get: { appState.authPassword },
               set: { appState.authPassword = $0 }
             ),
             statusMessage: appState.statusMessage,
             errorMessage: appState.authError,
-            onSendCode: {
-              Task {
-                do {
-                  try await supabase.sendOTP(email: appState.authEmail)
-                  appState.authError = ""
-                  appState.statusMessage = "OTP code requested."
-                } catch {
-                  appState.authError = error.localizedDescription
-                }
-              }
-            },
-            onSignIn: {
-              Task {
-                do {
-                  try await supabase.verifyOTP(email: appState.authEmail, code: appState.authCode)
-                  appState.isAuthenticated = true
-                  appState.authError = ""
-                  appState.statusMessage = "Signed in."
-                } catch {
-                  appState.authError = error.localizedDescription
-                }
-              }
-            },
             onSignInWithPassword: {
               Task {
                 do {
@@ -674,12 +647,9 @@ private enum DebugFixtureBuilder {
 
 private struct AuthView: View {
   @Binding var email: String
-  @Binding var code: String
   @Binding var password: String
   let statusMessage: String
   let errorMessage: String
-  let onSendCode: () -> Void
-  let onSignIn: () -> Void
   let onSignInWithPassword: () -> Void
   let onCreatePasswordAccount: () -> Void
   let onOpenInputLab: (() -> Void)?
@@ -687,16 +657,16 @@ private struct AuthView: View {
   var body: some View {
     NavigationStack {
       ScrollView {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
           VStack(alignment: .leading, spacing: 8) {
-            Text("Email OTP (recommended)")
-              .font(.headline)
-            Text(
-              "Use OTP as the default sign-in flow. If email rate limits block OTP, use password as a temporary fallback."
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            Text("Ebay Photo App")
+              .font(.largeTitle.weight(.semibold))
+            Text("Sign in with your app account. Google sign-in is planned once the auth surface is ready.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+          }
 
+          VStack(alignment: .leading, spacing: 12) {
             LabeledTextField(
               title: "Email",
               text: $email,
@@ -704,35 +674,21 @@ private struct AuthView: View {
               autocorrectDisabled: true,
               keyboardType: .emailAddress
             )
-            Button("Send OTP Code", action: onSendCode)
-              .buttonStyle(.bordered)
-            LabeledTextField(title: "Code", text: $code, keyboardType: .numberPad)
-            Button("Sign In with OTP Code", action: onSignIn)
-              .buttonStyle(.borderedProminent)
-          }
-
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Password fallback")
-              .font(.headline)
-            Text("Use only when OTP is temporarily unavailable.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
             LabeledTextField(title: "Password", text: $password, isSecure: true)
-            Button("Sign In with Password", action: onSignInWithPassword)
-              .buttonStyle(.bordered)
+
+            VStack(alignment: .leading, spacing: 10) {
+              Button("Sign In", action: onSignInWithPassword)
+                .buttonStyle(.borderedProminent)
+              Button("Create Account", action: onCreatePasswordAccount)
+                .buttonStyle(.bordered)
+            }
           }
 
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Create account (sends email)")
-              .font(.headline)
-            Button("Create Password Account", action: onCreatePasswordAccount)
-              .buttonStyle(.bordered)
-          }
-
-          VStack(alignment: .leading, spacing: 8) {
+          VStack(alignment: .leading, spacing: 6) {
             Text("Status")
               .font(.headline)
             Text(statusMessage)
+              .foregroundStyle(.secondary)
             if !errorMessage.isEmpty {
               Text(errorMessage)
                 .foregroundStyle(.red)
@@ -741,11 +697,21 @@ private struct AuthView: View {
 
           #if DEBUG
           if let onOpenInputLab {
-            Button("Open Text Input Lab", action: onOpenInputLab)
-              .buttonStyle(.bordered)
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Debug")
+                .font(.headline)
+              Text("Text Input Lab stays available for launch-route testing only.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+              Button("Open Text Input Lab", action: onOpenInputLab)
+                .buttonStyle(.bordered)
+            }
           }
           #endif
         }
+        .frame(maxWidth: 420, alignment: .leading)
+        .padding(.vertical, 12)
         .padding()
       }
       .navigationTitle("Ebay Photo App")
@@ -1232,7 +1198,26 @@ private struct MockQueuedItem: Identifiable, Hashable {
   let id = UUID()
   let itemNumber: Int
   let photoCount: Int
+  var sku: String
+  var weight: String
+  var dimensions: String
   let notes: String
+
+  init(
+    itemNumber: Int,
+    photoCount: Int,
+    sku: String = "",
+    weight: String = "",
+    dimensions: String = "",
+    notes: String
+  ) {
+    self.itemNumber = itemNumber
+    self.photoCount = photoCount
+    self.sku = sku
+    self.weight = weight
+    self.dimensions = dimensions
+    self.notes = notes
+  }
 }
 
 private enum MockIntakeFlowStep {
@@ -1247,6 +1232,9 @@ private struct MockIntakeFlowView: View {
   @State private var step: MockIntakeFlowStep = .camera
   @State private var currentItemNumber = 12
   @State private var currentPhotoCount = 4
+  @State private var currentSku = ""
+  @State private var currentWeight = ""
+  @State private var currentDimensions = ""
   @State private var currentNotes = ""
   @State private var latestPhotoSeed: Int? = 4
   @State private var mockSelectedLens = "1x"
@@ -1322,6 +1310,9 @@ private struct MockIntakeFlowView: View {
     ItemDetailsScreen(
       itemNumber: currentItemNumber,
       photoCount: currentPhotoCount,
+      sku: $currentSku,
+      weight: $currentWeight,
+      dimensions: $currentDimensions,
       notes: $currentNotes,
       onCancel: { step = .camera },
       onSubmit: submitCurrentMockItem,
@@ -1338,10 +1329,16 @@ private struct MockIntakeFlowView: View {
 
   private func finalizeCurrentMockItemIfNeeded() {
     guard currentPhotoCount > 0 else { return }
+    let trimmedSku = currentSku.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedWeight = currentWeight.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedDimensions = currentDimensions.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedNotes = currentNotes.trimmingCharacters(in: .whitespacesAndNewlines)
     let queuedItem = MockQueuedItem(
       itemNumber: currentItemNumber,
       photoCount: currentPhotoCount,
+      sku: trimmedSku,
+      weight: trimmedWeight,
+      dimensions: trimmedDimensions,
       notes: trimmedNotes
     )
     queuedItems.removeAll { $0.itemNumber == queuedItem.itemNumber }
@@ -1361,6 +1358,9 @@ private struct MockIntakeFlowView: View {
   private func advanceMockItem() {
     currentItemNumber += 1
     currentPhotoCount = 0
+    currentSku = ""
+    currentWeight = ""
+    currentDimensions = ""
     currentNotes = ""
     latestPhotoSeed = nil
   }
@@ -2485,6 +2485,9 @@ private struct CameraSessionView: View {
         ItemDetailsScreen(
           itemNumber: appState.currentItemNumber,
           photoCount: appState.capturedPhotos.count,
+          sku: currentItemBinding(\.currentItemSku),
+          weight: currentItemBinding(\.currentItemWeight),
+          dimensions: currentItemBinding(\.currentItemDimensions),
           notes: currentItemBinding(\.currentItemNotes),
           onCancel: {
             showingDetails = false

@@ -25,6 +25,9 @@ final class AppStateQueueTests: XCTestCase {
   func testAdvanceToNextItemEnqueuesDraft() {
     let state = AppState(userDefaults: defaults, queueRootDirectoryName: queueRootName)
     state.currentItemSku = "SKU-1"
+    state.currentItemWeight = "2.4 lb"
+    state.currentItemDimensions = "8 x 10 in"
+    state.currentItemNotes = "Small scratch on back cover."
     state.addCapturedPhoto(makePhoto())
 
     state.advanceToNextItem()
@@ -32,6 +35,9 @@ final class AppStateQueueTests: XCTestCase {
     XCTAssertEqual(state.queuedItemPackets.count, 1)
     XCTAssertEqual(state.queuedItemPackets.first?.itemNumber, 1)
     XCTAssertEqual(state.queuedItemPackets.first?.sku, "SKU-1")
+    XCTAssertEqual(state.queuedItemPackets.first?.weight, "2.4 lb")
+    XCTAssertEqual(state.queuedItemPackets.first?.dimensions, "8 x 10 in")
+    XCTAssertEqual(state.queuedItemPackets.first?.notes, "Small scratch on back cover.")
     XCTAssertEqual(state.currentItemNumber, 2)
     XCTAssertTrue(state.capturedPhotos.isEmpty)
   }
