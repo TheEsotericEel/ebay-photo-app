@@ -54,7 +54,12 @@ struct RootView: View {
               onOpenCamera: { showingCamera = true },
               onUploadBatch: {
                 Task {
-                  _ = await submitQueuedItems(advanceCurrentDraftIfNeeded: true)
+                  if !appState.capturedPhotos.isEmpty {
+                    appState.statusMessage = "Finish the current item before submitting."
+                    return
+                  }
+
+                  _ = await submitQueuedItems(advanceCurrentDraftIfNeeded: false)
                 }
               },
               onUploadFixture: {
@@ -2411,15 +2416,6 @@ private struct CameraSessionView: View {
       .frame(maxHeight: .infinity)
       .padding(.horizontal, 12)
       .layoutPriority(1)
-
-      CameraMetadataTray(
-        sku: currentItemBinding(\.currentItemSku),
-        weight: currentItemBinding(\.currentItemWeight),
-        dimensions: currentItemBinding(\.currentItemDimensions),
-        notes: currentItemBinding(\.currentItemNotes)
-      )
-      .padding(.horizontal, 12)
-      .layoutPriority(0)
 
       GuideToggleRow(
         gridEnabled: $cameraPreferences.gridEnabled,
