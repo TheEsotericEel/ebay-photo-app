@@ -40,13 +40,16 @@ struct CameraActionBar: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Capture")
+      .accessibilityIdentifier("liveCamera.capture")
       .disabled(!canCapture)
 
       Spacer(minLength: 0)
 
       VStack(spacing: 10) {
         secondaryButton("Next", action: onNextItem)
+          .accessibilityIdentifier("liveCamera.next")
         secondaryButton("Done", action: onDone)
+          .accessibilityIdentifier("liveCamera.done")
       }
       .frame(width: 108)
     }

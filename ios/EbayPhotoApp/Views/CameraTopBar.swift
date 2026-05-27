@@ -23,6 +23,7 @@ struct CameraTopBar: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Back")
+      .accessibilityIdentifier("liveCamera.back")
 
       Text(title)
         .font(.subheadline.weight(.semibold))
@@ -36,6 +37,7 @@ struct CameraTopBar: View {
         .foregroundStyle(.secondary)
         .monospacedDigit()
         .accessibilityLabel("\(photoCount) photos captured")
+        .accessibilityIdentifier("liveCamera.photoCount")
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 2)

@@ -12,11 +12,19 @@ struct RootView: View {
   @State private var showingMockIntakeFlow = false
   @State private var showingTextInputLab = false
   @State private var didRestoreSession = false
+  @State private var didSeedLiveCameraDraft = false
 
   private var shouldBypassAuth: Bool { AppState.usesDevelopmentAuthBypass }
   private var shouldOpenMockIntakeFlowOnLaunch: Bool {
     #if DEBUG
     ProcessInfo.processInfo.arguments.contains("-open-mock-intake-flow")
+    #else
+    false
+    #endif
+  }
+  private var shouldOpenLiveCameraWithSeededPhotoOnLaunch: Bool {
+    #if DEBUG
+    ProcessInfo.processInfo.arguments.contains("-open-live-camera-with-seeded-photo")
     #else
     false
     #endif
@@ -28,76 +36,25 @@ struct RootView: View {
         MockIntakeFlowView()
       } else {
         Group {
-        if shouldBypassAuth || appState.isAuthenticated {
-          if showingCamera {
-            CameraSessionView(
-              cameraService: cameraService,
-              cameraPreferences: cameraPreferences,
-              showingDetails: $showingDetails,
-              onBack: { showingCamera = false },
-              onDone: { showingCamera = false }
-            )
+          if shouldBypassAuth || appState.isAuthenticated {
+            if showingCamera {
+              CameraSessionView(
+                cameraService: cameraService,
+                cameraPreferences: cameraPreferences,
+                showingDetails: $showingDetails,
+                onBack: { showingCamera = false },
+                onDone: { showingCamera = false },
+                onOpenQueueReview: {
+                  showingCamera = false
+                  showingQueueReview = true
+                }
+              )
           } else {
             CaptureHomeView(
               onOpenCamera: { showingCamera = true },
               onUploadBatch: {
-                appState.statusMessage = "Submitting queued items…"
-                appState.uploadMessage = ""
                 Task {
-                  if !appState.capturedPhotos.isEmpty {
-                    appState.advanceToNextItem()
-                  }
-                  let eligible = appState.queueEligibleForSubmit()
-                  guard !eligible.isEmpty else {
-                    appState.statusMessage = "No queued items are ready to submit."
-                    return
-                  }
-
-                  var submittedCount = 0
-                  var failedCount = 0
-
-                  for item in eligible {
-                    appState.markQueuedItemUploadAttemptStarted(itemId: item.id)
-                    appState.updateQueuedItemSubmitState(item.id, state: .submitting)
-                    appState.setQueueSubmitProgress(
-                      itemId: item.id,
-                      itemNumber: item.itemNumber,
-                      stage: "submitting_item",
-                      message: "Submitting item \(item.itemNumber)"
-                    )
-                    do {
-                      let packet = try appState.makeUploadPacket(from: item)
-                      let result = try await supabase.uploadItemPacket(packet) { progress in
-                        Task { @MainActor in
-                          appState.setQueueSubmitProgress(
-                            itemId: item.id,
-                            itemNumber: item.itemNumber,
-                            stage: progress.stage,
-                            message: progress.message,
-                            photoIndex: progress.photoIndex,
-                            photoCount: progress.photoCount
-                          )
-                        }
-                      }
-                      appState.captureStoreRemoteId = result.storeId
-                      appState.captureBatchRemoteId = result.batchId
-                      appState.applyUploadResult(for: item.id, result: result)
-                      appState.updateQueuedItemSubmitState(item.id, state: .submitted, errorMessage: nil)
-                      submittedCount += 1
-                    } catch {
-                      appState.markQueuedItemUploadFailure(itemId: item.id, errorMessage: error.localizedDescription)
-                      appState.updateQueuedItemSubmitState(
-                        item.id,
-                        state: .failed,
-                        errorMessage: error.localizedDescription
-                      )
-                      failedCount += 1
-                    }
-                  }
-
-                  appState.statusMessage = "Submit finished."
-                  appState.uploadMessage = "Submitted \(submittedCount) item(s); failed \(failedCount)."
-                  appState.clearQueueSubmitProgress()
+                  _ = await submitQueuedItems(advanceCurrentDraftIfNeeded: true)
                 }
               },
               onUploadFixture: {
@@ -233,6 +190,17 @@ struct RootView: View {
     .onAppear {
       guard !didRestoreSession else { return }
       didRestoreSession = true
+      #if DEBUG
+      if shouldOpenLiveCameraWithSeededPhotoOnLaunch {
+        if !appState.isAuthenticated {
+          appState.isAuthenticated = true
+        }
+        seedLiveCameraDraftIfNeeded()
+        showingCamera = true
+        appState.statusMessage = "Debug live camera route opened."
+        return
+      }
+      #endif
       guard !shouldBypassAuth, supabase.hasPersistedSession else { return }
       guard !appState.isAuthenticated else { return }
       appState.isAuthenticated = true
@@ -263,10 +231,15 @@ struct RootView: View {
       TextInputLabView()
     }
     .fullScreenCover(isPresented: $showingQueueReview) {
-      QueueReviewSheet(onOpenCamera: {
-        showingQueueReview = false
-        showingCamera = true
-      })
+      QueueReviewSheet(
+        onOpenCamera: {
+          showingQueueReview = false
+          showingCamera = true
+        },
+        onSubmit: {
+          await submitQueuedItems(advanceCurrentDraftIfNeeded: false)
+        }
+      )
       .environmentObject(appState)
     }
     .fullScreenCover(isPresented: $showingMockIntakeFlow) {
@@ -292,6 +265,121 @@ struct RootView: View {
       }
     }
   }
+
+  #if DEBUG
+  private func seedLiveCameraDraftIfNeeded() {
+    guard !didSeedLiveCameraDraft else { return }
+    didSeedLiveCameraDraft = true
+
+    appState.clearCurrentItem()
+    if let photo = makeDebugSeededCapturedPhoto() {
+      appState.addCapturedPhoto(photo)
+      appState.statusMessage = "Seeded live camera draft ready."
+    } else {
+      appState.statusMessage = "Unable to seed live camera draft."
+    }
+  }
+
+  @MainActor
+  private func submitQueuedItems(advanceCurrentDraftIfNeeded: Bool) async -> Bool {
+    guard appState.queueSubmitProgress == nil else {
+      appState.statusMessage = "Submit already in progress."
+      return false
+    }
+
+    appState.statusMessage = "Submitting queued items…"
+    appState.uploadMessage = ""
+
+    if advanceCurrentDraftIfNeeded, !appState.capturedPhotos.isEmpty {
+      appState.advanceToNextItem()
+    }
+
+    let eligible = appState.queueEligibleForSubmit()
+    guard !eligible.isEmpty else {
+      appState.statusMessage = "No queued items are ready to submit."
+      return false
+    }
+
+    var submittedCount = 0
+    var failedCount = 0
+
+    for item in eligible {
+      appState.markQueuedItemUploadAttemptStarted(itemId: item.id)
+      appState.updateQueuedItemSubmitState(item.id, state: .submitting)
+      appState.setQueueSubmitProgress(
+        itemId: item.id,
+        itemNumber: item.itemNumber,
+        stage: "submitting_item",
+        message: "Submitting item \(item.itemNumber)"
+      )
+      do {
+        let packet = try appState.makeUploadPacket(from: item)
+        let result = try await supabase.uploadItemPacket(packet) { progress in
+          Task { @MainActor in
+            appState.setQueueSubmitProgress(
+              itemId: item.id,
+              itemNumber: item.itemNumber,
+              stage: progress.stage,
+              message: progress.message,
+              photoIndex: progress.photoIndex,
+              photoCount: progress.photoCount
+            )
+          }
+        }
+        appState.captureStoreRemoteId = result.storeId
+        appState.captureBatchRemoteId = result.batchId
+        appState.applyUploadResult(for: item.id, result: result)
+        appState.updateQueuedItemSubmitState(item.id, state: .submitted, errorMessage: nil)
+        submittedCount += 1
+      } catch {
+        appState.markQueuedItemUploadFailure(itemId: item.id, errorMessage: error.localizedDescription)
+        appState.updateQueuedItemSubmitState(
+          item.id,
+          state: .failed,
+          errorMessage: error.localizedDescription
+        )
+        failedCount += 1
+      }
+    }
+
+    appState.statusMessage = "Submit finished."
+    appState.uploadMessage = "Submitted \(submittedCount) item(s); failed \(failedCount)."
+    appState.clearQueueSubmitProgress()
+    return submittedCount > 0 && failedCount == 0
+  }
+
+  private func makeDebugSeededCapturedPhoto() -> CapturedPhoto? {
+    let size = CGSize(width: 1024, height: 1024)
+    let format = UIGraphicsImageRendererFormat.default()
+    format.scale = 1
+    let renderer = UIGraphicsImageRenderer(size: size, format: format)
+    let image = renderer.image { context in
+      let rect = CGRect(origin: .zero, size: size)
+      UIColor(red: 0.11, green: 0.09, blue: 0.08, alpha: 1).setFill()
+      context.fill(rect)
+
+      UIColor(red: 0.46, green: 0.28, blue: 0.16, alpha: 1).setFill()
+      context.fill(CGRect(x: 120, y: 180, width: 520, height: 360))
+
+      UIColor(red: 0.20, green: 0.28, blue: 0.36, alpha: 1).setFill()
+      context.fill(CGRect(x: 520, y: 300, width: 280, height: 220))
+
+      UIColor.white.withAlphaComponent(0.12).setFill()
+      context.fill(CGRect(x: 0, y: 0, width: size.width, height: 88))
+    }
+
+    guard let data = image.jpegData(compressionQuality: 0.9) else {
+      return nil
+    }
+
+    return CapturedPhoto(
+      data: data,
+      thumbnailData: data,
+      lensLabel: "1x",
+      capturedAt: Date()
+    )
+  }
+  #endif
 
 }
 
@@ -685,6 +773,7 @@ private struct CaptureHomeView: View {
               }
               .buttonStyle(.plain)
               .foregroundStyle(.black)
+              .accessibilityIdentifier("captureHome.openCamera")
               .background {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                   .fill(
@@ -697,13 +786,24 @@ private struct CaptureHomeView: View {
               }
 
               HStack(spacing: 10) {
-                HomeActionButton(title: "Review Queue", systemImage: "tray.full", action: onReviewQueue)
-                HomeActionButton(title: "Upload Batch", systemImage: "arrow.up.circle", action: onUploadBatch)
+                HomeActionButton(
+                  title: "Review Queue",
+                  systemImage: "tray.full",
+                  accessibilityIdentifier: "captureHome.reviewQueue",
+                  action: onReviewQueue
+                )
+                HomeActionButton(
+                  title: "Upload Batch",
+                  systemImage: "arrow.up.circle",
+                  accessibilityIdentifier: "captureHome.uploadBatch",
+                  action: onUploadBatch
+                )
               }
 
               HomeActionButton(
                 title: "Preview Intake Flow",
                 systemImage: "square.on.square",
+                accessibilityIdentifier: "captureHome.previewIntakeFlow",
                 action: onPreviewIntakeFlow
               )
             }
@@ -959,10 +1059,12 @@ private struct CaptureHomeCard<Content: View>: View {
 private struct HomeActionButton: View {
   let title: String
   let systemImage: String
+  let accessibilityIdentifier: String?
   let action: () -> Void
 
+  @ViewBuilder
   var body: some View {
-    Button(action: action) {
+    let button = Button(action: action) {
       HStack(spacing: 8) {
         Image(systemName: systemImage)
           .font(.subheadline.weight(.semibold))
@@ -974,15 +1076,22 @@ private struct HomeActionButton: View {
       .padding(.horizontal, 14)
       .frame(maxWidth: .infinity)
     }
-    .buttonStyle(.plain)
-    .foregroundStyle(.white)
-    .background {
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .fill(.white.opacity(0.08))
-    }
-    .overlay {
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .stroke(.white.opacity(0.08), lineWidth: 1)
+    let decoratedButton = button
+      .buttonStyle(.plain)
+      .foregroundStyle(.white)
+      .background {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .fill(.white.opacity(0.08))
+      }
+      .overlay {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .stroke(.white.opacity(0.08), lineWidth: 1)
+      }
+
+    if let accessibilityIdentifier {
+      decoratedButton.accessibilityIdentifier(accessibilityIdentifier)
+    } else {
+      decoratedButton
     }
   }
 }
@@ -1195,6 +1304,7 @@ private struct MockIntakeFlowView: View {
       itemNumber: currentItemNumber,
       photoCount: currentPhotoCount,
       notes: $currentNotes,
+      onCancel: { step = .camera },
       onSubmit: submitCurrentMockItem,
       onNextItem: continueToNextMockItem,
       thumbnailContent: {
@@ -1328,6 +1438,7 @@ private struct MockQueueReviewScreen: View {
     .background(MockFlowBackground())
     .navigationTitle("Queue Review")
     .navigationBarTitleDisplayMode(.inline)
+    .accessibilityIdentifier("queueReview.screen")
   }
 }
 
@@ -2005,10 +2116,23 @@ private struct QueueReviewSheet: View {
   @EnvironmentObject private var appState: AppState
   @Environment(\.dismiss) private var dismiss
   let onOpenCamera: () -> Void
+  let onSubmit: () async -> Bool
 
   var body: some View {
     NavigationStack {
       List {
+        Section {
+          Button("Submit") {
+            Task {
+              if await onSubmit() {
+                dismiss()
+              }
+            }
+          }
+          .disabled(appState.queueEligibleForSubmit().isEmpty)
+          .accessibilityIdentifier("queueReview.submit")
+        }
+
         if appState.queuedItemPackets.isEmpty {
           Text("Queue is empty. Capture photos and tap Next to create queued item packets.")
             .foregroundStyle(.secondary)
@@ -2038,9 +2162,11 @@ private struct QueueReviewSheet: View {
         }
       }
       .navigationTitle("Queue Review")
+      .accessibilityIdentifier("queueReview.screen")
       .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
-          Button("Done") { dismiss() }
+        ToolbarItem(placement: .topBarLeading) {
+          Button("Main Screen") { dismiss() }
+            .accessibilityIdentifier("queueReview.mainScreen")
         }
       }
     }
@@ -2215,6 +2341,7 @@ private struct CameraSessionView: View {
   @Binding var showingDetails: Bool
   let onBack: () -> Void
   let onDone: () -> Void
+  let onOpenQueueReview: () -> Void
 
   @State private var showingContext = false
   @State private var pinchStartZoom: Double?
@@ -2301,10 +2428,10 @@ private struct CameraSessionView: View {
       )
       .layoutPriority(0)
 
-      CameraActionBar(
-        thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
-        photoCount: appState.capturedPhotos.count,
-        canCapture: cameraService.canCapture || (isCaptureLoopRunning && pendingCaptureCount < maxPendingCaptures),
+        CameraActionBar(
+          thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
+          photoCount: appState.capturedPhotos.count,
+          canCapture: cameraService.canCapture || (isCaptureLoopRunning && pendingCaptureCount < maxPendingCaptures),
         onCapture: {
           if !isCaptureLoopRunning {
             startCaptureLoop()
@@ -2312,15 +2439,26 @@ private struct CameraSessionView: View {
             pendingCaptureCount += 1
           }
         },
-        onNextItem: {
-          appState.advanceToNextItem()
-        },
-        onDone: onDone
+          onNextItem: {
+            guard !appState.capturedPhotos.isEmpty else {
+              appState.statusMessage = "Capture at least one photo before continuing."
+              return
+            }
+            presentDetailsEditor()
+          },
+        onDone: {
+          guard !appState.capturedPhotos.isEmpty else {
+            onDone()
+            return
+          }
+          presentDetailsEditor()
+        }
       )
       .layoutPriority(0)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(Color.black.ignoresSafeArea())
+    .accessibilityIdentifier("liveCamera.screen")
     .padding(.bottom, 6)
     .onAppear {
       startCamera()
@@ -2333,8 +2471,36 @@ private struct CameraSessionView: View {
         .environmentObject(appState)
     }
     .fullScreenCover(isPresented: $showingDetails) {
-      ItemDetailsSheet()
-        .environmentObject(appState)
+      NavigationStack {
+        ItemDetailsScreen(
+          itemNumber: appState.currentItemNumber,
+          photoCount: appState.capturedPhotos.count,
+          notes: currentItemBinding(\.currentItemNotes),
+          onCancel: {
+            showingDetails = false
+          },
+          onSubmit: {
+            guard !appState.capturedPhotos.isEmpty else {
+              appState.statusMessage = "Capture at least one photo before submitting."
+              return
+            }
+            appState.advanceToNextItem()
+            showingDetails = false
+            onOpenQueueReview()
+          },
+          onNextItem: {
+            guard !appState.capturedPhotos.isEmpty else {
+              appState.statusMessage = "Capture at least one photo before continuing."
+              return
+            }
+            appState.advanceToNextItem()
+            showingDetails = false
+          },
+          thumbnailContent: {
+            liveItemDetailsThumbnail
+          }
+        )
+      }
     }
   }
 
@@ -2360,6 +2526,27 @@ private struct CameraSessionView: View {
     transaction.disablesAnimations = true
     withTransaction(transaction) {
       showingDetails = true
+    }
+  }
+
+  @ViewBuilder
+  private var liveItemDetailsThumbnail: some View {
+    if let thumbnailImage = appState.capturedPhotos.last?.thumbnailImage {
+      Image(uiImage: thumbnailImage)
+        .resizable()
+        .scaledToFill()
+        .frame(height: 120)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(.white.opacity(0.12), lineWidth: 1)
+        }
+    } else {
+      CaptureCameraThumbnailPanel(
+        seed: nil,
+        hasPhoto: false,
+        photoCount: appState.capturedPhotos.count
+      )
     }
   }
 

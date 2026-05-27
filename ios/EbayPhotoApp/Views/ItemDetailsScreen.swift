@@ -4,6 +4,7 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
   let itemNumber: Int
   let photoCount: Int
   @Binding var notes: String
+  let onCancel: () -> Void
   let onSubmit: () -> Void
   let onNextItem: () -> Void
   @ViewBuilder let thumbnailContent: () -> ThumbnailContent
@@ -53,6 +54,7 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
                     .stroke(.white.opacity(0.08), lineWidth: 1)
                 }
                 .foregroundStyle(.white)
+                .accessibilityIdentifier("itemDetails.notes")
             }
 
             HStack(spacing: 10) {
@@ -62,6 +64,7 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
               .buttonStyle(.bordered)
               .tint(.white)
               .foregroundStyle(.white)
+              .accessibilityIdentifier("itemDetails.submit")
 
               Button("Next Item") {
                 onNextItem()
@@ -69,15 +72,23 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
               .buttonStyle(.borderedProminent)
               .tint(.white)
               .foregroundStyle(.black)
+              .accessibilityIdentifier("itemDetails.nextItem")
             }
           }
         }
       }
       .padding(16)
     }
+    .accessibilityIdentifier("itemDetails.screen")
     .background(CaptureFlowBackground())
     .navigationTitle("Finish Item")
     .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .topBarLeading) {
+        Button("Cancel", action: onCancel)
+          .accessibilityIdentifier("itemDetails.cancel")
+      }
+    }
   }
 }
 
@@ -93,6 +104,7 @@ private struct MockItemDetailsScreenPreview: View {
       itemNumber: 12,
       photoCount: 4,
       notes: $notes,
+      onCancel: {},
       onSubmit: {},
       onNextItem: {},
       thumbnailContent: {
