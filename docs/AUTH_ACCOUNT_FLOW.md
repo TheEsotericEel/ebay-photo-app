@@ -3,7 +3,7 @@
 ## Current target app auth
 
 - App login is email + password for now.
-- Google OAuth is planned soon, but not implemented in this slice.
+- Google OAuth is planned and documented in [docs/GOOGLE_OAUTH_PLAN.md](./GOOGLE_OAUTH_PLAN.md), but not implemented yet.
 - iOS and desktop use the same Supabase app account and workspace session.
 
 ## Removed or deprecated from the product-facing flow

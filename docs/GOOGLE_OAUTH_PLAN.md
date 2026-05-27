@@ -1,0 +1,71 @@
+# Google OAuth Plan
+
+This document is a planning artifact only. It does not change app behavior.
+
+## 1. Target auth model
+
+- Primary app login: Sign in with Google
+- Fallback app login: email + password
+- Removed from product auth: OTP / magic-code auth
+- Separate future service: linked eBay seller accounts, not app login
+
+## 2. Supabase setup checklist
+
+- Enable the Google provider in Supabase Auth.
+- Create or reuse a Google Cloud / Auth Platform project.
+- Create OAuth client credentials for the app.
+- Store the Google OAuth client ID and client secret in Supabase.
+- Request the minimum required scopes:
+  - `openid`
+  - `email`
+  - `profile`
+- Add the Supabase callback URL to the Google OAuth client configuration.
+- Add local development redirect URLs for desktop and iOS testing.
+- Add production redirect URLs for the deployed desktop app and the shipped iOS app.
+
+## 3. Desktop web plan
+
+- Keep the existing Supabase JS client.
+- Add a `signInWithGoogle` helper to `useSupabaseSession`.
+- Add a `Continue with Google` button to the desktop auth card.
+- Keep the email + password form below the Google button.
+- Keep OTP out of the UI.
+- Confirm redirect and callback handling for:
+  - local development
+  - deployed desktop URL
+
+## 4. iOS plan
+
+- Decide the app URL scheme or deep link path used for OAuth callbacks.
+- Document required `Info.plist` changes for the URL scheme.
+- Document the Supabase redirect allow-list entry for the iOS callback URL.
+- Add a `signInWithGoogle` method to `SupabaseService` later in the iOS slice.
+- Decide whether the current custom REST auth client is sufficient for OAuth or whether introducing the Supabase Swift client is cleaner for this flow.
+- Preserve existing email + password sign-in.
+- Preserve existing DEBUG launch routes.
+
+## 5. Security and account notes
+
+- Google OAuth is app login only.
+- eBay OAuth comes later as a linked seller account, not as app login.
+- Do not store Google provider tokens unless a later Google API feature requires them.
+- The app account remains the Supabase user/workspace identity.
+
+## 6. Implementation sequence
+
+Recommended order:
+
+1. Desktop Google sign-in button and callback handling.
+2. iOS redirect and deep-link configuration.
+3. iOS Google sign-in button and callback handling.
+4. Account menu and profile display after Google sign-in is stable.
+
+## 7. Verification checklist
+
+- Desktop email + password still works.
+- Desktop Google login works locally.
+- Desktop session restores after refresh.
+- iOS email + password still works.
+- iOS Google login returns to the app.
+- Clean iOS launch still opens `AuthView` when signed out.
+- DEBUG routes still work.
