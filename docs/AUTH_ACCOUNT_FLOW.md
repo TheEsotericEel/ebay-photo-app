@@ -27,4 +27,5 @@
 
 - iOS remains the account-creation path in the product surface for now.
 - Desktop uses password sign-in only until a separate account-creation slice is added.
+- Desktop Google OAuth is now implemented in the web auth card, but Supabase and Google provider configuration are still required before it can succeed at runtime.
 - OTP methods may remain in service code temporarily if they are unused by the product UI.

@@ -296,6 +296,7 @@ export function DesktopListerPrototype() {
     session,
     loading: authLoading,
     error: authError,
+    signInWithGoogle,
     signInWithPassword,
     signUpWithEmailPassword,
     signOut,
@@ -305,6 +306,7 @@ export function DesktopListerPrototype() {
   const [password, setPassword] = useState('')
   const [loginMessage, setLoginMessage] = useState<string | null>(null)
   const [loginError, setLoginError] = useState<string | null>(null)
+  const [googleSigningIn, setGoogleSigningIn] = useState(false)
   const [passwordSigningIn, setPasswordSigningIn] = useState(false)
   const [passwordSigningUp, setPasswordSigningUp] = useState(false)
 
@@ -699,6 +701,20 @@ export function DesktopListerPrototype() {
     }
   }, [email, password, signInWithPassword])
 
+  const handleSignInWithGoogle = useCallback(async () => {
+    setGoogleSigningIn(true)
+    setLoginError(null)
+    setLoginMessage(null)
+    try {
+      await signInWithGoogle()
+      setLoginMessage('Continuing with Google...')
+    } catch (_error) {
+      setLoginError('Google sign-in failed. Check Supabase Google OAuth settings.')
+    } finally {
+      setGoogleSigningIn(false)
+    }
+  }, [signInWithGoogle])
+
   const handleCreateAccount = useCallback(async () => {
     setPasswordSigningUp(true)
     setLoginError(null)
@@ -740,6 +756,15 @@ export function DesktopListerPrototype() {
         <div style={styles.authCard}>
           <h1 style={styles.title}>Desktop Lister</h1>
           <p style={styles.subtleText}>Sign in to continue. Google sign-in is planned soon.</p>
+          <button
+            type="button"
+            style={styles.primaryButton}
+            onClick={() => void handleSignInWithGoogle()}
+            data-testid="auth-google-sign-in"
+            disabled={googleSigningIn || passwordSigningIn || passwordSigningUp}
+          >
+            {googleSigningIn ? 'Continuing with Google...' : 'Continue with Google'}
+          </button>
           <label style={styles.label} htmlFor="prototype-email-input">Email</label>
           <input
             id="prototype-email-input"
@@ -766,7 +791,7 @@ export function DesktopListerPrototype() {
               style={styles.primaryButton}
               onClick={handleSignInWithPassword}
               data-testid="auth-sign-in"
-              disabled={passwordSigningIn || passwordSigningUp || !email.trim() || !password.trim()}
+              disabled={googleSigningIn || passwordSigningIn || passwordSigningUp || !email.trim() || !password.trim()}
             >
               {passwordSigningIn ? 'Signing in...' : 'Sign In'}
             </button>
@@ -775,7 +800,7 @@ export function DesktopListerPrototype() {
               style={styles.secondaryButton}
               onClick={handleCreateAccount}
               data-testid="auth-create-account"
-              disabled={passwordSigningIn || passwordSigningUp || !email.trim() || !password.trim()}
+              disabled={googleSigningIn || passwordSigningIn || passwordSigningUp || !email.trim() || !password.trim()}
             >
               {passwordSigningUp ? 'Creating account...' : 'Create Account'}
             </button>

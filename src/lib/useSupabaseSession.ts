@@ -8,6 +8,7 @@ export interface SupabaseSessionState {
   error: string | null
   sendOtp: (email: string) => Promise<void>
   verifyOtp: (email: string, code: string) => Promise<void>
+  signInWithGoogle: () => Promise<void>
   signInWithPassword: (email: string, password: string) => Promise<void>
   signUpWithEmailPassword: (email: string, password: string) => Promise<boolean>
   signOut: () => Promise<void>
@@ -110,6 +111,22 @@ export function useSupabaseSession(): SupabaseSessionState {
     }
   }, [])
 
+  const signInWithGoogle = useCallback(async () => {
+    if (!supabase) {
+      throw new Error('Supabase client is not configured')
+    }
+
+    const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined
+    const { error: googleSignInError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: redirectTo ? { redirectTo } : undefined,
+    })
+
+    if (googleSignInError) {
+      throw googleSignInError
+    }
+  }, [])
+
   const signInWithPassword = useCallback(async (email: string, password: string) => {
     if (!supabase) {
       throw new Error('Supabase client is not configured')
@@ -164,6 +181,7 @@ export function useSupabaseSession(): SupabaseSessionState {
     error,
     sendOtp,
     verifyOtp,
+    signInWithGoogle,
     signInWithPassword,
     signUpWithEmailPassword,
     signOut,

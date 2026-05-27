@@ -25,14 +25,18 @@ This document is a planning artifact only. It does not change app behavior.
 
 ## 3. Desktop web plan
 
-- Keep the existing Supabase JS client.
-- Add a `signInWithGoogle` helper to `useSupabaseSession`.
-- Add a `Continue with Google` button to the desktop auth card.
-- Keep the email + password form below the Google button.
-- Keep OTP out of the UI.
-- Confirm redirect and callback handling for:
-  - local development
-  - deployed desktop URL
+- Implemented in this repo slice:
+  - Keep the existing Supabase JS client.
+  - Add a `signInWithGoogle` helper to `useSupabaseSession`.
+  - Add a `Continue with Google` button to the desktop auth card.
+  - Keep the email + password form below the Google button.
+  - Keep OTP out of the UI.
+- Still required outside the repo:
+  - Enable and configure the Google provider in Supabase.
+  - Confirm redirect and callback handling for local development.
+  - Confirm redirect and callback handling for the deployed desktop URL.
+- Runtime note:
+  - If the Google provider is not configured in Supabase, the button should fail generically rather than pretending to succeed.
 
 ## 4. iOS plan
 
@@ -69,3 +73,9 @@ Recommended order:
 - iOS Google login returns to the app.
 - Clean iOS launch still opens `AuthView` when signed out.
 - DEBUG routes still work.
+
+## 8. Current implementation status
+
+- Desktop Google OAuth button and helper: implemented.
+- Supabase/Google provider configuration: still required outside the repo.
+- iOS Google OAuth: future work only.
