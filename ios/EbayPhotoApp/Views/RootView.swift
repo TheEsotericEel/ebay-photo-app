@@ -2191,9 +2191,11 @@ private struct QueueReviewSheet: View {
             isSubmitting = true
             Task {
               let succeeded = await onSubmit()
-              isSubmitting = false
-              if succeeded {
-                dismiss()
+              await MainActor.run {
+                isSubmitting = false
+                if succeeded {
+                  dismiss()
+                }
               }
             }
           }
@@ -2222,6 +2224,16 @@ private struct QueueReviewSheet: View {
                   .foregroundStyle(.secondary)
               }
             }
+          } else if !appState.queueEligibleForSubmit().isEmpty {
+            Text("Ready to submit the finalized queued items.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .accessibilityIdentifier("queueReview.submitStatus")
+          } else if !appState.queuedItemPackets.isEmpty {
+            Text("No finalized items are ready to submit.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .accessibilityIdentifier("queueReview.submitStatus")
           } else if !appState.uploadMessage.isEmpty {
             Text(appState.uploadMessage)
               .font(.footnote)

@@ -63,6 +63,8 @@ Use the route harness in:
 - `docs/DEBUG_LAUNCH_ROUTES.md`
 - `./scripts/verify-debug-launch-routes.sh`
 
+The harness auto-selects a booted simulator if one exists. If none is booted, it boots a suitable iPhone simulator automatically, preferring `Smoke iPhone 17 Pro` when available.
+
 It covers the debug launch paths for:
 
 - clean normal launch
