@@ -306,6 +306,7 @@ final class SupabaseService: ObservableObject {
     #if DEBUG
     AppLog.auth.debug("Supabase OAuth intended redirect target: \(redirectURL.absoluteString, privacy: .public)")
     
+    var isRedirectValid = false
     if let components = URLComponents(url: signInURL, resolvingAgainstBaseURL: false) {
       AppLog.auth.debug("Generated OAuth URL host: \(components.host ?? "none", privacy: .public)")
       
@@ -316,7 +317,12 @@ final class SupabaseService: ObservableObject {
       if let decodedValue = redirectToItem?.value {
         let isMatch = decodedValue == "ebayphotoapp://auth-callback"
         AppLog.auth.debug("Decoded redirect_to equals ebayphotoapp://auth-callback: \(isMatch, privacy: .public)")
+        isRedirectValid = isMatch
       }
+    }
+    
+    guard isRedirectValid else {
+      throw AppServiceError.invalidRequest("DEBUG GUARD: OAuth redirect_to missing or incorrect in generated URL.")
     }
     #endif
     resetOAuthFlowState()

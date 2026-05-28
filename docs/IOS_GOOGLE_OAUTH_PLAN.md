@@ -127,6 +127,9 @@ Keep the existing Supabase config keys unchanged:
   - Whether `redirect_to` is present in the `signInURL` and its value.
   - Generated OAuth URL host.
 - Confirmed `ASWebAuthenticationSession` uses `oauthCallbackScheme` which evaluates to `ebayphotoapp`.
+- Added a DEBUG guard before opening Google:
+  - If the DEBUG guard trips, the problem is iOS URL generation.
+  - If the DEBUG guard passes but the app still opens Vercel/PWA, the problem is Supabase hosted redirect allow-list/config fallback.
 
 ## 11. Manual Device Test Required
 
