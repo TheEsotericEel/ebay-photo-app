@@ -303,6 +303,9 @@ final class SupabaseService: ObservableObject {
     )
 
     AppLog.auth.info("Google sign-in requested")
+    #if DEBUG
+    AppLog.auth.debug("Supabase OAuth redirect target: \(redirectURL.absoluteString, privacy: .public)")
+    #endif
     resetOAuthFlowState()
     activeOAuthSession?.cancel()
 

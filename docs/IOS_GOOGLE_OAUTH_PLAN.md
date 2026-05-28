@@ -53,7 +53,7 @@ Planned iOS URL handling:
 Required Supabase Auth setup:
 - Enable the Google provider.
 - Configure the Google OAuth client ID and client secret in Supabase.
-- Add `ebayphotoapp://auth-callback` to the Supabase redirect allow-list.
+- Add both `ebayphotoapp://auth-callback` and `ebayphotoapp://auth-callback/` to the Supabase redirect allow-list.
 - Add any additional exact redirect URLs only if the implementation later needs them for simulator or development testing.
 
 Required Google / Auth Platform setup:
