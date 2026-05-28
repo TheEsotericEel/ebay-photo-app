@@ -84,3 +84,7 @@ Recommended order:
   - Supabase returned `400` with `Unsupported provider: provider is not enabled`.
   - This means the desktop code is wired correctly, but the Google provider is not enabled in the Supabase Auth dashboard for this project yet.
   - The exact dashboard-side unblocker is to enable the Google provider in Supabase Auth and finish the Google OAuth client configuration there.
+- Verified desktop runtime on 2026-05-28:
+  - The button now redirects to the Google sign-in page with the provided client ID.
+  - Desktop password sign-in still restores the local workspace without the IndexedDB object-store error.
+  - Full Google account completion was not exercised in this run because a credentialed Google login was not entered.

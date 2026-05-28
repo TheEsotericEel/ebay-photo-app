@@ -4,7 +4,7 @@
  */
 
 export const DB_NAME = 'ebay-photo-spike'
-export const DB_VERSION = 3
+export const DB_VERSION = 5
 
 export const STORE_STORE_NAME = 'stores'
 export const BATCH_STORE_NAME = 'batches'

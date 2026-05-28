@@ -1,4 +1,4 @@
-import { BATCH_STORE_NAME, DB_NAME, DB_VERSION, STORE_STORE_NAME } from './dbConfig'
+import { BATCH_STORE_NAME, DB_NAME, DB_VERSION, ITEM_STORE_NAME, PHOTO_STORE_NAME, STORE_STORE_NAME } from './dbConfig'
 
 export interface StoreRecord {
   id: string
@@ -64,6 +64,17 @@ function openWorkflowDb(dbName = DB_NAME, version = DB_VERSION): Promise<IDBData
         const batchStore = db.createObjectStore(BATCH_STORE_NAME, { keyPath: 'id' })
         batchStore.createIndex('storeId', 'storeId', { unique: false })
         batchStore.createIndex('status', 'status', { unique: false })
+      }
+
+      if (!db.objectStoreNames.contains(PHOTO_STORE_NAME)) {
+        db.createObjectStore(PHOTO_STORE_NAME, { keyPath: 'id' })
+      }
+
+      if (!db.objectStoreNames.contains(ITEM_STORE_NAME)) {
+        const itemStore = db.createObjectStore(ITEM_STORE_NAME, { keyPath: 'id' })
+        itemStore.createIndex('storeId', 'storeId', { unique: false })
+        itemStore.createIndex('batchId', 'batchId', { unique: false })
+        itemStore.createIndex('itemNumber', 'itemNumber', { unique: false })
       }
     }
     req.onsuccess = () => resolve(req.result)
