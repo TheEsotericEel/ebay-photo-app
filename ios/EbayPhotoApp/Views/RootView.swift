@@ -304,7 +304,7 @@ struct RootView: View {
       return false
     }
 
-    appState.statusMessage = "Submitting queued items…"
+    appState.statusMessage = "Submitting queued items… Queue Review stays open."
     appState.uploadMessage = ""
 
     if advanceCurrentDraftIfNeeded, !appState.capturedPhotos.isEmpty {
@@ -313,22 +313,25 @@ struct RootView: View {
 
     let eligible = appState.queueEligibleForSubmit()
     guard !eligible.isEmpty else {
-      appState.statusMessage = "No queued items are ready to submit."
+      appState.statusMessage = "No queued items are ready to submit. Queue Review stays open."
       appState.uploadMessage = ""
       return false
     }
 
+    let eligibleCount = eligible.count
     var submittedCount = 0
     var failedCount = 0
 
-    for item in eligible {
+    for (index, item) in eligible.enumerated() {
       appState.markQueuedItemUploadAttemptStarted(itemId: item.id)
       appState.updateQueuedItemSubmitState(item.id, state: .submitting)
+      let photoCount = item.photos.count
+      let photoLabel = photoCount == 1 ? "photo" : "photos"
       appState.setQueueSubmitProgress(
         itemId: item.id,
         itemNumber: item.itemNumber,
         stage: "submitting_item",
-        message: "Submitting item \(item.itemNumber)"
+        message: "Submitting item \(index + 1) of \(eligibleCount) (\(photoCount) \(photoLabel))"
       )
       do {
         let packet = try appState.makeUploadPacket(from: item)

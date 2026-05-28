@@ -122,3 +122,4 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 - `Capture Home -> Upload Batch` still refuses to submit if the current draft has photos and shows: `Finish the current item before submitting.`
 - The mock flow is intentionally not used as a substitute for the live capture flow.
 - The debug route harness is the preferred local verification entry point for deterministic launch-state checks.
+- See [`REMOTE_SUBMIT_VERIFICATION.md`](/Users/joe/Projects/ebay-photo-app/docs/REMOTE_SUBMIT_VERIFICATION.md) for the manual remote-submit checklist and Supabase checks.
