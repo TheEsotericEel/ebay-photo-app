@@ -1,6 +1,6 @@
 # iOS Google OAuth Plan
 
-This document started as a planning artifact. The iOS OAuth foundation has now been implemented in the app, and this file records the remaining setup and verification notes.
+This document started as a planning artifact. Slice 1 has only added native Google Sign-In scaffolding so far; the browser-based Supabase OAuth path is still the active login behavior until the native bridge lands.
 
 ## 1. Current iOS auth architecture
 
@@ -14,24 +14,20 @@ This document started as a planning artifact. The iOS OAuth foundation has now b
   - sign-out
   - cached session restoration
   - authenticated workspace/item requests
-- `Info.plist` currently has Supabase config keys and no URL scheme for OAuth callbacks.
-- `AppDelegate` currently handles portrait locking only. There is no OAuth URL handling yet.
-- Foundation slice implemented on 2026-05-28:
-  - `ebayphotoapp://auth-callback` URL scheme added to `Info.plist`.
-  - The app receives OAuth callback URLs safely and logs only a generic message.
-  - The official Supabase Swift client was added for OAuth initiation and callback/session exchange.
-  - `SupabaseService` keeps email/password auth and workspace access as the app-facing façade.
-  - `AuthView` now enables `Continue with Google` alongside the existing email/password fallback.
+- `Info.plist` currently has Supabase config keys plus Google client-ID placeholders, but not the native Google callback URL scheme yet.
+- `AppDelegate` currently handles portrait locking only. Google callback URL handling is deferred to the native bridge slice.
+- Slice 1 scaffolding implemented on 2026-05-28:
+  - GoogleSignIn-iOS package references were added to the Xcode project.
+  - `GIDClientID` and `GIDServerClientID` build-setting plumbing was added.
+  - The app still uses the existing browser-session Supabase OAuth path for the visible `Continue with Google` button.
 
 ## 2. Recommended OAuth approach
 
 Recommended path:
-- Keep the Supabase Swift client in place for iOS OAuth initiation, callback exchange, and session refresh/persistence.
+- Keep Supabase as the final session authority.
+- Add native Google Sign-In as a bridge that produces Google tokens for Supabase session creation.
 - Keep `SupabaseService` as the app-facing source of truth for account state and workspace requests.
-- After OAuth completes, bridge the resulting Supabase session into the existing app state and persistence flow.
-- Supabase Swift dependency status:
-  - Added in the implementation slice.
-  - The callback plumbing and session bridge are now in place.
+- Preserve the existing browser-based OAuth path until the native bridge is wired and validated.
 
 Why this is the recommended path:
 - Native OAuth code exchange and PKCE are easy to get subtly wrong in a custom REST implementation.
@@ -99,26 +95,23 @@ Keep the existing Supabase config keys unchanged:
 
 ## 8. Suggested implementation sequence
 
-1. Add the iOS URL scheme and callback handling. Done.
-2. Add Supabase Swift OAuth/session plumbing behind the existing auth façade. Done.
-3. Verify email/password still works. Done.
-4. Verify Google sign-in returns to the app and restores the same workspace session. Done.
-5. Keep DEBUG routes and dev bypass behavior unchanged. Done.
+1. Add native Google Sign-In package and config scaffolding. Done.
+2. Add the iOS callback handling and token exchange bridge.
+3. Route the Google button through the native flow.
+4. Verify session restore and sign-out cleanup.
+5. Keep DEBUG routes and dev bypass behavior unchanged.
 
 ## 9. Verification checklist
 
 - Clean iOS launch still opens `AuthView` when signed out.
 - Email/password sign-in still works.
 - Email/password account creation still works.
-- Google OAuth returns to the app.
+- Google OAuth returns to the app through the native bridge.
 - The session survives relaunch.
-- Sign-out clears the session.
+- Sign-out clears the session and provider state.
 - DEBUG routes still compile and run.
 - Dated manual verification: 2026-05-28
-  - The iOS Google OAuth plumbing is implemented and build/test verified here.
-  - The callback path is `ebayphotoapp://auth-callback`.
-  - The app is wired to restore the authenticated session and open Capture Home after a successful callback exchange.
-  - Build/test verification completed here, but a live credentialed Google account pass on a physical iOS device still needs to be run manually if you want end-to-end human confirmation outside the simulator/build harness.
+  - This file now reflects the current scaffolding-only state rather than claiming the native bridge is complete.
 
 ## 10. Debugging Redirects
 

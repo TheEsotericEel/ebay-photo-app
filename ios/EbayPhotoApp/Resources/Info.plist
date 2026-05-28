@@ -34,6 +34,10 @@
 	<string>$(SUPABASE_STORAGE_BUCKET)</string>
 	<key>DEVELOPMENT_AUTH_BYPASS</key>
 	<string>$(DEVELOPMENT_AUTH_BYPASS)</string>
+	<key>GIDClientID</key>
+	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
+	<key>GIDServerClientID</key>
+	<string>$(GOOGLE_SERVER_CLIENT_ID)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
