@@ -314,6 +314,7 @@ struct RootView: View {
     let eligible = appState.queueEligibleForSubmit()
     guard !eligible.isEmpty else {
       appState.statusMessage = "No queued items are ready to submit."
+      appState.uploadMessage = ""
       return false
     }
 
@@ -359,8 +360,13 @@ struct RootView: View {
       }
     }
 
-    appState.statusMessage = "Submit finished."
-    appState.uploadMessage = "Submitted \(submittedCount) item(s); failed \(failedCount)."
+    if failedCount == 0 {
+      appState.statusMessage = "Submission complete."
+      appState.uploadMessage = "Submitted \(submittedCount) finalized item(s)."
+    } else {
+      appState.statusMessage = "Submission completed with failures."
+      appState.uploadMessage = "Submitted \(submittedCount) finalized item(s); \(failedCount) failed and remain in queue."
+    }
     appState.clearQueueSubmitProgress()
     return submittedCount > 0 && failedCount == 0
   }
@@ -2184,6 +2190,8 @@ private struct QueueReviewSheet: View {
 
   var body: some View {
     NavigationStack {
+      let eligibleCount = appState.queueEligibleForSubmit().count
+      let totalCount = appState.queuedItemPackets.count
       List {
         Section {
           Button("Submit") {
@@ -2199,7 +2207,7 @@ private struct QueueReviewSheet: View {
               }
             }
           }
-          .disabled(isSubmitting || appState.queueEligibleForSubmit().isEmpty)
+          .disabled(isSubmitting || eligibleCount == 0)
           .accessibilityIdentifier("queueReview.submit")
 
           if isSubmitting || appState.queueSubmitProgress != nil {
@@ -2224,21 +2232,27 @@ private struct QueueReviewSheet: View {
                   .foregroundStyle(.secondary)
               }
             }
-          } else if !appState.queueEligibleForSubmit().isEmpty {
-            Text("Ready to submit the finalized queued items.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-              .accessibilityIdentifier("queueReview.submitStatus")
-          } else if !appState.queuedItemPackets.isEmpty {
-            Text("No finalized items are ready to submit.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-              .accessibilityIdentifier("queueReview.submitStatus")
-          } else if !appState.uploadMessage.isEmpty {
-            Text(appState.uploadMessage)
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-              .accessibilityIdentifier("queueReview.submitStatus")
+          } else {
+            if !appState.uploadMessage.isEmpty {
+              Text(appState.uploadMessage)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("queueReview.submitStatus")
+            }
+
+            if eligibleCount > 0 {
+              Text("\(eligibleCount) finalized queued item\(eligibleCount == 1 ? "" : "s") ready to submit.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("queueReview.submitStatus")
+            } else if totalCount > 0 {
+              Text("No finalized items are ready to submit.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("queueReview.submitStatus")
+            } else if appState.uploadMessage.isEmpty {
+              EmptyView()
+            }
           }
         }
 
