@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfig } from './supabase'
+import { stripSupabaseOAuthCallbackHash } from './oauthCallback'
 
 export interface SupabaseSessionState {
   session: Session | null
@@ -34,6 +35,12 @@ export function useSupabaseSession(): SupabaseSessionState {
         setError(sessionError.message)
       }
       setSession(data.session)
+      if (data.session) {
+        const nextUrl = stripSupabaseOAuthCallbackHash(window.location)
+        if (nextUrl) {
+          window.history.replaceState(window.history.state, '', nextUrl)
+        }
+      }
       setLoading(false)
     }).catch((err: unknown) => {
       if (cancelled) return
@@ -45,6 +52,12 @@ export function useSupabaseSession(): SupabaseSessionState {
       if (cancelled) return
       setSession(nextSession)
       setError(null)
+      if (nextSession) {
+        const nextUrl = stripSupabaseOAuthCallbackHash(window.location)
+        if (nextUrl) {
+          window.history.replaceState(window.history.state, '', nextUrl)
+        }
+      }
       setLoading(false)
     })
 
@@ -53,6 +66,17 @@ export function useSupabaseSession(): SupabaseSessionState {
       data.subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (loading || !session) {
+      return
+    }
+
+    const nextUrl = stripSupabaseOAuthCallbackHash(window.location)
+    if (nextUrl) {
+      window.history.replaceState(window.history.state, '', nextUrl)
+    }
+  }, [loading, session])
 
   const sendOtp = useCallback(async (email: string) => {
     if (!supabase) {
