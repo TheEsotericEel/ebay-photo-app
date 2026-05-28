@@ -98,11 +98,12 @@ struct RootView: View {
               onReviewQueue: { showingQueueReview = true },
               onPreviewIntakeFlow: { showingMockIntakeFlow = true },
               onClearSafeLocalCopies: {
+                let eligibleItems = appState.safeLocalCleanupCandidates()
                 let cleared = appState.clearSafeLocalPhotoCopies()
                 if cleared == 0 {
                   appState.statusMessage = "No safe local copies available to clear."
                 } else {
-                  appState.statusMessage = "Cleared \(cleared) safe local photo copy(ies)."
+                  appState.statusMessage = "Cleared \(cleared) safe local photo copy(ies) from \(eligibleItems.count) submitted item(s)."
                 }
               },
               onSignOut: {
@@ -191,6 +192,17 @@ struct RootView: View {
                 }
               }
             },
+            onSignInWithGoogle: {
+              appState.authError = ""
+              appState.statusMessage = "Google sign-in is coming soon."
+              Task { @MainActor in
+                do {
+                  try await supabase.signInWithGoogle()
+                } catch {
+                  appState.authError = "Google sign-in is not ready yet."
+                }
+              }
+            },
             onOpenInputLab: { showingTextInputLab = true }
           )
         }
@@ -236,6 +248,17 @@ struct RootView: View {
     .task(id: appState.isAuthenticated) {
       guard appState.isAuthenticated, !shouldBypassAuth else { return }
       await pollWorkspaceSnapshotLoop()
+    }
+    .onOpenURL { url in
+      guard url.scheme == "ebayphotoapp", url.host == "auth-callback" else { return }
+      Task { @MainActor in
+        do {
+          try await supabase.handleOAuthCallback(url: url)
+        } catch {
+          appState.authError = "Google sign-in is not ready yet."
+          appState.statusMessage = "Received OAuth callback."
+        }
+      }
     }
     #if DEBUG
     .onAppear {
@@ -687,6 +710,7 @@ private struct AuthView: View {
   let isAuthenticating: Bool
   let onSignInWithPassword: () -> Void
   let onCreatePasswordAccount: () -> Void
+  let onSignInWithGoogle: () -> Void
   let onOpenInputLab: (() -> Void)?
 
   var body: some View {
@@ -718,6 +742,10 @@ private struct AuthView: View {
             )
 
             VStack(alignment: .leading, spacing: 10) {
+              Button("Continue with Google", action: onSignInWithGoogle)
+                .accessibilityIdentifier("auth.googleSignIn")
+                .disabled(true)
+                .buttonStyle(.bordered)
               Button("Sign In", action: onSignInWithPassword)
                 .accessibilityIdentifier("auth.signIn")
                 .disabled(isAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -728,9 +756,13 @@ private struct AuthView: View {
                 .buttonStyle(.bordered)
             }
 
+            Text("Google sign-in will be enabled after the iOS callback flow is wired up.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+
             if isAuthenticating {
               ProgressView("Working...")
-                .font(.footnote)
+              .font(.footnote)
                 .foregroundStyle(.secondary)
             }
           }
@@ -933,17 +965,22 @@ private struct CaptureHomeView: View {
           }
 
           CaptureHomeCard(title: "Utilities") {
+            let safeLocalCleanupCandidates = appState.safeLocalCleanupCandidates()
             VStack(alignment: .leading, spacing: 10) {
               Button(action: onClearSafeLocalCopies) {
                 homeUtilityLabel(
-                  title: "Clear Safe Local Copies",
-                  subtitle: "Removes local photo duplicates that are safe to discard.",
+                  title: safeLocalCleanupCandidates.isEmpty
+                    ? "Clear Safe Local Copies"
+                    : "Clear Safe Local Copies (\(safeLocalCleanupCandidates.count))",
+                  subtitle: safeLocalCleanupCandidates.isEmpty
+                    ? "No submitted items are eligible for manual local cleanup yet."
+                    : "\(safeLocalCleanupCandidates.count) submitted item(s) are eligible for manual local cleanup.",
                   systemImage: "trash"
                 )
               }
               .buttonStyle(.plain)
-              .disabled(appState.safeLocalCleanupCandidates().isEmpty)
-              .opacity(appState.safeLocalCleanupCandidates().isEmpty ? 0.5 : 1)
+              .disabled(safeLocalCleanupCandidates.isEmpty)
+              .opacity(safeLocalCleanupCandidates.isEmpty ? 0.5 : 1)
 
               #if DEBUG
               Button(action: onUploadFixture) {
@@ -2331,6 +2368,25 @@ private struct QueueReviewItemRow: View {
           Text("\(item.photos.count) photo(s)")
             .font(.subheadline.weight(.medium))
             .foregroundStyle(.secondary)
+
+          switch item.submitState {
+          case .submitted:
+            Text("Submitted items are eligible for manual local cleanup.")
+              .font(.caption.weight(.medium))
+              .foregroundStyle(.green.opacity(0.92))
+          case .failed:
+            Text("Failed items remain preserved for retry.")
+              .font(.caption.weight(.medium))
+              .foregroundStyle(.red.opacity(0.88))
+          case .local:
+            Text("Local items remain preserved until they are submitted.")
+              .font(.caption.weight(.medium))
+              .foregroundStyle(.secondary)
+          case .submitting:
+            Text("Uploading now. Not eligible for cleanup.")
+              .font(.caption.weight(.medium))
+              .foregroundStyle(.yellow.opacity(0.88))
+          }
 
           if !item.sku.isEmpty {
             queueDetailLabel("SKU", value: item.sku)

@@ -50,7 +50,9 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 - Submit is disabled when there are no eligible queued items.
 - Submit shows explicit ready-count, in-progress, success, and failure messaging.
 - Queue Review stays open after submit so the user can inspect submitted, failed, and retryable items.
-- Submitted items retain their queue state until existing cleanup rules apply.
+- Submitted items retain their queue state until the user chooses the manual safe-local cleanup action.
+- `Clear Safe Local Copies` is user-initiated only; it is eligible only for submitted items whose photo assets are already uploaded or otherwise verified safe to clear.
+- Current draft photos, local queued items, failed queued items, and retryable items remain preserved.
 - Mixed success/failure states remain visible in the queue using the existing item submit-state fields.
 
 ### Main Screen return
@@ -94,7 +96,7 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 ## Remaining workflow risks
 
 - Real remote upload confirmation remains the least proven part of the flow.
-- Local photo cleanup policy after successful submit is still intentionally conservative.
+- Local photo cleanup policy after successful submit is intentionally conservative and user-initiated only.
 - The seeded live-camera route can still show the first-run camera permission prompt on fresh simulator boots.
 - There is still no dedicated UI test target; verification is script/manual plus unit tests.
 - Some live flow interactions are still more code-backed than fully interactive verified.
@@ -120,6 +122,7 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 ## Notes
 
 - `Capture Home -> Upload Batch` still refuses to submit if the current draft has photos and shows: `Finish the current item before submitting.`
+- `Clear Safe Local Copies` never touches current draft photos and only operates on submitted items that are already eligible for manual local cleanup.
 - The mock flow is intentionally not used as a substitute for the live capture flow.
 - The debug route harness is the preferred local verification entry point for deterministic launch-state checks.
 - See [`REMOTE_SUBMIT_VERIFICATION.md`](/Users/joe/Projects/ebay-photo-app/docs/REMOTE_SUBMIT_VERIFICATION.md) for the manual remote-submit checklist and Supabase checks.

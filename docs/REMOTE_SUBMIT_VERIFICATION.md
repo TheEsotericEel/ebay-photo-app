@@ -64,6 +64,7 @@ For route validation and screenshots:
   - `Submitted 1 finalized item(s). Queue Review remains open.`
 - Submitted queue rows should visibly show `Submitted`.
 - Local photo assets should not be auto-deleted in this slice.
+- After a successful remote submit has been confirmed, the user may use `Clear Safe Local Copies` from Capture Home to remove only submitted items' safe local duplicates; it remains manual and never targets current draft photos.
 
 ### On partial success / mixed result
 - Queue Review stays open.

@@ -161,7 +161,7 @@ Agent rule:
 | Feature | Scope | Current handling | Agent rule |
 | --- | --- | --- | --- |
 | Current draft item | Current | iOS stores active photos and metadata before queueing. | Preserve. |
-| `Next` as item boundary | Current | Queues current draft and increments item number. | Preserve. |
+| `Next` as item boundary | Current | Camera Next opens `ItemDetailsScreen`; `ItemDetailsScreen` Next Item finalizes the current draft, queues it, and increments item number. | Preserve. |
 | Local multi-item queue | Current | Queued item packets exist. | Preserve. |
 | Queue persistence | Current | Queue state and photo files persist in app storage. | Preserve. |
 | Store assignment per queued item | Current | Queued item stores store and batch context. | Preserve. |
@@ -263,7 +263,7 @@ Agent rule:
 | Thumbnail variant storage | Current | Required. | Preserve. |
 | Optional original storage | Current / optional | May exist. | Do not make required. |
 | Photo retention fields | Current | Used for cleanup timing. | Preserve. |
-| Safe local cleanup | Current | Clears local copies after upload safety. | Preserve. |
+| Safe local cleanup | Current | User-initiated only; clears local copies only for submitted items that are already safe to discard. | Preserve. |
 | Retention-based remote photo cleanup | Current / limited | Deletes eligible storage objects and marks photo state. | Preserve. |
 | Tombstone-first entity delete | MVP foundation | Not current. | Do not add hard-delete assumptions that block it. |
 | Production-safe delete model | MVP required before public release | Not current. | Required before public release. |
