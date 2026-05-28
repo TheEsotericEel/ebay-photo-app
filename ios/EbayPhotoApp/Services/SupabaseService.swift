@@ -68,11 +68,20 @@ final class SupabaseService: ObservableObject {
   }
 
   private final class OAuthPresentationAnchorProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-      UIApplication.shared.connectedScenes
+    private weak var anchorWindow: UIWindow?
+
+    @MainActor
+    func prepareAnchor() -> Bool {
+      let window = UIApplication.shared.connectedScenes
         .compactMap { $0 as? UIWindowScene }
         .flatMap { $0.windows }
-        .first(where: { $0.isKeyWindow }) ?? ASPresentationAnchor()
+        .first(where: { $0.isKeyWindow })
+      self.anchorWindow = window
+      return window != nil
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+      anchorWindow ?? ASPresentationAnchor()
     }
   }
 
@@ -296,6 +305,13 @@ final class SupabaseService: ObservableObject {
     AppLog.auth.info("Google sign-in requested")
     resetOAuthFlowState()
     activeOAuthSession?.cancel()
+
+    let hasAnchor = await MainActor.run {
+      oauthPresentationAnchorProvider.prepareAnchor()
+    }
+    guard hasAnchor else {
+      throw AppServiceError.server("Google sign-in could not find an active presentation window.")
+    }
 
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       let session = ASWebAuthenticationSession(url: signInURL, callbackURLScheme: oauthCallbackScheme) { [weak self] callbackURL, error in
@@ -544,7 +560,11 @@ final class SupabaseService: ObservableObject {
       AppLog.auth.info("Session refresh succeeded")
     } catch {
       AppLog.auth.error("Session refresh failed error=\(error.localizedDescription, privacy: .public)")
-      if isExpiredSessionHTTPError(error) {
+      let errMsg = error.localizedDescription.lowercased()
+      if isExpiredSessionHTTPError(error)
+         || errMsg.contains("invalid refresh token")
+         || errMsg.contains("refresh token not found")
+         || errMsg.contains("invalid_grant") {
         signOut()
       }
       throw error
