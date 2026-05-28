@@ -127,3 +127,15 @@ Keep the existing Supabase config keys unchanged:
   - Whether `redirect_to` is present in the `signInURL` and its value.
   - Generated OAuth URL host.
 - Confirmed `ASWebAuthenticationSession` uses `oauthCallbackScheme` which evaluates to `ebayphotoapp`.
+
+## 11. Manual Device Test Required
+
+The OAuth issue must be manually tested on a physical device. Simulator tests verify the code structure, but physical device tests verify the actual web browser redirect routing and Supabase integration.
+
+When running the physical device test, please paste ONLY the following sanitized diagnostic lines from the Xcode console:
+- `Supabase OAuth intended redirect target:`
+- `Generated OAuth URL host:`
+- `Generated OAuth URL contains redirect_to:`
+- `Decoded redirect_to equals ebayphotoapp://auth-callback:`
+
+Do not paste full URLs, query strings, callback URLs, auth codes, or tokens.
