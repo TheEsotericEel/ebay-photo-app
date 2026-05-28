@@ -12,6 +12,7 @@ struct RootView: View {
   @State private var showingMockIntakeFlow = false
   @State private var showingTextInputLab = false
   @State private var isAuthenticating = false
+  @State private var isGoogleAuthenticating = false
   @State private var didRestoreSession = false
   @State private var didSeedLiveCameraDraft = false
 
@@ -136,8 +137,9 @@ struct RootView: View {
             statusMessage: appState.statusMessage,
             errorMessage: appState.authError,
             isAuthenticating: isAuthenticating,
+            isGoogleAuthenticating: isGoogleAuthenticating,
             onSignInWithPassword: {
-              guard !isAuthenticating else { return }
+              guard !isAuthenticating, !isGoogleAuthenticating else { return }
               isAuthenticating = true
               appState.authError = ""
               appState.statusMessage = "Signing in..."
@@ -162,7 +164,7 @@ struct RootView: View {
               }
             },
             onCreatePasswordAccount: {
-              guard !isAuthenticating else { return }
+              guard !isAuthenticating, !isGoogleAuthenticating else { return }
               isAuthenticating = true
               appState.authError = ""
               appState.statusMessage = "Creating account..."
@@ -193,13 +195,22 @@ struct RootView: View {
               }
             },
             onSignInWithGoogle: {
+              guard !isAuthenticating, !isGoogleAuthenticating else { return }
+              isGoogleAuthenticating = true
               appState.authError = ""
-              appState.statusMessage = "Google sign-in is coming soon."
+              appState.statusMessage = "Opening Google sign-in..."
               Task { @MainActor in
+                defer { isGoogleAuthenticating = false }
                 do {
                   try await supabase.signInWithGoogle()
+                  appState.isAuthenticated = true
+                  appState.authPassword = ""
+                  appState.authCode = ""
+                  appState.authError = ""
+                  appState.statusMessage = "Signed in with Google."
                 } catch {
-                  appState.authError = "Google sign-in is not ready yet."
+                  appState.authError = "Google sign-in failed. Try again."
+                  appState.statusMessage = "Google sign-in failed."
                 }
               }
             },
@@ -254,8 +265,13 @@ struct RootView: View {
       Task { @MainActor in
         do {
           try await supabase.handleOAuthCallback(url: url)
+          appState.isAuthenticated = true
+          appState.authPassword = ""
+          appState.authCode = ""
+          appState.authError = ""
+          appState.statusMessage = "Signed in with Google."
         } catch {
-          appState.authError = "Google sign-in is not ready yet."
+          appState.authError = "Google sign-in failed. Try again."
           appState.statusMessage = "Received OAuth callback."
         }
       }
@@ -509,55 +525,6 @@ private struct CameraContextStrip: View {
   }
 }
 
-private struct CameraMetadataTray: View {
-  @Binding var sku: String
-  @Binding var weight: String
-  @Binding var dimensions: String
-  @Binding var notes: String
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 8) {
-        InlineMetadataField(
-          title: "SKU",
-          text: $sku,
-          autocapitalize: .characters,
-          autocorrectDisabled: true
-        )
-
-        InlineMetadataField(
-          title: "Wt",
-          text: $weight,
-          autocorrectDisabled: true
-        )
-      }
-
-      HStack(spacing: 8) {
-        InlineMetadataField(
-          title: "Dim",
-          text: $dimensions,
-          autocorrectDisabled: true
-        )
-
-        InlineMetadataField(
-          title: "Note",
-          text: $notes
-        )
-      }
-    }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 7)
-    .background {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(.white.opacity(0.06))
-    }
-    .overlay {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .stroke(.white.opacity(0.1), lineWidth: 1)
-    }
-  }
-}
-
 private struct InlineMetadataField: View {
   let title: String
   @Binding var text: String
@@ -708,6 +675,7 @@ private struct AuthView: View {
   let statusMessage: String
   let errorMessage: String
   let isAuthenticating: Bool
+  let isGoogleAuthenticating: Bool
   let onSignInWithPassword: () -> Void
   let onCreatePasswordAccount: () -> Void
   let onSignInWithGoogle: () -> Void
@@ -720,7 +688,7 @@ private struct AuthView: View {
           VStack(alignment: .leading, spacing: 8) {
             Text("Ebay Photo App")
               .font(.largeTitle.weight(.semibold))
-            Text("Sign in with your app account. Google sign-in is planned once the auth surface is ready.")
+            Text("Sign in with your app account. Google sign-in opens in a browser session and returns through the app callback.")
               .font(.footnote)
               .foregroundStyle(.secondary)
           }
@@ -744,24 +712,24 @@ private struct AuthView: View {
             VStack(alignment: .leading, spacing: 10) {
               Button("Continue with Google", action: onSignInWithGoogle)
                 .accessibilityIdentifier("auth.googleSignIn")
-                .disabled(true)
+                .disabled(isAuthenticating || isGoogleAuthenticating)
                 .buttonStyle(.bordered)
               Button("Sign In", action: onSignInWithPassword)
                 .accessibilityIdentifier("auth.signIn")
-                .disabled(isAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(isAuthenticating || isGoogleAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .buttonStyle(.borderedProminent)
               Button("Create Account", action: onCreatePasswordAccount)
                 .accessibilityIdentifier("auth.createAccount")
-                .disabled(isAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(isAuthenticating || isGoogleAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .buttonStyle(.bordered)
             }
 
-            Text("Google sign-in will be enabled after the iOS callback flow is wired up.")
+            Text("Google sign-in uses the app callback flow and opens in a browser session.")
               .font(.footnote)
               .foregroundStyle(.secondary)
 
-            if isAuthenticating {
-              ProgressView("Working...")
+            if isAuthenticating || isGoogleAuthenticating {
+              ProgressView(isGoogleAuthenticating ? "Signing in with Google..." : "Working...")
               .font(.footnote)
                 .foregroundStyle(.secondary)
             }

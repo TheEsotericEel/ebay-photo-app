@@ -126,3 +126,9 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 - The mock flow is intentionally not used as a substitute for the live capture flow.
 - The debug route harness is the preferred local verification entry point for deterministic launch-state checks.
 - See [`REMOTE_SUBMIT_VERIFICATION.md`](/Users/joe/Projects/ebay-photo-app/docs/REMOTE_SUBMIT_VERIFICATION.md) for the manual remote-submit checklist and Supabase checks.
+
+## Current cleanup audit
+
+- `CameraMetadataTray` was removed from `RootView.swift` because it was no longer referenced after the live camera moved to `ItemDetailsScreen`.
+- The remaining cleanup policy is consistent with current flow: submitted items may become manually eligible for safe local cleanup, while local, failed, retryable, and current-draft photos stay protected.
+- No other clearly stale capture-flow code was found in the reviewed path that was safe to remove without a broader refactor.
