@@ -12,6 +12,13 @@ import { calculateRetentionWindow, type RemoteRetentionMode } from '../adapters/
 import { IndexedDbWorkflowStore, type BatchRecord, type StoreRecord } from '../adapters/workflowStore'
 import { createItemMutation, enqueueItemMutation, flushItemMutations, getClientId } from '../adapters/itemSync'
 import { supabase } from '../lib/supabase'
+import {
+  getDesktopAccountSummary,
+  getLastMethodLabel,
+  loadDesktopAuthPreferences,
+  saveDesktopAuthPreferences,
+  type DesktopAuthMethod,
+} from '../lib/desktopAuth'
 import { useSupabaseSession } from '../lib/useSupabaseSession'
 
 type StoreCounts = {
@@ -309,6 +316,7 @@ export function DesktopListerPrototype() {
   const [googleSigningIn, setGoogleSigningIn] = useState(false)
   const [passwordSigningIn, setPasswordSigningIn] = useState(false)
   const [passwordSigningUp, setPasswordSigningUp] = useState(false)
+  const [lastAuthPreferences, setLastAuthPreferences] = useState(() => loadDesktopAuthPreferences())
 
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [items, setItems] = useState<ItemPacket[]>([])
@@ -329,6 +337,33 @@ export function DesktopListerPrototype() {
   const realtimeImportTimerRef = useRef<number | null>(null)
 
   const photoById = useMemo(() => buildPhotoById(photos), [photos])
+  const accountSummary = useMemo(() => getDesktopAccountSummary(session), [session])
+
+  useEffect(() => {
+    const stored = loadDesktopAuthPreferences()
+    if (stored.lastEmail) {
+      setEmail(stored.lastEmail)
+    }
+    setLastAuthPreferences(stored)
+  }, [])
+
+  useEffect(() => {
+    if (!session?.user) {
+      return
+    }
+
+    const nextEmail = session.user.email?.trim() || null
+    const nextMethod: DesktopAuthMethod = session.user.app_metadata?.provider === 'google' ? 'google' : 'password'
+    const nextPreferences = {
+      lastEmail: nextEmail,
+      lastMethod: nextMethod,
+    }
+    saveDesktopAuthPreferences(nextPreferences)
+    if (nextEmail) {
+      setEmail(nextEmail)
+    }
+    setLastAuthPreferences(nextPreferences)
+  }, [session])
 
   const loadDesktopData = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -688,11 +723,16 @@ export function DesktopListerPrototype() {
   }, [batchesByStore, loadDesktopData, session, supabase])
 
   const handleSignInWithPassword = useCallback(async () => {
+    const trimmedEmail = email.trim()
+    if (trimmedEmail) {
+      saveDesktopAuthPreferences({ lastEmail: trimmedEmail, lastMethod: 'password' })
+      setLastAuthPreferences({ lastEmail: trimmedEmail, lastMethod: 'password' })
+    }
     setPasswordSigningIn(true)
     setLoginError(null)
     setLoginMessage(null)
     try {
-      await signInWithPassword(email.trim(), password.trim())
+      await signInWithPassword(trimmedEmail, password.trim())
       setLoginMessage('Signed in with password.')
     } catch (error) {
       setLoginError('Sign in failed. Check your email and password.')
@@ -702,6 +742,16 @@ export function DesktopListerPrototype() {
   }, [email, password, signInWithPassword])
 
   const handleSignInWithGoogle = useCallback(async () => {
+    const trimmedEmail = email.trim()
+    if (trimmedEmail) {
+      saveDesktopAuthPreferences({ lastEmail: trimmedEmail, lastMethod: 'google' })
+    } else {
+      saveDesktopAuthPreferences({ lastMethod: 'google' })
+    }
+    setLastAuthPreferences((current) => ({
+      lastEmail: trimmedEmail || current.lastEmail,
+      lastMethod: 'google',
+    }))
     setGoogleSigningIn(true)
     setLoginError(null)
     setLoginMessage(null)
@@ -716,11 +766,16 @@ export function DesktopListerPrototype() {
   }, [signInWithGoogle])
 
   const handleCreateAccount = useCallback(async () => {
+    const trimmedEmail = email.trim()
+    if (trimmedEmail) {
+      saveDesktopAuthPreferences({ lastEmail: trimmedEmail, lastMethod: 'password' })
+      setLastAuthPreferences({ lastEmail: trimmedEmail, lastMethod: 'password' })
+    }
     setPasswordSigningUp(true)
     setLoginError(null)
     setLoginMessage(null)
     try {
-      const signedIn = await signUpWithEmailPassword(email.trim(), password.trim())
+      const signedIn = await signUpWithEmailPassword(trimmedEmail, password.trim())
       if (signedIn) {
         setLoginMessage('Account created and signed in.')
       } else {
@@ -750,6 +805,7 @@ export function DesktopListerPrototype() {
     const authStateError = authError
       ? 'Unable to load authentication state. Check Supabase settings.'
       : null
+    const lastMethodLabel = getLastMethodLabel(lastAuthPreferences.lastMethod)
 
     return (
       <div style={styles.page}>
@@ -814,6 +870,16 @@ export function DesktopListerPrototype() {
           {loginMessage ? (
             <p style={styles.infoText} data-testid="auth-status">{loginMessage}</p>
           ) : null}
+          {lastMethodLabel || lastAuthPreferences.lastEmail ? (
+            <div style={styles.lastAuthNote}>
+              {lastAuthPreferences.lastEmail ? (
+                <span>Last email: {lastAuthPreferences.lastEmail}</span>
+              ) : null}
+              {lastMethodLabel ? (
+                <span>{lastAuthPreferences.lastEmail ? ' · ' : ''}Last method: {lastMethodLabel}</span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     )
@@ -829,18 +895,33 @@ export function DesktopListerPrototype() {
               {dataLoading ? 'Loading local stores and items...' : 'Pick a store to review item bundles.'}
             </p>
           </div>
-          <div style={styles.headerActions}>
-            <button
-              type="button"
-              style={styles.secondaryButton}
-              onClick={() => void runWorkspaceSync()}
-              disabled={importingRemote}
-            >
-              {importingRemote ? 'Syncing…' : 'Sync Workspace'}
-            </button>
-            <button type="button" style={styles.secondaryButton} onClick={() => signOut()}>
-              Sign out
-            </button>
+          <div style={styles.accountHeader}>
+            <div style={styles.accountSummary}>
+              <div style={styles.accountLabel}>Signed in as</div>
+              <div style={styles.accountEmail}>{accountSummary.email || 'Unknown email'}</div>
+              {accountSummary.currentMethodLabel ? (
+                <div style={styles.accountMeta}>Via {accountSummary.currentMethodLabel}</div>
+              ) : null}
+              {accountSummary.linkedProviderLabels.length > 0 ? (
+                <div style={styles.accountMeta}>Linked providers: {accountSummary.linkedProviderLabels.join(' · ')}</div>
+              ) : null}
+              {import.meta.env.DEV && accountSummary.userId ? (
+                <div style={styles.accountMeta}>User ID: {accountSummary.userId}</div>
+              ) : null}
+            </div>
+            <div style={styles.headerActions}>
+              <button
+                type="button"
+                style={styles.secondaryButton}
+                onClick={() => void runWorkspaceSync()}
+                disabled={importingRemote}
+              >
+                {importingRemote ? 'Syncing…' : 'Sync Workspace'}
+              </button>
+              <button type="button" style={styles.secondaryButton} onClick={() => signOut()}>
+                Sign out
+              </button>
+            </div>
           </div>
         </header>
 
@@ -919,26 +1000,41 @@ export function DesktopListerPrototype() {
             </p>
           </div>
         </div>
-        <div style={styles.headerActions}>
-          <button
-            type="button"
-            style={styles.secondaryButton}
-            onClick={() => void runWorkspaceSync()}
-            disabled={importingRemote}
-          >
-            {importingRemote ? 'Syncing…' : 'Sync Workspace'}
-          </button>
-          <button
-            type="button"
-            style={styles.secondaryButton}
-            onClick={() => void runRemoteImport(selectedStore.id)}
-            disabled={importingRemote}
-          >
-            {importingRemote ? 'Refreshing…' : 'Refresh'}
-          </button>
-          <button type="button" style={styles.secondaryButton} onClick={() => signOut()}>
-            Sign out
-          </button>
+        <div style={styles.accountHeader}>
+          <div style={styles.accountSummary}>
+            <div style={styles.accountLabel}>Signed in as</div>
+            <div style={styles.accountEmail}>{accountSummary.email || 'Unknown email'}</div>
+            {accountSummary.currentMethodLabel ? (
+              <div style={styles.accountMeta}>Via {accountSummary.currentMethodLabel}</div>
+            ) : null}
+            {accountSummary.linkedProviderLabels.length > 0 ? (
+              <div style={styles.accountMeta}>Linked providers: {accountSummary.linkedProviderLabels.join(' · ')}</div>
+            ) : null}
+            {import.meta.env.DEV && accountSummary.userId ? (
+              <div style={styles.accountMeta}>User ID: {accountSummary.userId}</div>
+            ) : null}
+          </div>
+          <div style={styles.headerActions}>
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={() => void runWorkspaceSync()}
+              disabled={importingRemote}
+            >
+              {importingRemote ? 'Syncing…' : 'Sync Workspace'}
+            </button>
+            <button
+              type="button"
+              style={styles.secondaryButton}
+              onClick={() => void runRemoteImport(selectedStore.id)}
+              disabled={importingRemote}
+            >
+              {importingRemote ? 'Refreshing…' : 'Refresh'}
+            </button>
+            <button type="button" style={styles.secondaryButton} onClick={() => signOut()}>
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1420,6 +1516,16 @@ const styles: Record<string, CSSProperties> = {
     padding: '8px 10px',
     fontSize: '13px',
   },
+  lastAuthNote: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px',
+    alignItems: 'center',
+    color: '#5e6b84',
+    fontSize: '12px',
+    lineHeight: 1.4,
+    marginTop: '2px',
+  },
   errorText: {
     margin: 0,
     color: '#9f2525',
@@ -1445,6 +1551,38 @@ const styles: Record<string, CSSProperties> = {
     alignItems: 'center',
     gap: '8px',
     flexWrap: 'wrap',
+  },
+  accountHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
+  accountSummary: {
+    display: 'grid',
+    gap: '2px',
+    textAlign: 'right',
+    minWidth: '180px',
+  },
+  accountLabel: {
+    color: '#5e6b84',
+    fontSize: '11px',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  accountEmail: {
+    color: '#1e2430',
+    fontSize: '13px',
+    fontWeight: 700,
+    lineHeight: 1.2,
+    wordBreak: 'break-word',
+  },
+  accountMeta: {
+    color: '#5e6b84',
+    fontSize: '12px',
+    lineHeight: 1.35,
   },
   storeGrid: {
     display: 'grid',

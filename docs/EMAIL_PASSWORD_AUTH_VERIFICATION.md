@@ -25,6 +25,8 @@ This checklist is for confirming the current app auth path before Google OAuth i
 - Valid email/password enters the desktop lister.
 - Refresh restores the session after a successful sign-in.
 - Sign out returns to the login card.
+- Signed-in desktop UI shows the account email and provider state clearly.
+- The app may remember the last used email and login method locally, but it does not store passwords.
 
 ## Cross-client verification
 
@@ -40,3 +42,6 @@ This checklist is for confirming the current app auth path before Google OAuth i
 - Verified manually against the real Supabase project on 2026-05-27:
   - iOS invalid login, valid login, sign out, and relaunch restoration passed.
   - Desktop invalid login, valid login, sign out, and session restore passed.
+- Verified manually against the real desktop account/session UX on 2026-05-28:
+  - Signed-in account state now shows email and provider details.
+  - Last-used email/method convenience state is local-only.

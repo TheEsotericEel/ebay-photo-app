@@ -97,3 +97,8 @@ Recommended order:
   - The browser address bar was scrubbed after app load and no longer contained OAuth token hash values.
   - Console output may still show the original callback URL from the initial page load, but that is stale pre-cleanup logging.
   - iOS Google OAuth remains future work.
+- Desktop account/session UX hardening:
+  - The desktop app now shows signed-in email, current provider, and linked providers.
+  - In DEV, the Supabase user ID is visible for same-email identity-link verification.
+  - Last used email and login method are remembered locally for convenience.
+  - Passwords and access tokens are not stored by the app.
