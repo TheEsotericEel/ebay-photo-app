@@ -258,6 +258,11 @@ final class SupabaseService: ObservableObject {
     }
   }
 
+  func signInWithGoogle() async throws {
+    AppLog.auth.info("Google sign-in requested")
+    throw AppServiceError.notConfigured("Google sign-in is not ready yet.")
+  }
+
   func signUpWithEmailPassword(email: String, password: String) async throws -> Bool {
     let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -306,6 +311,15 @@ final class SupabaseService: ObservableObject {
     cachedWorkspaceId = nil
     userDefaults.removeObject(forKey: sessionStoreKey)
     AppLog.auth.info("Session cleared via sign out")
+  }
+
+  func handleOAuthCallback(url: URL) async throws {
+    guard url.scheme == "ebayphotoapp", url.host == "auth-callback" else {
+      throw AppServiceError.invalidRequest("Unsupported OAuth callback URL.")
+    }
+
+    AppLog.auth.info("Received OAuth callback URL")
+    throw AppServiceError.notConfigured("Google sign-in is not ready yet.")
   }
 
   /// Refreshes the access token when expired or close to expiry. No-op if still valid.

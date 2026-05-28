@@ -16,6 +16,11 @@ This is a planning document only. It does not change app behavior.
   - authenticated workspace/item requests
 - `Info.plist` currently has Supabase config keys and no URL scheme for OAuth callbacks.
 - `AppDelegate` currently handles portrait locking only. There is no OAuth URL handling yet.
+- Foundation slice implemented on 2026-05-28:
+  - `ebayphotoapp://auth-callback` URL scheme added to `Info.plist`.
+  - The app now receives OAuth callback URLs safely and logs only a generic message.
+  - `SupabaseService` now has graceful Google OAuth stubs that do not fake success.
+  - `AuthView` now shows a disabled Google sign-in control as a layout placeholder only.
 
 ## 2. Recommended OAuth approach
 
@@ -23,6 +28,9 @@ Recommended path:
 - Introduce the Supabase Swift client for iOS OAuth initiation, callback exchange, and session refresh/persistence.
 - Keep `SupabaseService` as the app-facing source of truth for account state and workspace requests.
 - After OAuth completes, bridge the resulting Supabase session into the existing app state and persistence flow.
+- Supabase Swift dependency status:
+  - Deferred in this foundation slice to avoid project churn.
+  - The callback plumbing is now in place so the next slice can add the package cleanly if needed.
 
 Why this is the recommended path:
 - Native OAuth code exchange and PKCE are easy to get subtly wrong in a custom REST implementation.
@@ -90,7 +98,7 @@ Keep the existing Supabase config keys unchanged:
 
 ## 8. Suggested implementation sequence
 
-1. Add the iOS URL scheme and callback handling.
+1. Add the iOS URL scheme and callback handling. Done in the foundation slice.
 2. Add Supabase Swift OAuth/session plumbing behind the existing auth façade.
 3. Verify email/password still works.
 4. Verify Google sign-in returns to the app and restores the same workspace session.
@@ -105,4 +113,3 @@ Keep the existing Supabase config keys unchanged:
 - The session survives relaunch.
 - Sign-out clears the session.
 - DEBUG routes still compile and run.
-
