@@ -89,7 +89,6 @@ Recommended order:
   - Desktop password sign-in still restores the local workspace without the IndexedDB object-store error.
   - Full Google account completion was not exercised in this run because a credentialed Google login was not entered.
   - OAuth callback hashes are now scrubbed from the visible URL after Supabase restores the session.
-  - A `manifest.json` 401 on a protected Vercel preview is expected and separate from OAuth/session handling.
 - Final manual desktop verification on Vercel:
   - Google OAuth completed and returned to the desktop app.
   - The app entered the desktop lister/items flow.
