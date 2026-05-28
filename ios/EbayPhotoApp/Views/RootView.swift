@@ -361,10 +361,10 @@ struct RootView: View {
     }
 
     if failedCount == 0 {
-      appState.statusMessage = "Submission complete."
-      appState.uploadMessage = "Submitted \(submittedCount) finalized item(s)."
+      appState.statusMessage = "Submission complete. Queue Review stays open."
+      appState.uploadMessage = "Submitted \(submittedCount) finalized item(s). Queue Review remains open."
     } else {
-      appState.statusMessage = "Submission completed with failures."
+      appState.statusMessage = "Submission completed with failures. Queue Review stays open."
       appState.uploadMessage = "Submitted \(submittedCount) finalized item(s); \(failedCount) failed and remain in queue."
     }
     appState.clearQueueSubmitProgress()
@@ -2198,12 +2198,9 @@ private struct QueueReviewSheet: View {
             guard !isSubmitting else { return }
             isSubmitting = true
             Task {
-              let succeeded = await onSubmit()
+              _ = await onSubmit()
               await MainActor.run {
                 isSubmitting = false
-                if succeeded {
-                  dismiss()
-                }
               }
             }
           }

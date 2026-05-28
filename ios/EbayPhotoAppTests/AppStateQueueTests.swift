@@ -69,6 +69,84 @@ final class AppStateQueueTests: XCTestCase {
     XCTAssertEqual(state.queuedItemPackets.first?.photos.map(\.id), photoIds)
   }
 
+  func testSubmittedQueuedItemRemainsInQueueWithSubmittedState() {
+    let state = AppState(userDefaults: defaults, queueRootDirectoryName: queueRootName)
+    state.currentItemSku = "SKU-3"
+    state.currentItemWeight = "1.8 lb"
+    state.currentItemDimensions = "5 x 7 in"
+    state.currentItemNotes = "Ready to submit."
+    state.addCapturedPhoto(makePhoto())
+    state.advanceToNextItem()
+
+    guard let queued = state.queuedItemPackets.first else {
+      XCTFail("Expected queued item")
+      return
+    }
+
+    let photoIds = queued.photos.map(\.id)
+    let remotePhotoId = "remote-photo-1"
+
+    state.markQueuedItemUploadAttemptStarted(itemId: queued.id)
+    state.applyUploadResult(
+      for: queued.id,
+      result: NativeUploadItemPacketV1Result(
+        storeId: "store-1",
+        batchId: "batch-1",
+        itemId: "item-1",
+        photoIdByLocalPhotoId: [photoIds[0].uuidString: remotePhotoId],
+        listingStorageKeys: [],
+        thumbnailStorageKeys: []
+      )
+    )
+    state.updateQueuedItemSubmitState(queued.id, state: .submitted)
+
+    guard let submitted = state.queuedItemPackets.first else {
+      XCTFail("Expected submitted item")
+      return
+    }
+
+    XCTAssertEqual(submitted.submitState, .submitted)
+    XCTAssertNotNil(submitted.submittedAt)
+    XCTAssertNil(submitted.lastSubmitError)
+    XCTAssertEqual(submitted.storeRemoteId, "store-1")
+    XCTAssertEqual(submitted.batchRemoteId, "batch-1")
+    XCTAssertEqual(submitted.remoteItemId, "item-1")
+    XCTAssertEqual(submitted.sku, "SKU-3")
+    XCTAssertEqual(submitted.weight, "1.8 lb")
+    XCTAssertEqual(submitted.dimensions, "5 x 7 in")
+    XCTAssertEqual(submitted.notes, "Ready to submit.")
+    XCTAssertEqual(submitted.photos.map(\.id), photoIds)
+    XCTAssertEqual(submitted.photos.first?.remotePhotoId, remotePhotoId)
+    XCTAssertEqual(submitted.photos.first?.uploadState, .uploaded)
+    XCTAssertTrue(state.queueEligibleForSubmit().isEmpty)
+  }
+
+  func testFailedQueuedItemRemainsEligibleForRetry() {
+    let state = AppState(userDefaults: defaults, queueRootDirectoryName: queueRootName)
+    state.addCapturedPhoto(makePhoto())
+    state.advanceToNextItem()
+
+    guard let queued = state.queuedItemPackets.first else {
+      XCTFail("Expected queued item")
+      return
+    }
+
+    state.markQueuedItemUploadAttemptStarted(itemId: queued.id)
+    state.markQueuedItemUploadFailure(itemId: queued.id, errorMessage: "Upload failed.")
+    state.updateQueuedItemSubmitState(queued.id, state: .failed, errorMessage: "Upload failed.")
+
+    guard let failed = state.queuedItemPackets.first else {
+      XCTFail("Expected failed item")
+      return
+    }
+
+    XCTAssertEqual(failed.submitState, .failed)
+    XCTAssertEqual(failed.lastSubmitError, "Upload failed.")
+    XCTAssertEqual(failed.photos.first?.uploadState, .failed)
+    XCTAssertEqual(failed.photos.first?.lastUploadError, "Upload failed.")
+    XCTAssertEqual(state.queueEligibleForSubmit().count, 1)
+  }
+
   func testRemovingQueuedItemDoesNotAffectCurrentDraft() {
     let state = AppState(userDefaults: defaults, queueRootDirectoryName: queueRootName)
     state.addCapturedPhoto(makePhoto())

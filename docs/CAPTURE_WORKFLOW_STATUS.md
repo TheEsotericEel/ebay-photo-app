@@ -48,11 +48,13 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 ### Queue Review Submit
 - `Submit` uses the existing shared `submitQueuedItems` helper and upload path.
 - Submit is disabled when there are no eligible queued items.
-- Submit shows clearer ready / in-progress / success / failure messaging.
+- Submit shows explicit ready-count, in-progress, success, and failure messaging.
+- Queue Review stays open after submit so the user can inspect submitted, failed, and retryable items.
 - Submitted items retain their queue state until existing cleanup rules apply.
+- Mixed success/failure states remain visible in the queue using the existing item submit-state fields.
 
 ### Main Screen return
-- `Main Screen` dismisses Queue Review back to `Capture Home`.
+- `Main Screen` remains the deliberate exit from Queue Review back to `Capture Home`.
 
 ### Mock flow
 - `Preview Intake Flow` still opens the mock prototype flow.
@@ -81,10 +83,11 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 - Queue-local metadata preservation for SKU, weight, dimensions, and notes
 - Queue Review metadata display before submit
 - Queue item removal safety without affecting the live draft
-- Submit feedback basics:
+- Submit-result semantics:
   - ready count
   - in-progress state
   - success/failure status copy
+  - visible submitted / failed mixed states
 - DEBUG launch route verification harness
 - `AppStateQueueTests` coverage for queue enqueue, metadata editing, and safe removal
 
@@ -99,7 +102,7 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 ## Recommended next 5 implementation slices
 
 1. Tighten submit-result persistence semantics.
-   - Make the final Queue Review state after submit clearer for mixed success/failure queues.
+   - Keep Queue Review open after submit and make the final state clearer for mixed success/failure queues.
    - Keep the existing upload path and cleanup policy.
 
 2. Add a minimal UI smoke test target if the project is ready for it.
