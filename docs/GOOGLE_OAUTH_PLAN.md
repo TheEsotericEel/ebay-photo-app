@@ -90,3 +90,10 @@ Recommended order:
   - Full Google account completion was not exercised in this run because a credentialed Google login was not entered.
   - OAuth callback hashes are now scrubbed from the visible URL after Supabase restores the session.
   - A `manifest.json` 401 on a protected Vercel preview is expected and separate from OAuth/session handling.
+- Final manual desktop verification on Vercel:
+  - Google OAuth completed and returned to the desktop app.
+  - The app entered the desktop lister/items flow.
+  - The previous IndexedDB post-login error was gone.
+  - The browser address bar was scrubbed after app load and no longer contained OAuth token hash values.
+  - Console output may still show the original callback URL from the initial page load, but that is stale pre-cleanup logging.
+  - iOS Google OAuth remains future work.
