@@ -1,5 +1,8 @@
+import AuthenticationServices
 import Combine
 import Foundation
+import Supabase
+import UIKit
 
 enum AppServiceError: LocalizedError {
   case notConfigured(String)
@@ -22,6 +25,12 @@ enum AppServiceError: LocalizedError {
 }
 
 final class SupabaseService: ObservableObject {
+  private enum OAuthCallbackState {
+    case idle
+    case processing
+    case handled
+  }
+
   private struct Config {
     let baseURL: URL
     let anonKey: String
@@ -56,6 +65,15 @@ final class SupabaseService: ObservableObject {
 
   private struct AuthUser: Decodable {
     let id: String?
+  }
+
+  private final class OAuthPresentationAnchorProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+      UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .flatMap { $0.windows }
+        .first(where: { $0.isKeyWindow }) ?? ASPresentationAnchor()
+    }
   }
 
   private struct StoreRow: Decodable {
@@ -134,10 +152,18 @@ final class SupabaseService: ObservableObject {
 
   private let sessionStoreKey = "ebp.supabase.session.v1"
   private let defaultStorageBucket = "photo-assets"
+  private let oauthCallbackScheme = "ebayphotoapp"
+  private let oauthCallbackHost = "auth-callback"
   private let userDefaults: UserDefaults
   private let urlSession: URLSession
   private var cachedSession: Session?
   private var cachedWorkspaceId: String?
+  private var oauthCallbackState: OAuthCallbackState = .idle
+  private var oauthClient: SupabaseClient?
+  private var oauthClientKey: String?
+  private var activeOAuthSession: ASWebAuthenticationSession?
+  private let oauthPresentationAnchorProvider = OAuthPresentationAnchorProvider()
+  private let oauthStateLock = NSLock()
 
   var hasPersistedSession: Bool {
     cachedSession != nil
@@ -259,8 +285,58 @@ final class SupabaseService: ObservableObject {
   }
 
   func signInWithGoogle() async throws {
+    let config = try loadConfig()
+    let client = getOrCreateOAuthClient(config: config)
+    let redirectURL = try oauthRedirectURL()
+    let signInURL = try client.auth.getOAuthSignInURL(
+      provider: .google,
+      redirectTo: redirectURL
+    )
+
     AppLog.auth.info("Google sign-in requested")
-    throw AppServiceError.notConfigured("Google sign-in is not ready yet.")
+    resetOAuthFlowState()
+    activeOAuthSession?.cancel()
+
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+      let session = ASWebAuthenticationSession(url: signInURL, callbackURLScheme: oauthCallbackScheme) { [weak self] callbackURL, error in
+        guard let self else {
+          continuation.resume(throwing: AppServiceError.server("Google sign-in could not complete."))
+          return
+        }
+
+        Task { @MainActor in
+          self.activeOAuthSession = nil
+        }
+
+        if let error = error as? ASWebAuthenticationSessionError, error.code == .canceledLogin {
+          continuation.resume(throwing: AppServiceError.invalidRequest("Google sign-in was cancelled."))
+          return
+        }
+
+        guard let callbackURL else {
+          continuation.resume(throwing: AppServiceError.server("Google sign-in did not complete."))
+          return
+        }
+
+        Task {
+          do {
+            try await self.handleOAuthCallback(url: callbackURL)
+            continuation.resume(returning: ())
+          } catch {
+            continuation.resume(throwing: error)
+          }
+        }
+      }
+
+      session.presentationContextProvider = oauthPresentationAnchorProvider
+      activeOAuthSession = session
+
+      guard session.start() else {
+        activeOAuthSession = nil
+        continuation.resume(throwing: AppServiceError.server("Unable to start Google sign-in."))
+        return
+      }
+    }
   }
 
   func signUpWithEmailPassword(email: String, password: String) async throws -> Bool {
@@ -307,6 +383,11 @@ final class SupabaseService: ObservableObject {
   }
 
   func signOut() {
+    activeOAuthSession?.cancel()
+    activeOAuthSession = nil
+    oauthClient = nil
+    oauthClientKey = nil
+    resetOAuthFlowState()
     cachedSession = nil
     cachedWorkspaceId = nil
     userDefaults.removeObject(forKey: sessionStoreKey)
@@ -314,12 +395,32 @@ final class SupabaseService: ObservableObject {
   }
 
   func handleOAuthCallback(url: URL) async throws {
-    guard url.scheme == "ebayphotoapp", url.host == "auth-callback" else {
+    guard url.scheme == oauthCallbackScheme, url.host == oauthCallbackHost else {
       throw AppServiceError.invalidRequest("Unsupported OAuth callback URL.")
     }
 
-    AppLog.auth.info("Received OAuth callback URL")
-    throw AppServiceError.notConfigured("Google sign-in is not ready yet.")
+    guard beginOAuthCallbackProcessing() else {
+      AppLog.auth.info("OAuth callback already handled")
+      return
+    }
+
+    do {
+      let config = try loadConfig()
+      let client = getOrCreateOAuthClient(config: config)
+      let authSession = try await client.auth.session(from: url)
+      persistOAuthSession(
+        accessToken: authSession.accessToken,
+        refreshToken: authSession.refreshToken,
+        userId: String(describing: authSession.user.id),
+        expiresAt: authSession.expiresAt
+      )
+      AppLog.auth.info("Received OAuth callback URL")
+      setOAuthCallbackState(.handled)
+    } catch {
+      setOAuthCallbackState(.idle)
+      AppLog.auth.error("Google sign-in callback exchange failed error=\(error.localizedDescription, privacy: .public)")
+      throw error
+    }
   }
 
   /// Refreshes the access token when expired or close to expiry. No-op if still valid.
@@ -1545,6 +1646,69 @@ final class SupabaseService: ObservableObject {
       anonKey: anonKey,
       bucket: resolvedBucket
     )
+  }
+
+  private func oauthRedirectURL() throws -> URL {
+    guard let url = URL(string: "\(oauthCallbackScheme)://\(oauthCallbackHost)") else {
+      throw AppServiceError.notConfigured("Invalid Google OAuth redirect URL.")
+    }
+    return url
+  }
+
+  private func getOrCreateOAuthClient(config: Config) -> SupabaseClient {
+    let cacheKey = "\(config.baseURL.absoluteString)|\(config.anonKey)"
+    if let oauthClient, oauthClientKey == cacheKey {
+      return oauthClient
+    }
+
+    let client = SupabaseClient(
+      supabaseURL: config.baseURL,
+      supabaseKey: config.anonKey,
+      options: SupabaseClientOptions(
+        auth: .init(
+          flowType: .pkce
+        )
+      )
+    )
+    oauthClient = client
+    oauthClientKey = cacheKey
+    return client
+  }
+
+  private func persistOAuthSession(
+    accessToken: String,
+    refreshToken: String?,
+    userId: String?,
+    expiresAt: TimeInterval?
+  ) {
+    let session = Session(
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      userId: userId,
+      expiresAt: expiresAt
+    )
+    saveSession(session)
+    AppLog.auth.info("OAuth session persisted")
+  }
+
+  private func resetOAuthFlowState() {
+    oauthStateLock.lock()
+    oauthCallbackState = .idle
+    oauthStateLock.unlock()
+  }
+
+  private func beginOAuthCallbackProcessing() -> Bool {
+    oauthStateLock.lock()
+    defer { oauthStateLock.unlock() }
+    guard oauthCallbackState == .idle else { return false }
+    oauthCallbackState = .processing
+    return true
+  }
+
+  private func setOAuthCallbackState(_ state: OAuthCallbackState) {
+    oauthStateLock.lock()
+    oauthCallbackState = state
+    oauthStateLock.unlock()
   }
 
   private func saveSession(_ session: Session) {

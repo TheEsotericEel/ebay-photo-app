@@ -3,9 +3,9 @@
 ## Current target app auth
 
 - App login is email + password for now.
-- Google OAuth is planned and documented in [docs/GOOGLE_OAUTH_PLAN.md](./GOOGLE_OAUTH_PLAN.md), but not implemented yet.
-- The iOS-side callback/session plan is documented in [docs/IOS_GOOGLE_OAUTH_PLAN.md](./IOS_GOOGLE_OAUTH_PLAN.md).
-- The iOS foundation slice now includes the callback URL scheme and safe URL reception, but not full Google sign-in yet.
+- Google OAuth is documented in [docs/GOOGLE_OAUTH_PLAN.md](./GOOGLE_OAUTH_PLAN.md) and implemented on desktop and iOS.
+- The iOS callback/session implementation details are documented in [docs/IOS_GOOGLE_OAUTH_PLAN.md](./IOS_GOOGLE_OAUTH_PLAN.md).
+- The iOS app now includes the callback URL scheme, safe URL reception, and real Google sign-in flow.
 - Email/password verification steps live in [docs/EMAIL_PASSWORD_AUTH_VERIFICATION.md](./EMAIL_PASSWORD_AUTH_VERIFICATION.md).
 - iOS and desktop use the same Supabase app account and workspace session.
 

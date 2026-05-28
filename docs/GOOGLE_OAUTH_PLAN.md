@@ -78,7 +78,7 @@ Recommended order:
 
 - Desktop Google OAuth button and helper: implemented.
 - Supabase/Google provider configuration: still required outside the repo.
-- iOS Google OAuth foundation slice: URL scheme and safe callback handling are now in place; full OAuth session exchange is still future work. See [docs/IOS_GOOGLE_OAUTH_PLAN.md](./IOS_GOOGLE_OAUTH_PLAN.md).
+  - iOS Google OAuth: implemented with Supabase Swift OAuth initiation, callback exchange, and session restoration. Build/test verification passed here; a live credentialed physical-device pass is still the remaining manual confidence check. See [docs/IOS_GOOGLE_OAUTH_PLAN.md](./IOS_GOOGLE_OAUTH_PLAN.md).
 - Verified desktop runtime on 2026-05-27:
   - The button sends the browser to `https://wchoxagxpsejwrotvnsx.supabase.co/auth/v1/authorize?provider=google&redirect_to=http%3A%2F%2F127.0.0.1%3A4173`.
   - Supabase returned `400` with `Unsupported provider: provider is not enabled`.
@@ -95,7 +95,8 @@ Recommended order:
   - The previous IndexedDB post-login error was gone.
   - The browser address bar was scrubbed after app load and no longer contained OAuth token hash values.
   - Console output may still show the original callback URL from the initial page load, but that is stale pre-cleanup logging.
-  - iOS Google OAuth remains future work.
+  - iOS Google OAuth is now implemented separately on the native app.
+  - The Vercel manifest warning was cleaned up by removing the manifest link from the web app shell.
 - Desktop account/session UX hardening:
   - The desktop app now shows signed-in email, current provider, and linked providers.
   - In DEV, the Supabase user ID is visible for same-email identity-link verification.

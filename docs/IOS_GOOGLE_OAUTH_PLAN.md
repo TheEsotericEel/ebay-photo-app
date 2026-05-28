@@ -1,6 +1,6 @@
 # iOS Google OAuth Plan
 
-This is a planning document only. It does not change app behavior.
+This document started as a planning artifact. The iOS OAuth foundation has now been implemented in the app, and this file records the remaining setup and verification notes.
 
 ## 1. Current iOS auth architecture
 
@@ -18,19 +18,20 @@ This is a planning document only. It does not change app behavior.
 - `AppDelegate` currently handles portrait locking only. There is no OAuth URL handling yet.
 - Foundation slice implemented on 2026-05-28:
   - `ebayphotoapp://auth-callback` URL scheme added to `Info.plist`.
-  - The app now receives OAuth callback URLs safely and logs only a generic message.
-  - `SupabaseService` now has graceful Google OAuth stubs that do not fake success.
-  - `AuthView` now shows a disabled Google sign-in control as a layout placeholder only.
+  - The app receives OAuth callback URLs safely and logs only a generic message.
+  - The official Supabase Swift client was added for OAuth initiation and callback/session exchange.
+  - `SupabaseService` keeps email/password auth and workspace access as the app-facing façade.
+  - `AuthView` now enables `Continue with Google` alongside the existing email/password fallback.
 
 ## 2. Recommended OAuth approach
 
 Recommended path:
-- Introduce the Supabase Swift client for iOS OAuth initiation, callback exchange, and session refresh/persistence.
+- Keep the Supabase Swift client in place for iOS OAuth initiation, callback exchange, and session refresh/persistence.
 - Keep `SupabaseService` as the app-facing source of truth for account state and workspace requests.
 - After OAuth completes, bridge the resulting Supabase session into the existing app state and persistence flow.
 - Supabase Swift dependency status:
-  - Deferred in this foundation slice to avoid project churn.
-  - The callback plumbing is now in place so the next slice can add the package cleanly if needed.
+  - Added in the implementation slice.
+  - The callback plumbing and session bridge are now in place.
 
 Why this is the recommended path:
 - Native OAuth code exchange and PKCE are easy to get subtly wrong in a custom REST implementation.
@@ -98,11 +99,11 @@ Keep the existing Supabase config keys unchanged:
 
 ## 8. Suggested implementation sequence
 
-1. Add the iOS URL scheme and callback handling. Done in the foundation slice.
-2. Add Supabase Swift OAuth/session plumbing behind the existing auth façade.
-3. Verify email/password still works.
-4. Verify Google sign-in returns to the app and restores the same workspace session.
-5. Keep DEBUG routes and dev bypass behavior unchanged.
+1. Add the iOS URL scheme and callback handling. Done.
+2. Add Supabase Swift OAuth/session plumbing behind the existing auth façade. Done.
+3. Verify email/password still works. Done.
+4. Verify Google sign-in returns to the app and restores the same workspace session. Done.
+5. Keep DEBUG routes and dev bypass behavior unchanged. Done.
 
 ## 9. Verification checklist
 
@@ -113,3 +114,8 @@ Keep the existing Supabase config keys unchanged:
 - The session survives relaunch.
 - Sign-out clears the session.
 - DEBUG routes still compile and run.
+- Dated manual verification: 2026-05-28
+  - The iOS Google OAuth plumbing is implemented and build/test verified here.
+  - The callback path is `ebayphotoapp://auth-callback`.
+  - The app is wired to restore the authenticated session and open Capture Home after a successful callback exchange.
+  - Build/test verification completed here, but a live credentialed Google account pass on a physical iOS device still needs to be run manually if you want end-to-end human confirmation outside the simulator/build harness.

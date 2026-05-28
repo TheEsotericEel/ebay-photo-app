@@ -51,6 +51,7 @@ xcodebuild \
   -scheme "${SCHEME}" \
   -configuration Debug \
   -destination "${DESTINATION}" \
+  ARCHS=arm64 \
   -derivedDataPath "${DERIVED_DATA}" \
   build -quiet
 
