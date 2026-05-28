@@ -119,3 +119,11 @@ Keep the existing Supabase config keys unchanged:
   - The callback path is `ebayphotoapp://auth-callback`.
   - The app is wired to restore the authenticated session and open Capture Home after a successful callback exchange.
   - Build/test verification completed here, but a live credentialed Google account pass on a physical iOS device still needs to be run manually if you want end-to-end human confirmation outside the simulator/build harness.
+
+## 10. Debugging Redirects
+
+- Added DEBUG-only diagnostics to `signInWithGoogle` to print:
+  - Intended redirect target URL.
+  - Whether `redirect_to` is present in the `signInURL` and its value.
+  - Generated OAuth URL host.
+- Confirmed `ASWebAuthenticationSession` uses `oauthCallbackScheme` which evaluates to `ebayphotoapp`.

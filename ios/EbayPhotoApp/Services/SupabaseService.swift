@@ -304,7 +304,20 @@ final class SupabaseService: ObservableObject {
 
     AppLog.auth.info("Google sign-in requested")
     #if DEBUG
-    AppLog.auth.debug("Supabase OAuth redirect target: \(redirectURL.absoluteString, privacy: .public)")
+    AppLog.auth.debug("Supabase OAuth intended redirect target: \(redirectURL.absoluteString, privacy: .public)")
+    
+    if let components = URLComponents(url: signInURL, resolvingAgainstBaseURL: false) {
+      AppLog.auth.debug("Generated OAuth URL host: \(components.host ?? "none", privacy: .public)")
+      
+      let redirectToItem = components.queryItems?.first(where: { $0.name == "redirect_to" })
+      let hasRedirectTo = redirectToItem != nil
+      AppLog.auth.debug("Generated OAuth URL contains redirect_to: \(hasRedirectTo, privacy: .public)")
+      
+      if let decodedValue = redirectToItem?.value {
+        let isMatch = decodedValue == "ebayphotoapp://auth-callback"
+        AppLog.auth.debug("Decoded redirect_to equals ebayphotoapp://auth-callback: \(isMatch, privacy: .public)")
+      }
+    }
     #endif
     resetOAuthFlowState()
     activeOAuthSession?.cancel()
