@@ -2436,6 +2436,7 @@ private struct QueueItemEditorView: View {
   @State private var storeName = ""
   @State private var storeShortCode = ""
   @State private var batchName = ""
+  @State private var showingRemoveConfirmation = false
 
   var body: some View {
     Group {
@@ -2547,11 +2548,11 @@ private struct QueueItemEditorView: View {
             .foregroundStyle(.blue)
             .disabled(isSubmitting)
 
-            Button("Delete Queued Item", role: .destructive) {
-              appState.removeQueuedItem(itemId: item.id)
-              dismiss()
+            Button("Remove Item", role: .destructive) {
+              showingRemoveConfirmation = true
             }
             .disabled(isSubmitting)
+            .accessibilityIdentifier("queueReview.removeItem")
           }
         }
         .navigationTitle("Item \(item.itemNumber)")
@@ -2563,6 +2564,22 @@ private struct QueueItemEditorView: View {
           storeName = item.storeName
           storeShortCode = item.storeShortCode
           batchName = item.batchName
+        }
+        .confirmationDialog(
+          "Remove queued item?",
+          isPresented: $showingRemoveConfirmation,
+          titleVisibility: .visible
+        ) {
+          Button("Remove Item", role: .destructive) {
+            appState.removeQueuedItemPreservingPhotoAssets(itemId: item.id)
+            dismiss()
+          }
+          .accessibilityIdentifier("queueReview.confirmRemoveItem")
+
+          Button("Cancel", role: .cancel) {}
+            .accessibilityIdentifier("queueReview.cancelRemoveItem")
+        } message: {
+          Text("This removes the finalized item from the queue. The current live draft is not changed.")
         }
       } else {
         ContentUnavailableView("Item Not Found", systemImage: "exclamationmark.triangle")

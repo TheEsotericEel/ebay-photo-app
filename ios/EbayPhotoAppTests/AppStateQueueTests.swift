@@ -42,6 +42,56 @@ final class AppStateQueueTests: XCTestCase {
     XCTAssertTrue(state.capturedPhotos.isEmpty)
   }
 
+  func testUpdateQueuedItemMetadataPreservesPhotos() {
+    let state = AppState(userDefaults: defaults, queueRootDirectoryName: queueRootName)
+    state.addCapturedPhoto(makePhoto())
+    state.advanceToNextItem()
+
+    guard let queued = state.queuedItemPackets.first else {
+      XCTFail("Expected queued item")
+      return
+    }
+
+    let photoIds = queued.photos.map(\.id)
+
+    state.updateQueuedItemMetadata(
+      itemId: queued.id,
+      sku: "SKU-2",
+      weight: "3.1 lb",
+      dimensions: "12 x 14 in",
+      notes: "Updated note."
+    )
+
+    XCTAssertEqual(state.queuedItemPackets.first?.sku, "SKU-2")
+    XCTAssertEqual(state.queuedItemPackets.first?.weight, "3.1 lb")
+    XCTAssertEqual(state.queuedItemPackets.first?.dimensions, "12 x 14 in")
+    XCTAssertEqual(state.queuedItemPackets.first?.notes, "Updated note.")
+    XCTAssertEqual(state.queuedItemPackets.first?.photos.map(\.id), photoIds)
+  }
+
+  func testRemovingQueuedItemDoesNotAffectCurrentDraft() {
+    let state = AppState(userDefaults: defaults, queueRootDirectoryName: queueRootName)
+    state.addCapturedPhoto(makePhoto())
+    state.advanceToNextItem()
+    state.addCapturedPhoto(makePhoto())
+    state.currentItemNotes = "Draft note"
+
+    guard let queued = state.queuedItemPackets.first else {
+      XCTFail("Expected queued item")
+      return
+    }
+
+    let draftPhotoCount = state.capturedPhotos.count
+    let draftItemNumber = state.currentItemNumber
+
+    state.removeQueuedItemPreservingPhotoAssets(itemId: queued.id)
+
+    XCTAssertTrue(state.queuedItemPackets.isEmpty)
+    XCTAssertEqual(state.capturedPhotos.count, draftPhotoCount)
+    XCTAssertEqual(state.currentItemNumber, draftItemNumber)
+    XCTAssertEqual(state.currentItemNotes, "Draft note")
+  }
+
   func testSubmittedItemsAreEligibleForSafeCleanup() {
     let state = AppState(userDefaults: defaults, queueRootDirectoryName: queueRootName)
     state.addCapturedPhoto(makePhoto())

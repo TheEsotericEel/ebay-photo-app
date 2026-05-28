@@ -646,6 +646,10 @@ final class AppState: ObservableObject {
     removeQueuedItem(itemId: itemId, deletePhotoAssets: true)
   }
 
+  func removeQueuedItemPreservingPhotoAssets(itemId: UUID) {
+    removeQueuedItem(itemId: itemId, deletePhotoAssets: false)
+  }
+
   @discardableResult
   func promoteQueuedItemToDraft(itemId: UUID) -> Bool {
     guard let item = queuedItemPacket(id: itemId) else { return false }
