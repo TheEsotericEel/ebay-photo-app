@@ -2235,92 +2235,47 @@ private struct QueueReviewSheet: View {
     NavigationStack {
       let eligibleCount = appState.queueEligibleForSubmit().count
       let totalCount = appState.queuedItemPackets.count
-      List {
-        Section {
-          Button("Submit") {
-            guard !isSubmitting else { return }
-            isSubmitting = true
-            Task {
-              _ = await onSubmit()
-              await MainActor.run {
-                isSubmitting = false
-              }
-            }
-          }
-          .disabled(isSubmitting || eligibleCount == 0)
-          .accessibilityIdentifier("queueReview.submit")
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          queueReviewHero(
+            eligibleCount: eligibleCount,
+            totalCount: totalCount
+          )
 
-          if isSubmitting || appState.queueSubmitProgress != nil {
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Submitting queued items…")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("queueReview.submitStatus")
+          submitSummaryCard(eligibleCount: eligibleCount, totalCount: totalCount)
 
-              if let progress = appState.queueSubmitProgress {
-                Text(progress.message)
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-                if let photoIndex = progress.photoIndex, let photoCount = progress.photoCount {
-                  Text("Photo \(photoIndex) of \(photoCount)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary.opacity(0.8))
-                }
-              } else if !appState.uploadMessage.isEmpty {
-                Text(appState.uploadMessage)
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-              }
-            }
-          } else {
-            if !appState.uploadMessage.isEmpty {
-              Text(appState.uploadMessage)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("queueReview.submitStatus")
-            }
-
-            if eligibleCount > 0 {
-              Text("\(eligibleCount) finalized queued item\(eligibleCount == 1 ? "" : "s") ready to submit.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("queueReview.submitStatus")
-            } else if totalCount > 0 {
-              Text("No finalized items are ready to submit.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier("queueReview.submitStatus")
-            } else if appState.uploadMessage.isEmpty {
-              EmptyView()
-            }
-          }
-        }
-
-        if appState.queuedItemPackets.isEmpty {
-          Text("Queue is empty. Capture photos and tap Next to create queued item packets.")
-            .foregroundStyle(.secondary)
+          if appState.queuedItemPackets.isEmpty {
+            EmptyHomeState(
+              title: "Queue is empty",
+              message: "Capture photos and tap Next to create the first item packet."
+            )
             .accessibilityIdentifier("queueReview.emptyState")
-        } else {
-          ForEach(appState.queuedItemPackets.sorted(by: { $0.itemNumber < $1.itemNumber })) { item in
-            let progressMessage = appState.queueSubmitProgress?.itemId == item.id
-              ? appState.queueSubmitProgress?.message
-              : nil
-            let previewData = item.photos.first.flatMap { photo in
-              appState.queuedPhotoPreviewData(itemId: item.id, photoId: photo.id)
+          } else {
+            LazyVStack(spacing: 12) {
+              ForEach(appState.queuedItemPackets.sorted(by: { $0.itemNumber < $1.itemNumber })) { item in
+                let progressMessage = appState.queueSubmitProgress?.itemId == item.id
+                  ? appState.queueSubmitProgress?.message
+                  : nil
+                let previewData = item.photos.first.flatMap { photo in
+                  appState.queuedPhotoPreviewData(itemId: item.id, photoId: photo.id)
+                }
+                NavigationLink {
+                  QueueItemEditorView(itemId: item.id, onOpenCamera: onOpenCamera)
+                    .environmentObject(appState)
+                } label: {
+                  QueueReviewItemRow(
+                    item: item,
+                    progressMessage: progressMessage,
+                    previewData: previewData
+                  )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("queueReview.itemRow.\(item.itemNumber)")
+              }
             }
-            NavigationLink {
-              QueueItemEditorView(itemId: item.id, onOpenCamera: onOpenCamera)
-                .environmentObject(appState)
-            } label: {
-              QueueReviewItemRow(
-                item: item,
-                progressMessage: progressMessage,
-                previewData: previewData
-              )
-            }
-            .accessibilityIdentifier("queueReview.itemRow.\(item.itemNumber)")
           }
         }
+        .padding(16)
       }
       .navigationTitle("Queue Review")
       .accessibilityIdentifier("queueReview.screen")
@@ -2330,19 +2285,95 @@ private struct QueueReviewSheet: View {
             .accessibilityIdentifier("queueReview.mainScreen")
         }
       }
+      .background(MockFlowBackground())
     }
   }
 
-  private func submitStateLabel(_ state: AppState.QueueItemSubmitState) -> String {
-    switch state {
-    case .local:
-      return "Local"
-    case .submitting:
-      return "Submitting"
-    case .submitted:
-      return "Submitted"
-    case .failed:
-      return "Failed"
+  @ViewBuilder
+  private func queueReviewHero(eligibleCount: Int, totalCount: Int) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("QUEUE REVIEW")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+
+      Text("Finished item cards")
+        .font(.largeTitle.weight(.bold))
+        .foregroundStyle(.white)
+
+      Text("Inspect finished items before handing them off upstream.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      HStack(spacing: 8) {
+        HomeMetricPill(label: "Queued", value: "\(totalCount)")
+        HomeMetricPill(label: "Ready", value: "\(eligibleCount)")
+      }
+      .padding(.top, 2)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  @ViewBuilder
+  private func submitSummaryCard(eligibleCount: Int, totalCount: Int) -> some View {
+    CaptureHomeCard(title: "Submit") {
+      VStack(alignment: .leading, spacing: 12) {
+        Button("Submit") {
+          guard !isSubmitting else { return }
+          isSubmitting = true
+          Task {
+            _ = await onSubmit()
+            await MainActor.run {
+              isSubmitting = false
+            }
+          }
+        }
+        .disabled(isSubmitting || eligibleCount == 0)
+        .accessibilityIdentifier("queueReview.submit")
+
+        if isSubmitting || appState.queueSubmitProgress != nil {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Submitting queued items…")
+              .font(.footnote.weight(.medium))
+              .foregroundStyle(.secondary)
+              .accessibilityIdentifier("queueReview.submitStatus")
+
+            if let progress = appState.queueSubmitProgress {
+              Text(progress.message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+              if let photoIndex = progress.photoIndex, let photoCount = progress.photoCount {
+                Text("Photo \(photoIndex) of \(photoCount)")
+                  .font(.caption2)
+                  .foregroundStyle(.secondary.opacity(0.8))
+              }
+            } else if !appState.uploadMessage.isEmpty {
+              Text(appState.uploadMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+          }
+        } else {
+          if !appState.uploadMessage.isEmpty {
+            Text(appState.uploadMessage)
+              .font(.footnote.weight(.medium))
+              .foregroundStyle(.secondary)
+              .accessibilityIdentifier("queueReview.submitStatus")
+          }
+
+          if eligibleCount > 0 {
+            Text("\(eligibleCount) finalized queued item\(eligibleCount == 1 ? "" : "s") ready to submit.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .accessibilityIdentifier("queueReview.submitStatus")
+          } else if totalCount > 0 {
+            Text("No finalized items are ready to submit.")
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .accessibilityIdentifier("queueReview.submitStatus")
+          }
+        }
+      }
     }
   }
 }
@@ -2353,70 +2384,63 @@ private struct QueueReviewItemRow: View {
   let previewData: Data?
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack(alignment: .top, spacing: 12) {
-        itemThumbnail
+    CaptureHomeCard(title: "Item \(item.itemNumber)", subtitle: "\(item.photos.count) photo\(item.photos.count == 1 ? "" : "s")") {
+      VStack(alignment: .leading, spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
+          itemThumbnail
 
-        VStack(alignment: .leading, spacing: 6) {
-          HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("Item \(item.itemNumber)")
-              .font(.headline.weight(.semibold))
-              .foregroundStyle(.white)
+          VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+              QueueStateBadge(state: item.submitState)
+              Spacer(minLength: 0)
+            }
 
-            Spacer(minLength: 0)
+            switch item.submitState {
+            case .submitted:
+              Text("Submitted items are eligible for manual local cleanup.")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.green.opacity(0.92))
+            case .failed:
+              Text("Failed items remain preserved for retry.")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.red.opacity(0.88))
+            case .local:
+              Text("Local items remain preserved until they are submitted.")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            case .submitting:
+              Text("Uploading now. Not eligible for cleanup.")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.yellow.opacity(0.88))
+            }
 
-            QueueStateBadge(state: item.submitState)
-          }
+            if !item.sku.isEmpty {
+              queueDetailLabel("SKU", value: item.sku)
+            }
+            if !item.weight.isEmpty {
+              queueDetailLabel("Weight", value: item.weight)
+            }
+            if !item.dimensions.isEmpty {
+              queueDetailLabel("Dimensions", value: item.dimensions)
+            }
+            if !item.notes.isEmpty {
+              queueDetailLabel("Notes", value: item.notes, limit: 2)
+            }
 
-          Text("\(item.photos.count) photo(s)")
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(.secondary)
-
-          switch item.submitState {
-          case .submitted:
-            Text("Submitted items are eligible for manual local cleanup.")
-              .font(.caption.weight(.medium))
-              .foregroundStyle(.green.opacity(0.92))
-          case .failed:
-            Text("Failed items remain preserved for retry.")
-              .font(.caption.weight(.medium))
-              .foregroundStyle(.red.opacity(0.88))
-          case .local:
-            Text("Local items remain preserved until they are submitted.")
-              .font(.caption.weight(.medium))
+            Text("\(item.storeShortCode) · \(item.batchName)")
+              .font(.caption)
               .foregroundStyle(.secondary)
-          case .submitting:
-            Text("Uploading now. Not eligible for cleanup.")
-              .font(.caption.weight(.medium))
-              .foregroundStyle(.yellow.opacity(0.88))
-          }
 
-          if !item.sku.isEmpty {
-            queueDetailLabel("SKU", value: item.sku)
-          }
-          if !item.weight.isEmpty {
-            queueDetailLabel("Weight", value: item.weight)
-          }
-          if !item.dimensions.isEmpty {
-            queueDetailLabel("Dimensions", value: item.dimensions)
-          }
-          if !item.notes.isEmpty {
-            queueDetailLabel("Notes", value: item.notes, limit: 2)
-          }
-
-          Text("\(item.storeShortCode) · \(item.batchName)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-          if let progressMessage, !progressMessage.isEmpty {
-            Text(progressMessage)
-              .font(.caption2)
-              .foregroundStyle(.secondary)
+            if let progressMessage, !progressMessage.isEmpty {
+              Text(progressMessage)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
           }
         }
       }
     }
-    .padding(.vertical, 4)
+    .accessibilityIdentifier("queueReview.card")
   }
 
   private var itemThumbnail: some View {
