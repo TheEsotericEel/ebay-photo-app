@@ -16,7 +16,7 @@ struct RootView: View {
   @State private var didRestoreSession = false
   @State private var didSeedLiveCameraDraft = false
 
-  private var shouldBypassAuth: Bool { AppState.usesDevelopmentAuthBypass }
+  private var shouldOfferDevelopmentBypass: Bool { AppState.usesDevelopmentAuthBypass }
   private var shouldOpenMockIntakeFlowOnLaunch: Bool {
     #if DEBUG
     ProcessInfo.processInfo.arguments.contains("-open-mock-intake-flow")
@@ -45,7 +45,7 @@ struct RootView: View {
         MockIntakeFlowView()
       } else {
         Group {
-          if shouldBypassAuth || appState.isAuthenticated {
+          if appState.isAuthenticated {
             if showingCamera {
               CameraSessionView(
                 cameraService: cameraService,
@@ -108,8 +108,9 @@ struct RootView: View {
                 }
               },
               onSignOut: {
-                if shouldBypassAuth {
-                  appState.statusMessage = "Development auth bypass stays enabled."
+                if shouldOfferDevelopmentBypass {
+                  appState.isAuthenticated = false
+                  appState.statusMessage = "Developer mode available."
                 } else {
                   supabase.signOut()
                   appState.isAuthenticated = false
@@ -138,6 +139,7 @@ struct RootView: View {
             errorMessage: appState.authError,
             isAuthenticating: isAuthenticating,
             isGoogleAuthenticating: isGoogleAuthenticating,
+            showsDevelopmentBypass: shouldOfferDevelopmentBypass,
             onSignInWithPassword: {
               guard !isAuthenticating, !isGoogleAuthenticating else { return }
               isAuthenticating = true
@@ -214,7 +216,12 @@ struct RootView: View {
                 }
               }
             },
-            onOpenInputLab: { showingTextInputLab = true }
+            onContinueWithoutSigningIn: {
+              guard shouldOfferDevelopmentBypass else { return }
+              appState.authError = ""
+              appState.statusMessage = "Developer mode enabled."
+              appState.isAuthenticated = true
+            }
           )
         }
         }
@@ -241,7 +248,7 @@ struct RootView: View {
         return
       }
       #endif
-      guard !shouldBypassAuth, supabase.hasPersistedSession else { return }
+      guard supabase.hasPersistedSession else { return }
       guard !appState.isAuthenticated else { return }
       appState.isAuthenticated = true
       appState.statusMessage = "Session restored."
@@ -257,7 +264,7 @@ struct RootView: View {
       }
     }
     .task(id: appState.isAuthenticated) {
-      guard appState.isAuthenticated, !shouldBypassAuth else { return }
+      guard appState.isAuthenticated, !shouldOfferDevelopmentBypass else { return }
       await pollWorkspaceSnapshotLoop()
     }
     .onOpenURL { url in
@@ -676,98 +683,125 @@ private struct AuthView: View {
   let errorMessage: String
   let isAuthenticating: Bool
   let isGoogleAuthenticating: Bool
+  let showsDevelopmentBypass: Bool
   let onSignInWithPassword: () -> Void
   let onCreatePasswordAccount: () -> Void
   let onSignInWithGoogle: () -> Void
-  let onOpenInputLab: (() -> Void)?
+  let onContinueWithoutSigningIn: () -> Void
+
+  private var isWorking: Bool {
+    isAuthenticating || isGoogleAuthenticating
+  }
+
+  private var primaryStatusText: String {
+    if isGoogleAuthenticating {
+      return "Signing in with Google..."
+    }
+    if !statusMessage.isEmpty && statusMessage != "Ready" {
+      return statusMessage
+    }
+    return "Signing in..."
+  }
 
   var body: some View {
     NavigationStack {
       ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Ebay Photo App")
-              .font(.largeTitle.weight(.semibold))
-            Text("Sign in with your app account. Google sign-in now uses the native app flow and returns to Supabase.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-          }
+        VStack(spacing: 24) {
+          Spacer(minLength: 24)
 
-          VStack(alignment: .leading, spacing: 12) {
-            LabeledTextField(
-              title: "Email",
-              text: $email,
-              autocapitalize: .never,
-              autocorrectDisabled: true,
-              keyboardType: .emailAddress,
-              accessibilityIdentifier: "auth.email"
-            )
-            LabeledTextField(
-              title: "Password",
-              text: $password,
-              isSecure: true,
-              accessibilityIdentifier: "auth.password"
-            )
-
-            VStack(alignment: .leading, spacing: 10) {
-              Button("Continue with Google", action: onSignInWithGoogle)
-                .accessibilityIdentifier("auth.googleSignIn")
-                .disabled(isAuthenticating || isGoogleAuthenticating)
-                .buttonStyle(.bordered)
-              Button("Sign In", action: onSignInWithPassword)
-                .accessibilityIdentifier("auth.signIn")
-                .disabled(isAuthenticating || isGoogleAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .buttonStyle(.borderedProminent)
-              Button("Create Account", action: onCreatePasswordAccount)
-                .accessibilityIdentifier("auth.createAccount")
-                .disabled(isAuthenticating || isGoogleAuthenticating || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .buttonStyle(.bordered)
-            }
-
-            Text("Google sign-in now uses the native iOS flow and hands off to Supabase after authentication.")
-              .font(.footnote)
-              .foregroundStyle(.secondary)
-
-            if isAuthenticating || isGoogleAuthenticating {
-              ProgressView(isGoogleAuthenticating ? "Signing in with Google..." : "Working...")
-              .font(.footnote)
+          VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Listing Photo Handoff")
+                .font(.largeTitle.weight(.semibold))
+              Text("Sign in to sync capture batches with your desktop workspace.")
+                .font(.body)
                 .foregroundStyle(.secondary)
             }
-          }
 
-          VStack(alignment: .leading, spacing: 6) {
-            Text("Status")
-              .font(.headline)
-            Text(statusMessage)
-              .foregroundStyle(.secondary)
-              .accessibilityIdentifier("auth.status")
-            if !errorMessage.isEmpty {
+            VStack(spacing: 16) {
+              Button("Continue with Google", action: onSignInWithGoogle)
+                .accessibilityIdentifier("auth.googleSignIn")
+                .disabled(isWorking)
+                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+
+              HStack(spacing: 12) {
+                Rectangle()
+                  .fill(Color.secondary.opacity(0.25))
+                  .frame(height: 1)
+                Text("or")
+                  .font(.footnote)
+                  .foregroundStyle(.secondary)
+                Rectangle()
+                  .fill(Color.secondary.opacity(0.25))
+                  .frame(height: 1)
+              }
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+              LabeledTextField(
+                title: "Email",
+                text: $email,
+                autocapitalize: .never,
+                autocorrectDisabled: true,
+                keyboardType: .emailAddress,
+                accessibilityIdentifier: "auth.email"
+              )
+              LabeledTextField(
+                title: "Password",
+                text: $password,
+                isSecure: true,
+                accessibilityIdentifier: "auth.password"
+              )
+            }
+
+            VStack(spacing: 12) {
+              Button("Sign In", action: onSignInWithPassword)
+                .accessibilityIdentifier("auth.signIn")
+                .disabled(isWorking || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+
+              Button("Create Account", action: onCreatePasswordAccount)
+                .accessibilityIdentifier("auth.createAccount")
+                .disabled(isWorking || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+            }
+
+            if isWorking {
+              ProgressView(primaryStatusText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("auth.status")
+            } else if !errorMessage.isEmpty {
               Text(errorMessage)
+                .font(.footnote)
                 .foregroundStyle(.red)
                 .accessibilityIdentifier("auth.error")
             }
-          }
 
-          #if DEBUG
-          if let onOpenInputLab {
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-              Text("Debug")
-                .font(.headline)
-              Text("Text Input Lab stays available for launch-route testing only.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-              Button("Open Text Input Lab", action: onOpenInputLab)
-                .buttonStyle(.bordered)
+            if showsDevelopmentBypass {
+              VStack(alignment: .leading, spacing: 10) {
+                Divider()
+                Text("Developer mode")
+                  .font(.headline)
+                Button("Continue without signing in", action: onContinueWithoutSigningIn)
+                  .accessibilityIdentifier("auth.developmentBypass")
+                  .buttonStyle(.bordered)
+              }
             }
           }
-          #endif
+          .frame(maxWidth: 420, alignment: .leading)
+          .padding(.horizontal, 24)
+          .padding(.vertical, 16)
+
+          Spacer(minLength: 24)
         }
-        .frame(maxWidth: 420, alignment: .leading)
-        .padding(.vertical, 12)
-        .padding()
       }
-      .navigationTitle("Ebay Photo App")
+      .scrollIndicators(.hidden)
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar(.hidden, for: .navigationBar)
     }
   }
 }

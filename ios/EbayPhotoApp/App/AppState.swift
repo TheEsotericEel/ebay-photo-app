@@ -303,8 +303,6 @@ final class AppState: ObservableObject {
     restoreQueueState()
 
     if Self.usesDevelopmentAuthBypass {
-      isAuthenticated = true
-      statusMessage = "Development auth bypass enabled."
       AppLog.auth.notice("Development auth bypass enabled")
     } else {
       AppLog.auth.notice("Development auth bypass disabled")
