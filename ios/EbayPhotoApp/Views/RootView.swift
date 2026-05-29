@@ -198,18 +198,18 @@ struct RootView: View {
               guard !isAuthenticating, !isGoogleAuthenticating else { return }
               isGoogleAuthenticating = true
               appState.authError = ""
-              appState.statusMessage = "Opening Google sign-in..."
+              appState.statusMessage = "Signing in with Google..."
               Task { @MainActor in
                 defer { isGoogleAuthenticating = false }
                 do {
-                  try await supabase.signInWithGoogle()
+                  try await supabase.signInWithNativeGoogle()
                   appState.isAuthenticated = true
                   appState.authPassword = ""
                   appState.authCode = ""
                   appState.authError = ""
                   appState.statusMessage = "Signed in with Google."
                 } catch {
-                  appState.authError = "Google sign-in failed. Try again."
+                  appState.authError = error.localizedDescription
                   appState.statusMessage = "Google sign-in failed."
                 }
               }
@@ -688,7 +688,7 @@ private struct AuthView: View {
           VStack(alignment: .leading, spacing: 8) {
             Text("Ebay Photo App")
               .font(.largeTitle.weight(.semibold))
-            Text("Sign in with your app account. Google sign-in opens in a browser session and returns through the app callback.")
+            Text("Sign in with your app account. Google sign-in now uses the native app flow and returns to Supabase.")
               .font(.footnote)
               .foregroundStyle(.secondary)
           }
@@ -724,7 +724,7 @@ private struct AuthView: View {
                 .buttonStyle(.bordered)
             }
 
-            Text("Google sign-in uses the app callback flow and opens in a browser session.")
+            Text("Google sign-in now uses the native iOS flow and hands off to Supabase after authentication.")
               .font(.footnote)
               .foregroundStyle(.secondary)
 

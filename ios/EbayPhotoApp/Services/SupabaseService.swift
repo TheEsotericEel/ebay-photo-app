@@ -1,6 +1,7 @@
 import AuthenticationServices
 import Combine
 import Foundation
+import GoogleSignIn
 import Supabase
 import UIKit
 
@@ -377,6 +378,30 @@ final class SupabaseService: ObservableObject {
     }
   }
 
+  func signInWithNativeGoogle(using googleAuthService: GoogleAuthService = .live) async throws {
+    let config = try loadConfig()
+    let client = getOrCreateOAuthClient(config: config)
+    let googleAuth = try await googleAuthService.signIn()
+
+    let session = try await client.auth.signInWithIdToken(
+      credentials: OpenIDConnectCredentials(
+        provider: .google,
+        idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken
+      )
+    )
+
+    let userId = String(describing: session.user.id)
+    let savedSession = Session(
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      userId: userId,
+      expiresAt: normalizedExpiresAt(from: session.expiresAt)
+    )
+    saveSession(savedSession)
+    AppLog.auth.info("Native Google sign-in succeeded userIdPresent=\(!userId.isEmpty, privacy: .public)")
+  }
+
   func signUpWithEmailPassword(email: String, password: String) async throws -> Bool {
     let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -425,6 +450,7 @@ final class SupabaseService: ObservableObject {
     activeOAuthSession = nil
     oauthClient = nil
     oauthClientKey = nil
+    GIDSignIn.sharedInstance.signOut()
     resetOAuthFlowState()
     cachedSession = nil
     cachedWorkspaceId = nil
@@ -1770,6 +1796,30 @@ final class SupabaseService: ObservableObject {
       return nil
     }
     return session
+  }
+
+  private func normalizedExpiresAt(from rawValue: Any?) -> TimeInterval? {
+    if let date = rawValue as? Date {
+      return date.timeIntervalSince1970
+    }
+
+    if let interval = rawValue as? TimeInterval {
+      return interval
+    }
+
+    if let integer = rawValue as? Int {
+      return TimeInterval(integer)
+    }
+
+    if let integer64 = rawValue as? Int64 {
+      return TimeInterval(integer64)
+    }
+
+    if let double = rawValue as? Double {
+      return TimeInterval(double)
+    }
+
+    return nil
   }
 
   private func maskedEmail(_ email: String) -> String {

@@ -1,3 +1,4 @@
+import GoogleSignIn
 import UIKit
 
 /// Portrait-only interface orientations for the capture app (see migration spec).
@@ -38,5 +39,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
   func applicationDidBecomeActive(_ application: UIApplication) {
     OrientationLock.enforcePortrait()
+  }
+
+  func application(
+    _ application: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    if GIDSignIn.sharedInstance.handle(url) {
+      return true
+    }
+
+    return false
   }
 }
