@@ -8,3 +8,5 @@ logs/
 supabase/.temp/
 ios/**/xcuserdata/
 *.xcuserstate
+ebay-photo-app.code-workspace
+verify_visuals.sh
