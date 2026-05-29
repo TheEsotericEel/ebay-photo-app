@@ -61,6 +61,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>ebayphotoapp</string>
+				<string>com.googleusercontent.apps.209779584847-aj51obtn3gd153bhbi5m0jc8sqft2vrk</string>
 			</array>
 		</dict>
 	</array>
