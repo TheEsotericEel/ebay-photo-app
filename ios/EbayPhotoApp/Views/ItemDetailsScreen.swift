@@ -8,7 +8,7 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
   @Binding var dimensions: String
   @Binding var notes: String
   let onCancel: () -> Void
-  let onSubmit: () -> Void
+  let onContinueToReview: () -> Void
   let onNextItem: () -> Void
   @ViewBuilder let thumbnailContent: () -> ThumbnailContent
 
@@ -82,13 +82,14 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
             }
 
             HStack(spacing: 10) {
-              Button("Submit") {
-                onSubmit()
+              // `Submit` is reserved for the review-screen upload/handoff action.
+              Button("Continue to Review") {
+                onContinueToReview()
               }
               .buttonStyle(.bordered)
               .tint(.white)
               .foregroundStyle(.white)
-              .accessibilityIdentifier("itemDetails.submit")
+              .accessibilityIdentifier("itemDetails.continueToReview")
 
               Button("Next Item") {
                 onNextItem()
@@ -135,7 +136,7 @@ private struct MockItemDetailsScreenPreview: View {
       dimensions: $dimensions,
       notes: $notes,
       onCancel: {},
-      onSubmit: {},
+      onContinueToReview: {},
       onNextItem: {},
       thumbnailContent: {
         CaptureCameraThumbnailPanel(seed: 4, hasPhoto: true, photoCount: 4)

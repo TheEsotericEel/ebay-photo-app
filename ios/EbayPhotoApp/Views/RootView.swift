@@ -1407,7 +1407,7 @@ private struct MockIntakeFlowView: View {
       dimensions: $currentDimensions,
       notes: $currentNotes,
       onCancel: { step = .camera },
-      onSubmit: submitCurrentMockItem,
+      onContinueToReview: submitCurrentMockItem,
       onNextItem: continueToNextMockItem,
       thumbnailContent: {
         CaptureCameraThumbnailPanel(
@@ -2799,9 +2799,9 @@ private struct CameraSessionView: View {
           onCancel: {
             showingDetails = false
           },
-          onSubmit: {
+          onContinueToReview: {
             guard !appState.capturedPhotos.isEmpty else {
-              appState.statusMessage = "Capture at least one photo before submitting."
+              appState.statusMessage = "Capture at least one photo before continuing to review."
               return
             }
             appState.advanceToNextItem()
