@@ -42,6 +42,7 @@ struct RootView: View {
   var body: some View {
     Group {
       if shouldOpenMockIntakeFlowOnLaunch {
+        // Debug/demo-only preview flow. The live flow above is the product source of truth.
         MockIntakeFlowView()
       } else {
         Group {

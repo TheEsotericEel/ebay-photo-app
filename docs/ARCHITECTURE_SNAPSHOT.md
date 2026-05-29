@@ -39,6 +39,28 @@ The primary workflow is:
 
 This app is a photo handoff and listing workflow tool, not a full eBay automation platform.
 
+## 1a. iOS Flow Ownership
+
+The canonical native iOS product flow is:
+
+```txt
+AuthView -> CaptureHomeView -> CameraSessionView -> ItemDetailsScreen -> QueueReviewSheet
+```
+
+That live flow is the source of truth for workflow semantics:
+
+- `Next` finishes the current item and starts the next one.
+- `Done` ends the live capture session or batch and moves toward review.
+- `Continue to Review` is the pre-review checkpoint transition.
+- `Submit` is reserved for the live queue/review upload and handoff path.
+
+`MockIntakeFlowView` and its seeded preview/demo helpers are debug-only:
+
+- They exist for simulator preview, demo, and QA.
+- They use seeded local mock state, not product state.
+- They should not define or override production workflow semantics.
+- Future camera and review work should target the live flow unless the task explicitly says to inspect the mock/debug path.
+
 ---
 
 ## 2. Platform Roles
