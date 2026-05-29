@@ -1521,7 +1521,7 @@ private struct MockQueueReviewScreen: View {
         MockFlowHero(
           eyebrow: "Queue Review",
           title: "Finished item cards",
-          message: "This is the landing page after `Submit`. Tap a card to inspect the item and its photos."
+          message: "This is the landing page after review handoff. Tap a card to inspect the item and its photos."
         )
 
         Text("\(items.count) items")
