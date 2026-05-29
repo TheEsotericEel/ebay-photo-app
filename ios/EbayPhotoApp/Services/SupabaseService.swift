@@ -384,13 +384,13 @@ final class SupabaseService: ObservableObject {
     let client = getOrCreateOAuthClient(config: config)
     let googleAuth = try await googleAuthService.signIn()
 
-    AppLog.auth.info("Native Google token exchange started accessTokenPresent=\(!googleAuth.accessToken.isEmpty, privacy: .public) noncePresent=\(!googleAuth.nonce.isEmpty, privacy: .public)")
+    AppLog.auth.info("Native Google token exchange started accessTokenPresent=\(!googleAuth.accessToken.isEmpty, privacy: .public) noncePresent=\(!googleAuth.rawNonce.isEmpty, privacy: .public)")
     let session = try await client.auth.signInWithIdToken(
       credentials: OpenIDConnectCredentials(
         provider: .google,
         idToken: googleAuth.idToken,
         accessToken: googleAuth.accessToken,
-        nonce: googleAuth.nonce
+        nonce: googleAuth.rawNonce
       )
     )
 

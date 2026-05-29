@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import GoogleSignIn
 import Security
@@ -6,13 +7,13 @@ import UIKit
 struct GoogleAuthTokens {
   let idToken: String
   let accessToken: String
-  let nonce: String
+  let rawNonce: String
 }
 
 enum GoogleAuthNonce {
   private static let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
 
-  static func make(length: Int = 32) throws -> String {
+  static func makeRaw(length: Int = 32) throws -> String {
     guard length > 0 else {
       throw AppServiceError.server("Google sign-in could not prepare a secure login challenge.")
     }
@@ -25,6 +26,11 @@ enum GoogleAuthNonce {
 
     return String(randomBytes.map { charset[Int($0) % charset.count] })
   }
+
+  static func sha256Hex(_ value: String) -> String {
+    let digest = SHA256.hash(data: Data(value.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
+  }
 }
 
 struct GoogleAuthService {
@@ -36,10 +42,12 @@ struct GoogleAuthService {
     GIDSignIn.sharedInstance.configuration = configuration
 
     let presentingViewController = try presentingViewController()
-    let nonce = try GoogleAuthNonce.make()
+    let rawNonce = try GoogleAuthNonce.makeRaw()
+    // Supabase expects the original nonce, while Google expects its SHA-256 hex form in the ID token flow.
+    let googleNonce = GoogleAuthNonce.sha256Hex(rawNonce)
     let signInResult = try await signInResult(
       withPresenting: presentingViewController,
-      nonce: nonce
+      nonce: googleNonce
     )
 
     guard let idToken = signInResult.user.idToken?.tokenString, !idToken.isEmpty else {
@@ -51,7 +59,7 @@ struct GoogleAuthService {
       throw AppServiceError.server("Google sign-in did not return an access token.")
     }
 
-    return GoogleAuthTokens(idToken: idToken, accessToken: accessToken, nonce: nonce)
+    return GoogleAuthTokens(idToken: idToken, accessToken: accessToken, rawNonce: rawNonce)
   }
 
   func signOut() {
