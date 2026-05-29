@@ -1,10 +1,30 @@
 import Foundation
 import GoogleSignIn
+import Security
 import UIKit
 
 struct GoogleAuthTokens {
   let idToken: String
   let accessToken: String
+  let nonce: String
+}
+
+enum GoogleAuthNonce {
+  private static let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+
+  static func make(length: Int = 32) throws -> String {
+    guard length > 0 else {
+      throw AppServiceError.server("Google sign-in could not prepare a secure login challenge.")
+    }
+
+    var randomBytes = [UInt8](repeating: 0, count: length)
+    let status = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+    guard status == errSecSuccess else {
+      throw AppServiceError.server("Google sign-in could not prepare a secure login challenge.")
+    }
+
+    return String(randomBytes.map { charset[Int($0) % charset.count] })
+  }
 }
 
 struct GoogleAuthService {
@@ -16,7 +36,11 @@ struct GoogleAuthService {
     GIDSignIn.sharedInstance.configuration = configuration
 
     let presentingViewController = try presentingViewController()
-    let signInResult = try await GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController)
+    let nonce = try GoogleAuthNonce.make()
+    let signInResult = try await signInResult(
+      withPresenting: presentingViewController,
+      nonce: nonce
+    )
 
     guard let idToken = signInResult.user.idToken?.tokenString, !idToken.isEmpty else {
       throw AppServiceError.server("Google sign-in did not return an ID token.")
@@ -27,7 +51,7 @@ struct GoogleAuthService {
       throw AppServiceError.server("Google sign-in did not return an access token.")
     }
 
-    return GoogleAuthTokens(idToken: idToken, accessToken: accessToken)
+    return GoogleAuthTokens(idToken: idToken, accessToken: accessToken, nonce: nonce)
   }
 
   func signOut() {
@@ -47,6 +71,33 @@ struct GoogleAuthService {
       throw AppServiceError.notConfigured("Google sign-in is not configured. Missing \(configKey).")
     }
     return value
+  }
+
+  @MainActor
+  private func signInResult(
+    withPresenting presentingViewController: UIViewController,
+    nonce: String
+  ) async throws -> GIDSignInResult {
+    try await withCheckedThrowingContinuation { continuation in
+      GIDSignIn.sharedInstance.signIn(
+        withPresenting: presentingViewController,
+        hint: nil,
+        additionalScopes: nil,
+        nonce: nonce
+      ) { signInResult, error in
+        if let error {
+          continuation.resume(throwing: error)
+          return
+        }
+
+        guard let signInResult else {
+          continuation.resume(throwing: AppServiceError.server("Google sign-in did not complete."))
+          return
+        }
+
+        continuation.resume(returning: signInResult)
+      }
+    }
   }
 
   @MainActor
