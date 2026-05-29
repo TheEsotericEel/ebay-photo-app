@@ -80,7 +80,7 @@ See:
 - [`docs/PUBLISHABLE_MVP_FOUNDATION.md`](docs/PUBLISHABLE_MVP_FOUNDATION.md) — publishable MVP direction (workspace ownership, RLS, tombstone deletes)
 - [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md)
 - [`.env.example`](.env.example)
-- iOS auth note: native Google sign-in uses `GoogleSignIn-iOS` and exchanges into Supabase; the browser OAuth path is fallback only. See `docs/AUTH_ACCOUNT_FLOW.md`.
+- iOS auth note: native Google sign-in uses `GoogleSignIn-iOS`, was manually verified on 2026-05-29, and exchanges into Supabase; the browser OAuth path is fallback only. The nonce split is: raw nonce in-memory, SHA-256 hex to Google, raw nonce to Supabase. See `docs/AUTH_ACCOUNT_FLOW.md`.
 
 The app uses Supabase Auth and syncs item/photo handoff data into the remote `stores`, `batches`, `items`, `photos`, and `photo_variants` tables.
 The same signed-in user/account is used for both phone capture and desktop management in the MVP workspace model.

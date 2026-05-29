@@ -1,6 +1,6 @@
 # iOS Google OAuth Plan
 
-This document started as a planning artifact. Native Google Sign-In now exists in the app, with Supabase still acting as the session authority. The browser-based Supabase OAuth path remains in code only as a fallback.
+This document started as a planning artifact. Native Google Sign-In now exists in the app, with Supabase still acting as the session authority. The browser-based Supabase OAuth path remains in code only as a fallback. Manual native Google sign-in was verified on 2026-05-29.
 
 ## 1. Current iOS auth architecture
 
@@ -22,6 +22,7 @@ This document started as a planning artifact. Native Google Sign-In now exists i
 - Native bridge implemented on 2026-05-29:
   - The visible `Continue with Google` button uses native GoogleSignIn-iOS and exchanges the Google ID token with Supabase.
   - The older browser-session Supabase OAuth path remains in code as a fallback method.
+  - Manual device verification succeeded on 2026-05-29.
 
 ## 2. Recommended OAuth approach
 
@@ -30,6 +31,11 @@ Recommended path:
 - Add native Google Sign-In as a bridge that produces Google tokens for Supabase session creation.
 - Keep `SupabaseService` as the app-facing source of truth for account state and workspace requests.
 - Preserve the existing browser-based OAuth path only as a fallback/recovery path.
+- Nonce mapping for the native Google bridge:
+  - Generate one raw nonce in memory.
+  - Send the SHA-256 hex nonce to GoogleSignIn-iOS.
+  - Send the raw nonce to Supabase `signInWithIdToken`.
+  - Do not persist either nonce.
 
 Why this is the recommended path:
 - Native OAuth code exchange and PKCE are easy to get subtly wrong in a custom REST implementation.
@@ -112,9 +118,9 @@ Keep the existing Supabase config keys unchanged:
 - The session survives relaunch.
 - Sign-out clears the session and provider state.
 - Google sign-out clears local Google provider state without revoking the remote grant.
+- Manual native Google sign-in verified on 2026-05-29.
 - DEBUG routes still compile and run.
-- Dated manual verification: 2026-05-28
-  - This file now reflects the current scaffolding-only state rather than claiming the native bridge is complete.
+  - This file now reflects the current verified native state rather than a planning-only scaffold.
 
 ## 10. Debugging Redirects
 
