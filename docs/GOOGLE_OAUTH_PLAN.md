@@ -44,7 +44,7 @@ This document is a planning artifact only. It does not change app behavior.
 - Document required `Info.plist` changes for the URL scheme.
 - Document the Supabase redirect allow-list entry for the iOS callback URL.
 - See the detailed iOS OAuth plan in [docs/IOS_GOOGLE_OAUTH_PLAN.md](./IOS_GOOGLE_OAUTH_PLAN.md).
-- Recommended path: introduce the Supabase Swift client for OAuth initiation, callback exchange, and session refresh, while keeping `SupabaseService` as the app-facing auth/workspace façade.
+- Recommended path: keep `SupabaseService` as the app-facing auth/workspace façade; the verified iOS path is native GoogleSignIn-iOS plus Supabase session exchange, and browser OAuth remains fallback only.
 - Preserve existing email + password sign-in.
 - Preserve existing DEBUG launch routes.
 
@@ -78,7 +78,7 @@ Recommended order:
 
 - Desktop Google OAuth button and helper: implemented.
 - Supabase/Google provider configuration: still required outside the repo.
-  - iOS Google OAuth: implemented with Supabase Swift OAuth initiation, callback exchange, and session restoration. Build/test verification passed here; a live credentialed physical-device pass is still the remaining manual confidence check. See [docs/IOS_GOOGLE_OAUTH_PLAN.md](./IOS_GOOGLE_OAUTH_PLAN.md).
+  - iOS Google OAuth: implemented with native GoogleSignIn-iOS, a Google token exchange into Supabase, and session restoration. Manual verification passed on 2026-05-29. See [docs/IOS_GOOGLE_OAUTH_PLAN.md](./IOS_GOOGLE_OAUTH_PLAN.md).
 - Verified desktop runtime on 2026-05-27:
   - The button sends the browser to `https://wchoxagxpsejwrotvnsx.supabase.co/auth/v1/authorize?provider=google&redirect_to=http%3A%2F%2F127.0.0.1%3A4173`.
   - Supabase returned `400` with `Unsupported provider: provider is not enabled`.
