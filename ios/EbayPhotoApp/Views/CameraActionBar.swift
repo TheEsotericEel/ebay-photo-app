@@ -7,7 +7,7 @@ struct CameraActionBar: View {
   let canCapture: Bool
   let onCapture: () -> Void
   let onNextItem: () -> Void
-  private let captureButtonSize: CGFloat = 84
+  private let captureButtonSize: CGFloat = 90
 
   var body: some View {
     HStack(alignment: .bottom, spacing: 14) {
@@ -17,7 +17,7 @@ struct CameraActionBar: View {
           .font(.caption2.weight(.medium))
           .foregroundStyle(.secondary)
       }
-      .frame(width: 72)
+      .frame(width: 76)
 
       Spacer(minLength: 0)
 
@@ -45,7 +45,7 @@ struct CameraActionBar: View {
       Spacer(minLength: 0)
 
       secondaryButton("Next", action: onNextItem)
-        .frame(width: 108)
+        .frame(width: 104)
         .accessibilityIdentifier("liveCamera.next")
     }
     .padding(.horizontal, 16)

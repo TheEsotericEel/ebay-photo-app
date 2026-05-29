@@ -491,7 +491,7 @@ private struct CameraContextStrip: View {
       )
     }
     .padding(.horizontal, 10)
-    .padding(.vertical, 6)
+    .padding(.vertical, 5)
     .background {
       RoundedRectangle(cornerRadius: 12, style: .continuous)
         .fill(.white.opacity(0.08))
@@ -2680,7 +2680,7 @@ private struct CameraSessionView: View {
   }
 
   var body: some View {
-    VStack(spacing: 4) {
+    VStack(spacing: 5) {
       CameraTopBar(
         title: "Item \(appState.currentItemNumber)",
         photoCount: appState.capturedPhotos.count,
@@ -2709,7 +2709,7 @@ private struct CameraSessionView: View {
         if isEditingOverlayPresented {
           cameraPreviewPlaceholder
         } else {
-          VStack(spacing: 4) {
+          VStack(spacing: 5) {
             CameraPreviewArea(
               session: cameraService.session,
               cameraService: cameraService,
@@ -2776,7 +2776,7 @@ private struct CameraSessionView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(Color.black.ignoresSafeArea())
     .accessibilityIdentifier("liveCamera.screen")
-    .padding(.bottom, 6)
+    .padding(.bottom, 4)
     .onAppear {
       startCamera()
     }

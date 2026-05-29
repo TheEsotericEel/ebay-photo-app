@@ -7,7 +7,7 @@ struct CameraTopBar: View {
   let onDone: () -> Void
 
   var body: some View {
-    HStack(spacing: 10) {
+    HStack(alignment: .center, spacing: 12) {
       Button(action: onBack) {
         Image(systemName: "chevron.left")
           .font(.system(size: 15, weight: .semibold))
@@ -26,26 +26,28 @@ struct CameraTopBar: View {
       .accessibilityLabel("Back")
       .accessibilityIdentifier("liveCamera.back")
 
-      Text(title)
-        .font(.subheadline.weight(.semibold))
-        .foregroundStyle(.white)
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      VStack(alignment: .leading, spacing: 1) {
+        Text(title)
+          .font(.headline.weight(.semibold))
+          .foregroundStyle(.white)
+          .lineLimit(1)
+          .minimumScaleFactor(0.9)
 
-      Text("\(photoCount)")
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .monospacedDigit()
-        .accessibilityLabel("\(photoCount) photos captured")
-        .accessibilityIdentifier("liveCamera.photoCount")
+        Text("\(photoCount) photo\(photoCount == 1 ? "" : "s")")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.secondary)
+          .monospacedDigit()
+          .accessibilityLabel("\(photoCount) photos captured")
+          .accessibilityIdentifier("liveCamera.photoCount")
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
 
       Button(action: onDone) {
         Text("Done")
           .font(.subheadline.weight(.semibold))
           .foregroundStyle(.white)
           .padding(.horizontal, 14)
-          .frame(height: 32)
+          .frame(minWidth: 86, minHeight: 34)
           .background {
             Capsule(style: .continuous)
               .fill(.white.opacity(0.12))
