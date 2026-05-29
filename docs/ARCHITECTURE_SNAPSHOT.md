@@ -50,6 +50,7 @@ The native iOS app owns the capture-first workflow.
 Current responsibilities:
 
 - Authenticate with Supabase.
+- Native Google sign-in exchanges Google tokens into a Supabase session; Supabase remains the app/session authority.
 - Maintain capture context:
   - store
   - store short code

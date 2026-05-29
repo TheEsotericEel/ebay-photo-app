@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
       return true
     }
 
+    // Return false so SwiftUI .onOpenURL can still receive the legacy Supabase callback URL.
     return false
   }
 }

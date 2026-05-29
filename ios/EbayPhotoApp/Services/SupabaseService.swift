@@ -294,7 +294,8 @@ final class SupabaseService: ObservableObject {
     }
   }
 
-  func signInWithGoogle() async throws {
+  /// Legacy browser-session Google OAuth fallback retained for recovery/testing.
+  func signInWithGoogleBrowserFallback() async throws {
     let config = try loadConfig()
     let client = getOrCreateOAuthClient(config: config)
     let redirectURL = try oauthRedirectURL()
@@ -450,6 +451,7 @@ final class SupabaseService: ObservableObject {
     activeOAuthSession = nil
     oauthClient = nil
     oauthClientKey = nil
+    // Clear local Google provider state without revoking the remote grant.
     GIDSignIn.sharedInstance.signOut()
     resetOAuthFlowState()
     cachedSession = nil

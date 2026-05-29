@@ -1,6 +1,6 @@
 # iOS Google OAuth Plan
 
-This document started as a planning artifact. Slice 1 has only added native Google Sign-In scaffolding so far; the browser-based Supabase OAuth path is still the active login behavior until the native bridge lands.
+This document started as a planning artifact. Native Google Sign-In now exists in the app, with Supabase still acting as the session authority. The browser-based Supabase OAuth path remains in code only as a fallback.
 
 ## 1. Current iOS auth architecture
 
@@ -14,12 +14,14 @@ This document started as a planning artifact. Slice 1 has only added native Goog
   - sign-out
   - cached session restoration
   - authenticated workspace/item requests
-- `Info.plist` currently has Supabase config keys plus Google client-ID placeholders, but not the native Google callback URL scheme yet.
-- `AppDelegate` currently handles portrait locking only. Google callback URL handling is deferred to the native bridge slice.
+- `Info.plist` currently has Supabase config keys plus Google client-ID wiring and the Google callback URL scheme.
+- `AppDelegate` now handles Google callback URLs and returns non-Google URLs to SwiftUI `.onOpenURL` for the legacy Supabase callback flow.
 - Slice 1 scaffolding implemented on 2026-05-28:
   - GoogleSignIn-iOS package references were added to the Xcode project.
   - `GIDClientID` and `GIDServerClientID` build-setting plumbing was added.
-  - The app still uses the existing browser-session Supabase OAuth path for the visible `Continue with Google` button.
+- Native bridge implemented on 2026-05-29:
+  - The visible `Continue with Google` button uses native GoogleSignIn-iOS and exchanges the Google ID token with Supabase.
+  - The older browser-session Supabase OAuth path remains in code as a fallback method.
 
 ## 2. Recommended OAuth approach
 
@@ -27,7 +29,7 @@ Recommended path:
 - Keep Supabase as the final session authority.
 - Add native Google Sign-In as a bridge that produces Google tokens for Supabase session creation.
 - Keep `SupabaseService` as the app-facing source of truth for account state and workspace requests.
-- Preserve the existing browser-based OAuth path until the native bridge is wired and validated.
+- Preserve the existing browser-based OAuth path only as a fallback/recovery path.
 
 Why this is the recommended path:
 - Native OAuth code exchange and PKCE are easy to get subtly wrong in a custom REST implementation.
@@ -109,13 +111,14 @@ Keep the existing Supabase config keys unchanged:
 - Google OAuth returns to the app through the native bridge.
 - The session survives relaunch.
 - Sign-out clears the session and provider state.
+- Google sign-out clears local Google provider state without revoking the remote grant.
 - DEBUG routes still compile and run.
 - Dated manual verification: 2026-05-28
   - This file now reflects the current scaffolding-only state rather than claiming the native bridge is complete.
 
 ## 10. Debugging Redirects
 
-- Added DEBUG-only diagnostics to `signInWithGoogle` to print:
+- Added DEBUG-only diagnostics to `signInWithGoogleBrowserFallback` to print:
   - Intended redirect target URL.
   - Whether `redirect_to` is present in the `signInURL` and its value.
   - Generated OAuth URL host.

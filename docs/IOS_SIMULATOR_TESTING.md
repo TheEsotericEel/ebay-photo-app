@@ -3,7 +3,7 @@
 Use the simulator for non-camera-critical work:
 
 - Supabase config validation
-- auth flow (email OTP default; sign out, session restore)
+- auth flow (email/password, native Google sign-in, sign out, session restore)
 - upload service behavior
 - storage path and DB row verification
 - status/failure handling
