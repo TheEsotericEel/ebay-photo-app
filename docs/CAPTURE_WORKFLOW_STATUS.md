@@ -24,7 +24,8 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 
 ### Next / Done
 - `Next` with draft photos opens `ItemDetailsScreen`.
-- `Done` remains pending final product decision; current code opens `ItemDetailsScreen` when draft photos exist.
+- `Done` with draft photos opens `ItemDetailsScreen`.
+- `Done` with no draft photos but queued items open `Queue Review`.
 - `Next` with no draft photos shows a status message and does not advance.
 - `Done` with no draft photos exits to `Capture Home`.
 

@@ -2758,6 +2758,10 @@ private struct CameraSessionView: View {
         onBack: onBack,
         onDone: {
           guard !appState.capturedPhotos.isEmpty else {
+            if !appState.queuedItemPackets.isEmpty {
+              onOpenQueueReview()
+              return
+            }
             onDone()
             return
           }

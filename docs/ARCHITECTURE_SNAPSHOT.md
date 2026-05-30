@@ -52,7 +52,7 @@ That live flow is the source of truth for workflow semantics:
 - `Next` opens the optional item checkpoint.
 - `Save & Next` queues the current draft and returns to the live camera for the next blank item.
 - `Continue to Review` queues the current draft and opens Queue Review.
-- `Done` remains pending final product decision; current code opens the checkpoint when photos exist and exits when there are none.
+- `Done` finishes the capture session: it opens the checkpoint when photos exist, opens Queue Review when the draft is empty but queued items exist, and exits to Capture Home when there is nothing to review.
 - `Submit` is reserved for the live queue/review upload and handoff path.
 
 `MockIntakeFlowView` and its seeded preview/demo helpers are debug-only:
@@ -335,7 +335,7 @@ The native iOS app currently has:
 - Store and batch context editing.
 - Item metadata editing.
 - Finish Item checkpoint before queueing.
-- `Done` remains pending final product decision; current code opens the checkpoint when the current draft has captured photos.
+- `Done` finishes the capture session: current code opens the checkpoint when the current draft has captured photos, opens Queue Review when the draft is empty but queued items exist, and exits to Capture Home when there is nothing to review.
 - Queue review.
 - Queue item editing.
 - Queue item deletion.

@@ -12,7 +12,8 @@ Live capture flow:
 - `Capture Home -> Open Camera` opens `CameraSessionView`.
 - `Next` with at least one draft photo opens `ItemDetailsScreen`.
 - `Next` with no draft photos does not advance and sets `Capture at least one photo before continuing.`
-- `Done` remains pending final product decision; current code opens `ItemDetailsScreen` when at least one draft photo exists.
+- `Done` with at least one draft photo opens `ItemDetailsScreen`.
+- `Done` with no draft photos but queued items opens `Queue Review`.
 - `Done` with no draft photos exits the camera back to `Capture Home`.
 
 Item details checkpoint:
