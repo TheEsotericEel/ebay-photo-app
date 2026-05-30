@@ -5,6 +5,7 @@ struct CameraActionBar: View {
   let thumbnailImage: UIImage?
   let photoCount: Int
   let canCapture: Bool
+  let isCapturing: Bool
   let onCapture: () -> Void
   let onNextItem: () -> Void
   private let captureButtonSize: CGFloat = 90
@@ -22,22 +23,31 @@ struct CameraActionBar: View {
       Spacer(minLength: 0)
 
       Button(action: onCapture) {
-        Circle()
-          .fill(.white)
-          .frame(width: captureButtonSize, height: captureButtonSize)
-          .overlay {
-            Circle()
-              .stroke(.white.opacity(0.9), lineWidth: 6)
-              .padding(4)
+        ZStack {
+          Circle()
+            .fill(.white)
+            .frame(width: captureButtonSize, height: captureButtonSize)
+            .overlay {
+              Circle()
+                .stroke(.white.opacity(0.9), lineWidth: 6)
+                .padding(4)
+            }
+            .overlay {
+              Circle()
+                .stroke(Color.black.opacity(canCapture ? 0.22 : 0.12), lineWidth: 1.5)
+            }
+            .shadow(color: .black.opacity(canCapture ? 0.28 : 0.12), radius: 10, x: 0, y: 6)
+            .scaleEffect(canCapture ? 1 : 0.96)
+
+          if isCapturing {
+            ProgressView()
+              .progressViewStyle(.circular)
+              .tint(.black.opacity(0.72))
+              .scaleEffect(0.9)
           }
-          .overlay {
-            Circle()
-              .stroke(Color.black.opacity(canCapture ? 0.22 : 0.12), lineWidth: 1.5)
-          }
-          .shadow(color: .black.opacity(canCapture ? 0.28 : 0.12), radius: 10, x: 0, y: 6)
-          .scaleEffect(canCapture ? 1 : 0.96)
+        }
       }
-      .buttonStyle(.plain)
+      .buttonStyle(PressFeedbackButtonStyle(pressedScale: 0.95, pressedOpacity: 0.92))
       .accessibilityLabel("Capture")
       .accessibilityIdentifier("liveCamera.capture")
       .disabled(!canCapture)
@@ -93,6 +103,6 @@ struct CameraActionBar: View {
             .stroke(.white.opacity(0.14), lineWidth: 1)
         }
     }
-    .buttonStyle(.plain)
+    .buttonStyle(PressFeedbackButtonStyle())
   }
 }

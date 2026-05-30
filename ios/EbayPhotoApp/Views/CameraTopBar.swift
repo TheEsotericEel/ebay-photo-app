@@ -19,10 +19,10 @@ struct CameraTopBar: View {
           }
           .overlay {
             Circle()
-              .stroke(.white.opacity(0.18), lineWidth: 1)
+            .stroke(.white.opacity(0.18), lineWidth: 1)
           }
       }
-      .buttonStyle(.plain)
+      .buttonStyle(PressFeedbackButtonStyle())
       .accessibilityLabel("Back")
       .accessibilityIdentifier("liveCamera.back")
 
@@ -53,11 +53,11 @@ struct CameraTopBar: View {
               .fill(.white.opacity(0.12))
           }
           .overlay {
-            Capsule(style: .continuous)
-              .stroke(.white.opacity(0.18), lineWidth: 1)
+          Capsule(style: .continuous)
+            .stroke(.white.opacity(0.18), lineWidth: 1)
           }
       }
-      .buttonStyle(.plain)
+      .buttonStyle(PressFeedbackButtonStyle())
       .accessibilityIdentifier("liveCamera.done")
     }
     .padding(.horizontal, 16)
