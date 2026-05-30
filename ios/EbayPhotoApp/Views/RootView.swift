@@ -355,12 +355,21 @@ struct RootView: View {
     appState.uploadMessage = ""
 
     if advanceCurrentDraftIfNeeded, !appState.capturedPhotos.isEmpty {
+      guard await appState.awaitCurrentDraftPhotoPersistence(statusMessage: "Finishing local photo save…") else {
+        appState.uploadMessage = ""
+        return false
+      }
       appState.advanceToNextItem()
     }
 
     let eligible = appState.queueEligibleForSubmit()
     guard !eligible.isEmpty else {
       appState.statusMessage = "No queued items are ready to submit. Queue Review stays open."
+      appState.uploadMessage = ""
+      return false
+    }
+
+    guard await appState.awaitQueuedPhotoPersistence(for: eligible, statusMessage: "Finishing local photo save…") else {
       appState.uploadMessage = ""
       return false
     }
@@ -2810,7 +2819,12 @@ private struct CameraSessionView: View {
             return
           }
           // Next is the item boundary; Done is the session boundary; Submit is upload/handoff.
-          appState.advanceToNextItem()
+          Task { @MainActor in
+            guard await appState.awaitCurrentDraftPhotoPersistence(statusMessage: "Finishing local photo save…") else {
+              return
+            }
+            appState.advanceToNextItem()
+          }
         }
       )
       .layoutPriority(0)
@@ -2846,17 +2860,27 @@ private struct CameraSessionView: View {
               appState.statusMessage = "Capture at least one photo before continuing to review."
               return
             }
-            appState.advanceToNextItem()
-            showingDetails = false
-            onOpenQueueReview()
+            Task { @MainActor in
+              guard await appState.awaitCurrentDraftPhotoPersistence(statusMessage: "Finishing local photo save…") else {
+                return
+              }
+              appState.advanceToNextItem()
+              showingDetails = false
+              onOpenQueueReview()
+            }
           },
           onNextItem: {
             guard !appState.capturedPhotos.isEmpty else {
               appState.statusMessage = "Capture at least one photo before continuing."
               return
             }
-            appState.advanceToNextItem()
-            showingDetails = false
+            Task { @MainActor in
+              guard await appState.awaitCurrentDraftPhotoPersistence(statusMessage: "Finishing local photo save…") else {
+                return
+              }
+              appState.advanceToNextItem()
+              showingDetails = false
+            }
           },
           thumbnailContent: {
             liveItemDetailsThumbnail

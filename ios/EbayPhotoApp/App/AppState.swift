@@ -11,6 +11,100 @@ private struct PersistedCaptureContext: Codable {
   var captureBatchRemoteId: String?
 }
 
+private struct PhotoAssetPersistencePayload: Sendable {
+  let listingData: Data
+  let thumbnailData: Data?
+  let originalData: Data?
+  let listingFileName: String
+  let thumbnailFileName: String?
+  let originalFileName: String?
+}
+
+private actor QueuePersistenceStore {
+  private let queueRootDirectoryName: String
+  private let queueStateFileName: String
+  private let queuePhotosDirectoryName: String
+
+  init(
+    queueRootDirectoryName: String,
+    queueStateFileName: String,
+    queuePhotosDirectoryName: String
+  ) {
+    self.queueRootDirectoryName = queueRootDirectoryName
+    self.queueStateFileName = queueStateFileName
+    self.queuePhotosDirectoryName = queuePhotosDirectoryName
+  }
+
+  func savePhotoAssets(
+    payload: PhotoAssetPersistencePayload
+  ) throws {
+    let directory = try queuePhotosDirectoryURL()
+    let listingURL = directory.appendingPathComponent(payload.listingFileName)
+    try payload.listingData.write(to: listingURL, options: .atomic)
+
+    if let thumbnailFileName = payload.thumbnailFileName, let thumbnailData = payload.thumbnailData {
+      let thumbURL = directory.appendingPathComponent(thumbnailFileName)
+      try thumbnailData.write(to: thumbURL, options: .atomic)
+    }
+
+    if let originalFileName = payload.originalFileName, let originalData = payload.originalData {
+      let originalURL = directory.appendingPathComponent(originalFileName)
+      try originalData.write(to: originalURL, options: .atomic)
+    }
+  }
+
+  func deletePhotoAssets(
+    listingFileName: String,
+    thumbnailFileName: String,
+    originalFileName: String
+  ) {
+    let fm = FileManager.default
+    guard let directory = try? queuePhotosDirectoryURL() else { return }
+
+    let listingURL = directory.appendingPathComponent(listingFileName)
+    let thumbURL = directory.appendingPathComponent(thumbnailFileName)
+    let originalURL = directory.appendingPathComponent(originalFileName)
+
+    if fm.fileExists(atPath: listingURL.path) {
+      try? fm.removeItem(at: listingURL)
+    }
+    if fm.fileExists(atPath: thumbURL.path) {
+      try? fm.removeItem(at: thumbURL)
+    }
+    if fm.fileExists(atPath: originalURL.path) {
+      try? fm.removeItem(at: originalURL)
+    }
+  }
+
+  func writeQueueState(_ data: Data) throws {
+    let url = try queueStateFileURL()
+    try data.write(to: url, options: .atomic)
+  }
+
+  private func queueStateFileURL() throws -> URL {
+    try queueRootDirectoryURL().appendingPathComponent(queueStateFileName)
+  }
+
+  private func queuePhotosDirectoryURL() throws -> URL {
+    let directory = try queueRootDirectoryURL().appendingPathComponent(queuePhotosDirectoryName, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory
+  }
+
+  private func queueRootDirectoryURL() throws -> URL {
+    let fm = FileManager.default
+    let appSupport = try fm.url(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask,
+      appropriateFor: nil,
+      create: true
+    )
+    let queueRoot = appSupport.appendingPathComponent(queueRootDirectoryName, isDirectory: true)
+    try fm.createDirectory(at: queueRoot, withIntermediateDirectories: true)
+    return queueRoot
+  }
+}
+
 @MainActor
 final class AppState: ObservableObject {
   struct QueueSubmitProgress {
@@ -277,8 +371,14 @@ final class AppState: ObservableObject {
   private let captureContextStorageKey = "ebp.capture.context.v1"
   private let queueStateFileName = "capture-queue-state-v1.json"
   private let queuePhotosDirectoryName = "capture-queue-photos"
+  private let persistenceStore: QueuePersistenceStore
   private var isApplyingPersistedCaptureContext = false
   private var isApplyingPersistedQueueState = false
+  private var pendingPhotoPersistenceTasks: [UUID: Task<Void, Error>] = [:]
+  private var photoPersistenceErrors: [UUID: String] = [:]
+  private var queueStatePersistenceTask: Task<Void, Never>?
+  private var queueStatePersistenceRevision = 0
+  private var isAwaitingCurrentDraftPersistence = false
 
   var captureContextChipLabel: String {
     "\(captureStoreShortCode) · \(captureBatchName) · Item \(currentItemNumber)"
@@ -290,6 +390,11 @@ final class AppState: ObservableObject {
   ) {
     self.userDefaults = userDefaults
     self.queueRootDirectoryName = queueRootDirectoryName
+    self.persistenceStore = QueuePersistenceStore(
+      queueRootDirectoryName: queueRootDirectoryName,
+      queueStateFileName: "capture-queue-state-v1.json",
+      queuePhotosDirectoryName: "capture-queue-photos"
+    )
     let loaded = Self.loadCaptureContext(from: userDefaults, key: captureContextStorageKey)
     isApplyingPersistedCaptureContext = true
     captureStoreName = loaded.captureStoreName
@@ -410,14 +515,9 @@ final class AppState: ObservableObject {
   }
 
   func addCapturedPhoto(_ photo: CapturedPhoto) {
-    do {
-      try savePhotoAssetFiles(for: photo)
-      capturedPhotos.append(photo)
-      statusMessage = "Captured \(capturedPhotos.count) photo(s)"
-    } catch {
-      statusMessage = "Capture saved in memory only: \(error.localizedDescription)"
-      capturedPhotos.append(photo)
-    }
+    beginPersistingPhotoAssets(for: photo)
+    capturedPhotos.append(photo)
+    statusMessage = "Captured \(capturedPhotos.count) photo(s)"
   }
 
   var hasCurrentDraftContent: Bool {
@@ -795,9 +895,32 @@ final class AppState: ObservableObject {
     statusMessage = "Moved to item \(currentItemNumber)"
   }
 
+  func awaitCurrentDraftPhotoPersistence(statusMessage waitingMessage: String) async -> Bool {
+    guard !isAwaitingCurrentDraftPersistence else { return false }
+    isAwaitingCurrentDraftPersistence = true
+    defer { isAwaitingCurrentDraftPersistence = false }
+    return await awaitPhotoPersistence(
+      for: Set(capturedPhotos.map(\.id)),
+      waitingMessage: waitingMessage
+    )
+  }
+
+  func awaitQueuedPhotoPersistence(
+    for items: [LocalQueueItemPacket],
+    statusMessage waitingMessage: String
+  ) async -> Bool {
+    let photoIDs = Set(items.flatMap(\.photos).map(\.id))
+    return await awaitPhotoPersistence(for: photoIDs, waitingMessage: waitingMessage)
+  }
+
   private func persistQueueStateIfNeeded() {
     guard !isApplyingPersistedQueueState else { return }
-    persistQueueState()
+    queueStatePersistenceRevision += 1
+    let revision = queueStatePersistenceRevision
+    queueStatePersistenceTask?.cancel()
+    queueStatePersistenceTask = Task { [weak self] in
+      await self?.persistQueueState(revision: revision)
+    }
   }
 
   private func restoreQueueState() {
@@ -822,7 +945,37 @@ final class AppState: ObservableObject {
     }
   }
 
-  private func persistQueueState() {
+  private func persistQueueState(revision: Int) async {
+    let pendingTasks = Array(pendingPhotoPersistenceTasks.values)
+    for task in pendingTasks {
+      _ = try? await task.value
+    }
+
+    guard !Task.isCancelled else { return }
+
+    if !photoPersistenceErrors.isEmpty {
+      AppLog.camera.error("Queue state persistence skipped: photo persistence is still unresolved.")
+      if queueStatePersistenceRevision == revision {
+        queueStatePersistenceTask = nil
+      }
+      return
+    }
+
+    let state = makePersistedQueueStateSnapshot()
+
+    do {
+      let data = try JSONEncoder().encode(state)
+      try await persistenceStore.writeQueueState(data)
+    } catch {
+      AppLog.camera.error("Queue state persistence failed error=\(error.localizedDescription, privacy: .public)")
+    }
+
+    if queueStatePersistenceRevision == revision {
+      queueStatePersistenceTask = nil
+    }
+  }
+
+  private func makePersistedQueueStateSnapshot() -> PersistedQueueState {
     let draft: PersistedDraftItem? = hasCurrentDraftContent
       ? PersistedDraftItem(
           sku: currentItemSku,
@@ -842,18 +995,87 @@ final class AppState: ObservableObject {
         )
       : nil
 
-    let state = PersistedQueueState(
+    return PersistedQueueState(
       queuedItems: queuedItemPackets,
       draft: draft
     )
+  }
 
-    do {
-      let data = try JSONEncoder().encode(state)
-      let url = try queueStateFileURL()
-      try data.write(to: url, options: .atomic)
-    } catch {
-      AppLog.camera.error("Queue state persistence failed error=\(error.localizedDescription, privacy: .public)")
+  private func beginPersistingPhotoAssets(for photo: CapturedPhoto) {
+    photoPersistenceErrors.removeValue(forKey: photo.id)
+
+    let payload = PhotoAssetPersistencePayload(
+      listingData: photo.data,
+      thumbnailData: photo.thumbnailData,
+      originalData: photo.originalData,
+      listingFileName: listingFileName(for: photo.id),
+      thumbnailFileName: photo.thumbnailData == nil ? nil : thumbnailFileName(for: photo.id),
+      originalFileName: photo.originalData == nil ? nil : originalFileName(for: photo.id)
+    )
+
+    let task = Task(priority: .utility) { [persistenceStore] in
+      try await persistenceStore.savePhotoAssets(payload: payload)
     }
+
+    pendingPhotoPersistenceTasks[photo.id] = task
+
+    Task { [weak self] in
+      do {
+        try await task.value
+        await MainActor.run {
+          self?.finishPhotoPersistence(for: photo.id, error: nil)
+        }
+      } catch {
+        await MainActor.run {
+          self?.finishPhotoPersistence(for: photo.id, error: error)
+        }
+      }
+    }
+  }
+
+  private func finishPhotoPersistence(for photoId: UUID, error: Error?) {
+    pendingPhotoPersistenceTasks.removeValue(forKey: photoId)
+
+    if let error {
+      photoPersistenceErrors[photoId] = error.localizedDescription
+      statusMessage = "Capture saved in memory only: \(error.localizedDescription)"
+    } else {
+      photoPersistenceErrors.removeValue(forKey: photoId)
+    }
+
+    persistQueueStateIfNeeded()
+  }
+
+  private func awaitPhotoPersistence(
+    for photoIDs: Set<UUID>,
+    waitingMessage: String
+  ) async -> Bool {
+    guard !photoIDs.isEmpty else { return true }
+
+    if let errorMessage = firstPhotoPersistenceError(for: photoIDs) {
+      statusMessage = "Capture saved in memory only: \(errorMessage)"
+      return false
+    }
+
+    let pendingTasks = pendingPhotoPersistenceTasks.filter { photoIDs.contains($0.key) }
+    guard !pendingTasks.isEmpty else { return true }
+
+    statusMessage = waitingMessage
+
+    for task in pendingTasks.values {
+      _ = try? await task.value
+    }
+
+    if let errorMessage = firstPhotoPersistenceError(for: photoIDs) {
+      statusMessage = "Capture saved in memory only: \(errorMessage)"
+      return false
+    }
+
+    return true
+  }
+
+  private func firstPhotoPersistenceError(for photoIDs: Set<UUID>) -> String? {
+    photoPersistenceErrors.first(where: { photoIDs.contains($0.key) })?.value
   }
 
   private func restoreCapturedPhoto(from persisted: LocalQueuePhoto) -> CapturedPhoto? {
@@ -877,34 +1099,16 @@ final class AppState: ObservableObject {
     )
   }
 
-  private func savePhotoAssetFiles(for photo: CapturedPhoto) throws {
-    let directory = try queuePhotosDirectoryURL()
-    let listingURL = directory.appendingPathComponent(listingFileName(for: photo.id))
-    try photo.data.write(to: listingURL, options: .atomic)
-    if let thumbnailData = photo.thumbnailData {
-      let thumbURL = directory.appendingPathComponent(thumbnailFileName(for: photo.id))
-      try thumbnailData.write(to: thumbURL, options: .atomic)
-    }
-    if let originalData = photo.originalData {
-      let originalURL = directory.appendingPathComponent(originalFileName(for: photo.id))
-      try originalData.write(to: originalURL, options: .atomic)
-    }
-  }
-
   private func deletePhotoAssetFiles(for photoId: UUID) {
-    let fm = FileManager.default
-    guard let directory = try? queuePhotosDirectoryURL() else { return }
-    let listingURL = directory.appendingPathComponent(listingFileName(for: photoId))
-    let thumbURL = directory.appendingPathComponent(thumbnailFileName(for: photoId))
-    let originalURL = directory.appendingPathComponent(originalFileName(for: photoId))
-    if fm.fileExists(atPath: listingURL.path) {
-      try? fm.removeItem(at: listingURL)
-    }
-    if fm.fileExists(atPath: thumbURL.path) {
-      try? fm.removeItem(at: thumbURL)
-    }
-    if fm.fileExists(atPath: originalURL.path) {
-      try? fm.removeItem(at: originalURL)
+    let listingFileName = listingFileName(for: photoId)
+    let thumbnailFileName = thumbnailFileName(for: photoId)
+    let originalFileName = originalFileName(for: photoId)
+    Task(priority: .utility) { [persistenceStore] in
+      await persistenceStore.deletePhotoAssets(
+        listingFileName: listingFileName,
+        thumbnailFileName: thumbnailFileName,
+        originalFileName: originalFileName
+      )
     }
   }
 
