@@ -502,6 +502,7 @@ private struct CameraContextStrip: View {
         icon: "tag",
         value: "Item \(itemNumber)",
         accessibilityLabel: "Item \(itemNumber). Edit item details.",
+        accessibilityIdentifier: "liveCamera.itemNumber",
         action: onItemTap
       )
     }
@@ -527,6 +528,7 @@ private struct CameraContextStrip: View {
     icon: String,
     value: String,
     accessibilityLabel: String,
+    accessibilityIdentifier: String? = nil,
     action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
@@ -544,6 +546,9 @@ private struct CameraContextStrip: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel(accessibilityLabel)
+    .ifLet(accessibilityIdentifier) { view, identifier in
+      view.accessibilityIdentifier(identifier)
+    }
   }
 }
 
@@ -894,6 +899,7 @@ private struct CaptureHomeView: View {
                 action: onPreviewIntakeFlow
               )
             }
+            .accessibilityIdentifier("captureHome.screen")
           }
 
           CaptureHomeCard(title: "Active Batch") {

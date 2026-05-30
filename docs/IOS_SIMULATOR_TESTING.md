@@ -73,6 +73,21 @@ It covers the debug launch paths for:
 - `-open-mock-intake-flow`
 - `-open-input-lab`
 
+## iOS UI smoke runner
+
+Use the smoke runner for the new native UI test slice:
+
+```bash
+./scripts/test-ios-smoke.sh
+```
+
+It runs the `EbayPhotoAppUITests` smoke target against a simulator and writes a timestamped folder under `tmp/test-runs/ios-smoke-<timestamp>/` with:
+
+- `result.xcresult`
+- `xcodebuild.log`
+- `simulator.log`
+- `screenshots/`
+
 ## Auth rate limits (`429 over_email_send_rate_limit`)
 
 If OTP or account creation fails with email rate limit errors, see:

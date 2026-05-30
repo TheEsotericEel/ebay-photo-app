@@ -101,7 +101,7 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
 - Real remote upload confirmation remains the least proven part of the flow.
 - Local photo cleanup policy after successful submit is intentionally conservative and user-initiated only.
 - The seeded live-camera route can still show the first-run camera permission prompt on fresh simulator boots.
-- There is still no dedicated UI test target; verification is script/manual plus unit tests.
+- There is now a dedicated `EbayPhotoAppUITests` smoke target for the auth, capture-home, and seeded live-camera debug routes.
 - Some live flow interactions are still more code-backed than fully interactive verified.
 
 ## Recommended next 5 implementation slices

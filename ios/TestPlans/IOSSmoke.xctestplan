@@ -1,0 +1,27 @@
+{
+  "configurations" : [
+    {
+      "id" : "C9003BF5-4AD2-45D6-BB60-30C721C0D075",
+      "name" : "Default",
+      "options" : {
+      }
+    }
+  ],
+  "defaultOptions" : {
+  },
+  "testTargets" : [
+    {
+      "selectedTests" : [
+        "EbayPhotoAppUITests/testFreshLaunchShowsAuthView()",
+        "EbayPhotoAppUITests/testOpenCaptureHomeRouteShowsCaptureHome()",
+        "EbayPhotoAppUITests/testSeededLiveCameraRouteShowsStableCameraState()"
+      ],
+      "target" : {
+        "containerPath" : "container:EbayPhotoApp.xcodeproj",
+        "identifier" : "5B8C1D4C2C2F4D5D8B900001",
+        "name" : "EbayPhotoAppUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

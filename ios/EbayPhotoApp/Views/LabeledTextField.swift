@@ -44,7 +44,7 @@ struct OptionalAutocapitalize: ViewModifier {
   }
 }
 
-private extension View {
+extension View {
   @ViewBuilder
   func ifLet<T, Content: View>(
     _ value: T?,
