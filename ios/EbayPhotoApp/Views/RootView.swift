@@ -2695,7 +2695,6 @@ private struct CameraSessionView: View {
   let onOpenQueueReview: () -> Void
 
   @State private var showingContext = false
-  @State private var pinchStartZoom: Double?
   @State private var isCaptureLoopRunning = false
   @State private var pendingCaptureCount = 0
   private let maxPendingCaptures = 2
@@ -2739,7 +2738,6 @@ private struct CameraSessionView: View {
               session: cameraService.session,
               cameraService: cameraService,
               cameraPreferences: cameraPreferences,
-              pinchStartZoom: $pinchStartZoom,
               canUndo: !appState.capturedPhotos.isEmpty,
               onUndo: {
                 appState.undoLastCapture()

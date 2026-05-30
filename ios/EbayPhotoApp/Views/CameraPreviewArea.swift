@@ -6,7 +6,6 @@ struct CameraPreviewArea: View {
   let session: AVCaptureSession
   @ObservedObject var cameraService: CameraService
   @ObservedObject var cameraPreferences: CameraPreferencesStore
-  @Binding var pinchStartZoom: Double?
   let canUndo: Bool
   let onUndo: () -> Void
   let onSelectLens: (CameraLensPreset) -> Void
@@ -24,19 +23,28 @@ struct CameraPreviewArea: View {
 
   @ViewBuilder
   private func squarePreview(side: CGFloat) -> some View {
-    CameraPreviewView(session: session)
+    CameraPreviewView(
+      session: session,
+      currentZoom: cameraService.currentZoom,
+      minZoom: cameraService.minZoom,
+      maxZoom: cameraService.userFacingMaxZoom,
+      onTapFocus: { point in
+        cameraService.focus(at: point)
+      },
+      onResetFocus: {
+        cameraService.resetFocus()
+      },
+      onZoomChange: { zoom in
+        let lens = cameraPreferences.preferredLens
+        let clamped = min(max(zoom, cameraService.minZoom), max(cameraService.userFacingMaxZoom, cameraService.minZoom))
+        cameraPreferences.setZoom(clamped, for: lens)
+        cameraService.setZoom(clamped)
+      }
+    )
       .frame(width: side, height: side)
       .background(.black)
       .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
       .shadow(color: .black.opacity(0.34), radius: 20, x: 0, y: 12)
-      .overlay {
-        PreviewInteractionLayer(
-          cameraService: cameraService,
-          cameraPreferences: cameraPreferences,
-          pinchStartZoom: $pinchStartZoom
-        )
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-      }
       .overlay {
         if cameraPreferences.gridEnabled || cameraPreferences.horizonGuideEnabled {
           CameraGuideOverlay(
@@ -96,66 +104,6 @@ struct CameraPreviewArea: View {
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Undo last capture")
-  }
-}
-
-private struct PreviewInteractionLayer: View {
-  @ObservedObject var cameraService: CameraService
-  @ObservedObject var cameraPreferences: CameraPreferencesStore
-  @Binding var pinchStartZoom: Double?
-
-  var body: some View {
-    GeometryReader { proxy in
-      Color.clear
-        .contentShape(Rectangle())
-        .gesture(singleTapGesture(in: proxy.size))
-        .simultaneousGesture(doubleTapGesture)
-        .simultaneousGesture(pinchGesture)
-    }
-  }
-
-  private func singleTapGesture(in size: CGSize) -> some Gesture {
-    SpatialTapGesture()
-      .onEnded { value in
-        let normalized = normalizedPoint(value.location, in: size)
-        cameraService.focus(at: normalized)
-      }
-  }
-
-  private var doubleTapGesture: some Gesture {
-    TapGesture(count: 2)
-      .onEnded {
-        cameraService.resetFocus()
-      }
-  }
-
-  private var pinchGesture: some Gesture {
-    MagnificationGesture()
-      .onChanged { scale in
-        if pinchStartZoom == nil {
-          pinchStartZoom = cameraService.currentZoom
-        }
-        if let base = pinchStartZoom {
-          let target = base * scale
-          let effectiveMax = max(cameraService.userFacingMaxZoom, cameraService.minZoom)
-          let clamped = min(max(target, cameraService.minZoom), effectiveMax)
-          cameraService.setZoom(clamped)
-          cameraPreferences.setZoom(clamped, for: cameraPreferences.preferredLens)
-        }
-      }
-      .onEnded { _ in
-        pinchStartZoom = nil
-      }
-  }
-
-  private func normalizedPoint(_ point: CGPoint, in size: CGSize) -> CGPoint {
-    guard size.width > 0, size.height > 0 else {
-      return CGPoint(x: 0.5, y: 0.5)
-    }
-    return CGPoint(
-      x: min(max(point.x / size.width, 0), 1),
-      y: min(max(point.y / size.height, 0), 1)
-    )
   }
 }
 
