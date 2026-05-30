@@ -30,11 +30,9 @@ struct CameraPreviewArea: View {
         maxZoom: cameraService.userFacingMaxZoom,
       onTapFocus: { previewPoint, devicePoint in
         cameraService.focus(at: devicePoint, displayPoint: previewPoint)
-        CameraFeedback.selection()
       },
       onResetFocus: { previewPoint in
         cameraService.resetFocus(displayPoint: previewPoint)
-        CameraFeedback.selection()
       },
       onZoomChange: { zoom in
         let lens = cameraPreferences.preferredLens
@@ -99,7 +97,7 @@ struct CameraPreviewArea: View {
         }
         .shadow(color: .black.opacity(0.35), radius: 6, x: 0, y: 3)
     }
-    .buttonStyle(PressFeedbackButtonStyle())
+    .buttonStyle(.plain)
     .accessibilityLabel("Undo last capture")
   }
 }

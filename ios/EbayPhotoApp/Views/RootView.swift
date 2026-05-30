@@ -2697,8 +2697,6 @@ private struct CameraSessionView: View {
   @State private var showingContext = false
   @State private var isCaptureLoopRunning = false
   @State private var pendingCaptureCount = 0
-  @State private var cameraFeedbackMessage: String?
-  @State private var cameraFeedbackTask: Task<Void, Never>?
   private let maxPendingCaptures = 2
 
   private var isEditingOverlayPresented: Bool {
@@ -2728,12 +2726,10 @@ private struct CameraSessionView: View {
         photoCount: appState.capturedPhotos.count,
         onBack: onBack,
         onDone: {
-          CameraFeedback.selection()
           guard !appState.capturedPhotos.isEmpty else {
             onDone()
             return
           }
-          flashCameraFeedback("Opening review…")
           presentDetailsEditor()
         }
       )
@@ -2750,12 +2746,6 @@ private struct CameraSessionView: View {
       .layoutPriority(0)
 
       Group {
-        if let cameraFeedbackMessage {
-          cameraActionFeedbackBanner(message: cameraFeedbackMessage)
-            .padding(.horizontal, 12)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
-
         if isEditingOverlayPresented {
           cameraStatusPlaceholder(message: "Editing item details…")
         } else if isCameraReady {
@@ -2807,27 +2797,19 @@ private struct CameraSessionView: View {
         thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
         photoCount: appState.capturedPhotos.count,
         canCapture: cameraService.canCapture || (isCaptureLoopRunning && pendingCaptureCount < maxPendingCaptures),
-        isCapturing: isCaptureLoopRunning,
         onCapture: {
-          CameraFeedback.impact(.light)
           if !isCaptureLoopRunning {
-            flashCameraFeedback("Capturing photo…")
             startCaptureLoop()
           } else if pendingCaptureCount < maxPendingCaptures {
-            flashCameraFeedback("Saving next photo…")
             pendingCaptureCount += 1
           }
         },
         onNextItem: {
           guard !appState.capturedPhotos.isEmpty else {
-            CameraFeedback.impact(.light)
             appState.statusMessage = "Capture at least one photo before continuing."
-            flashCameraFeedback("Capture at least one photo before continuing.")
             return
           }
           // Next is the item boundary; Done is the session boundary; Submit is upload/handoff.
-          CameraFeedback.selection()
-          flashCameraFeedback("Starting next item…")
           appState.advanceToNextItem()
         }
       )
@@ -2841,9 +2823,6 @@ private struct CameraSessionView: View {
       startCamera()
     }
     .onDisappear {
-      cameraFeedbackTask?.cancel()
-      cameraFeedbackTask = nil
-      cameraFeedbackMessage = nil
       cameraService.stop()
     }
     .fullScreenCover(isPresented: $showingContext) {
@@ -2978,19 +2957,10 @@ private struct CameraSessionView: View {
     Task {
       while true {
         do {
-          await MainActor.run {
-            flashCameraFeedback("Capturing photo…")
-          }
           let photo = try await cameraService.capturePhoto(aspectMode: cameraPreferences.aspectMode)
           appState.addCapturedPhoto(photo)
-          await MainActor.run {
-            flashCameraFeedback("Captured \(appState.capturedPhotos.count) photo\(appState.capturedPhotos.count == 1 ? "" : "s")")
-          }
         } catch {
           appState.statusMessage = "Capture failed: \(error.localizedDescription)"
-          await MainActor.run {
-            flashCameraFeedback("Capture failed")
-          }
         }
         
         if pendingCaptureCount > 0 {
@@ -3027,54 +2997,6 @@ private struct CameraSessionView: View {
     let clamped = min(max(zoom, cameraService.minZoom), max(cap, cameraService.minZoom))
     cameraPreferences.setZoom(clamped, for: lens)
     cameraService.setZoom(clamped)
-  }
-
-  private func flashCameraFeedback(_ message: String?, duration: TimeInterval = 1.0) {
-    cameraFeedbackTask?.cancel()
-
-    withAnimation(.easeOut(duration: 0.14)) {
-      cameraFeedbackMessage = message
-    }
-
-    guard message != nil else { return }
-
-    cameraFeedbackTask = Task { @MainActor in
-      do {
-        try await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-      } catch {
-        return
-      }
-      guard !Task.isCancelled else { return }
-      withAnimation(.easeIn(duration: 0.14)) {
-        cameraFeedbackMessage = nil
-      }
-    }
-  }
-
-  @ViewBuilder
-  private func cameraActionFeedbackBanner(message: String) -> some View {
-    HStack(spacing: 8) {
-      Image(systemName: "sparkles")
-        .font(.caption.weight(.semibold))
-      Text(message)
-        .font(.footnote.weight(.semibold))
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
-    }
-    .foregroundStyle(.white)
-    .padding(.vertical, 9)
-    .padding(.horizontal, 14)
-    .frame(maxWidth: .infinity, alignment: .center)
-    .background {
-      Capsule(style: .continuous)
-        .fill(.black.opacity(0.84))
-    }
-    .overlay {
-      Capsule(style: .continuous)
-        .stroke(.white.opacity(0.12), lineWidth: 1)
-    }
-    .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-    .accessibilityIdentifier("liveCamera.feedback")
   }
 
   private func formatZoom(_ zoom: Double) -> String {

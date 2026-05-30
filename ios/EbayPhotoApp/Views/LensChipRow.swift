@@ -62,7 +62,7 @@ struct LensChipRow: View {
             .stroke(Color.white.opacity(0.25), lineWidth: 1)
         }
     }
-    .buttonStyle(PressFeedbackButtonStyle())
+    .buttonStyle(.plain)
   }
 
   // MARK: - Expanded
@@ -70,18 +70,15 @@ struct LensChipRow: View {
   private var expandedRow: some View {
     HStack(spacing: 6) {
       lensChip(label: ".5",   isSelected: switchingMode == .locked && preferredLens == .ultraWide) {
-        CameraFeedback.selection()
         onSelectLens(.ultraWide)
         isExpanded = false
       }
       lensChip(label: "1x",   isSelected: switchingMode == .locked && preferredLens == .wide) {
-        CameraFeedback.selection()
         onSelectLens(.wide)
         isExpanded = false
       }
       lensChip(label: "AUTO", isSelected: switchingMode == .auto) {
         if switchingMode != .auto { onSelectAuto() }
-        CameraFeedback.selection()
         isExpanded = false
       }
     }
@@ -106,6 +103,6 @@ struct LensChipRow: View {
             .stroke(isSelected ? Color.clear : Color.white.opacity(0.22), lineWidth: 1)
         }
     }
-    .buttonStyle(PressFeedbackButtonStyle())
+    .buttonStyle(.plain)
   }
 }
