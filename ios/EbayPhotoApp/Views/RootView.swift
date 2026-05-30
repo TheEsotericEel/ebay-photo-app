@@ -374,6 +374,11 @@ struct RootView: View {
       return false
     }
 
+    guard await appState.awaitQueuedSupplementalPhotoPersistence(for: eligible, statusMessage: "Preparing original photo data…") else {
+      appState.uploadMessage = ""
+      return false
+    }
+
     let eligibleCount = eligible.count
     var submittedCount = 0
     var failedCount = 0
@@ -2717,15 +2722,32 @@ private struct CameraSessionView: View {
   }
 
   private var cameraStartupMessage: String {
-    if cameraService.debugSummary == "Camera not started." || cameraService.debugSummary == "Starting camera..." {
-      return "Starting camera..."
+    if cameraService.debugSummary == "Camera permission is denied." {
+      return "Camera access is off."
     }
 
-    if !cameraService.debugSummary.isEmpty {
-      return cameraService.debugSummary
+    if cameraService.debugSummary.hasPrefix("Camera fallback:") {
+      return "Camera unavailable."
     }
 
     return "Starting camera..."
+  }
+
+  private var cameraStartupDetail: String {
+    if cameraService.debugSummary == "Camera permission is denied." {
+      return "Enable camera access in Settings to capture listing photos."
+    }
+
+    if cameraService.debugSummary.hasPrefix("Camera fallback:") {
+      return "The rear camera is not ready yet on this device or simulator."
+    }
+
+    return "The camera screen is open while the session finishes starting."
+  }
+
+  private var cameraStartupShowsProgress: Bool {
+    cameraService.debugSummary != "Camera permission is denied."
+      && !cameraService.debugSummary.hasPrefix("Camera fallback:")
   }
 
   var body: some View {
@@ -2756,7 +2778,11 @@ private struct CameraSessionView: View {
 
       Group {
         if isEditingOverlayPresented {
-          cameraStatusPlaceholder(message: "Editing item details…")
+          cameraStatusPlaceholder(
+            title: "Editing item details…",
+            message: "Return to the live camera when you are ready to keep capturing.",
+            showsProgress: false
+          )
         } else if isCameraReady {
           VStack(spacing: 5) {
             CameraPreviewArea(
@@ -2788,7 +2814,11 @@ private struct CameraSessionView: View {
             )
           }
         } else {
-          cameraStatusPlaceholder(message: cameraStartupMessage)
+          cameraStatusPlaceholder(
+            title: cameraStartupMessage,
+            message: cameraStartupDetail,
+            showsProgress: cameraStartupShowsProgress
+          )
         }
       }
       .frame(maxHeight: .infinity)
@@ -2834,6 +2864,9 @@ private struct CameraSessionView: View {
     .accessibilityIdentifier("liveCamera.screen")
     .padding(.bottom, 4)
     .onAppear {
+      cameraService.deferredOriginalHandler = { photoID, originalData in
+        appState.attachDeferredOriginalData(originalData, to: photoID)
+      }
       startCamera()
     }
     .onDisappear {
@@ -2890,7 +2923,11 @@ private struct CameraSessionView: View {
     }
   }
 
-  private func cameraStatusPlaceholder(message: String) -> some View {
+  private func cameraStatusPlaceholder(
+    title: String,
+    message: String,
+    showsProgress: Bool
+  ) -> some View {
     GeometryReader { geo in
       let side = max(min(geo.size.width, geo.size.height), 120)
       ZStack {
@@ -2911,13 +2948,19 @@ private struct CameraSessionView: View {
           }
 
         VStack(spacing: 12) {
-          ProgressView()
-            .tint(.white)
-          Text(message)
+          if showsProgress {
+            ProgressView()
+              .tint(.white)
+          } else {
+            Image(systemName: "camera")
+              .font(.title3.weight(.semibold))
+              .foregroundStyle(.white.opacity(0.92))
+          }
+          Text(title)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white)
             .multilineTextAlignment(.center)
-          Text("The camera screen is open. Startup continues in the background.")
+          Text(message)
             .font(.caption)
             .foregroundStyle(.white.opacity(0.7))
             .multilineTextAlignment(.center)

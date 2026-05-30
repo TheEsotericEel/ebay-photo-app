@@ -81,6 +81,12 @@ private actor QueuePersistenceStore {
     try data.write(to: url, options: .atomic)
   }
 
+  func saveOriginalPhotoData(_ data: Data, fileName: String) throws {
+    let directory = try queuePhotosDirectoryURL()
+    let url = directory.appendingPathComponent(fileName)
+    try data.write(to: url, options: .atomic)
+  }
+
   private func queueStateFileURL() throws -> URL {
     try queueRootDirectoryURL().appendingPathComponent(queueStateFileName)
   }
@@ -136,7 +142,7 @@ final class AppState: ObservableObject {
     let id: UUID
     let fileName: String
     let thumbnailFileName: String?
-    let originalFileName: String?
+    var originalFileName: String?
     let lensLabel: String
     let capturedAt: Date
     var remotePhotoId: String?
@@ -375,6 +381,7 @@ final class AppState: ObservableObject {
   private var isApplyingPersistedCaptureContext = false
   private var isApplyingPersistedQueueState = false
   private var pendingPhotoPersistenceTasks: [UUID: Task<Void, Error>] = [:]
+  private var pendingSupplementalPhotoTasks: [UUID: Task<Void, Error>] = [:]
   private var photoPersistenceErrors: [UUID: String] = [:]
   private var queueStatePersistenceTask: Task<Void, Never>?
   private var queueStatePersistenceRevision = 0
@@ -518,6 +525,32 @@ final class AppState: ObservableObject {
     beginPersistingPhotoAssets(for: photo)
     capturedPhotos.append(photo)
     statusMessage = "Captured \(capturedPhotos.count) photo(s)"
+  }
+
+  func attachDeferredOriginalData(_ originalData: Data, to photoId: UUID) {
+    guard !originalData.isEmpty else { return }
+
+    var didUpdate = false
+
+    if let draftIndex = capturedPhotos.firstIndex(where: { $0.id == photoId }) {
+      guard capturedPhotos[draftIndex].originalData == nil else { return }
+      capturedPhotos[draftIndex].originalData = originalData
+      didUpdate = true
+    }
+
+    for itemIndex in queuedItemPackets.indices {
+      guard let photoIndex = queuedItemPackets[itemIndex].photos.firstIndex(where: { $0.id == photoId }) else {
+        continue
+      }
+      guard queuedItemPackets[itemIndex].photos[photoIndex].originalFileName == nil else { continue }
+      queuedItemPackets[itemIndex].photos[photoIndex].originalFileName = originalFileName(for: photoId)
+      didUpdate = true
+    }
+
+    guard didUpdate else { return }
+
+    beginPersistingSupplementalOriginalData(originalData, for: photoId)
+    persistQueueStateIfNeeded()
   }
 
   var hasCurrentDraftContent: Bool {
@@ -913,6 +946,14 @@ final class AppState: ObservableObject {
     return await awaitPhotoPersistence(for: photoIDs, waitingMessage: waitingMessage)
   }
 
+  func awaitQueuedSupplementalPhotoPersistence(
+    for items: [LocalQueueItemPacket],
+    statusMessage waitingMessage: String
+  ) async -> Bool {
+    let photoIDs = Set(items.flatMap(\.photos).map(\.id))
+    return await awaitSupplementalPhotoPersistence(for: photoIDs, waitingMessage: waitingMessage)
+  }
+
   private func persistQueueStateIfNeeded() {
     guard !isApplyingPersistedQueueState else { return }
     queueStatePersistenceRevision += 1
@@ -1014,6 +1055,7 @@ final class AppState: ObservableObject {
     )
 
     let task = Task(priority: .utility) { [persistenceStore] in
+      try Task.checkCancellation()
       try await persistenceStore.savePhotoAssets(payload: payload)
     }
 
@@ -1037,10 +1079,62 @@ final class AppState: ObservableObject {
     pendingPhotoPersistenceTasks.removeValue(forKey: photoId)
 
     if let error {
+      if error is CancellationError {
+        photoPersistenceErrors.removeValue(forKey: photoId)
+        persistQueueStateIfNeeded()
+        return
+      }
       photoPersistenceErrors[photoId] = error.localizedDescription
       statusMessage = "Capture saved in memory only: \(error.localizedDescription)"
     } else {
       photoPersistenceErrors.removeValue(forKey: photoId)
+    }
+
+    persistQueueStateIfNeeded()
+  }
+
+  private func beginPersistingSupplementalOriginalData(_ originalData: Data, for photoId: UUID) {
+    let listingTask = pendingPhotoPersistenceTasks[photoId]
+    let priorSupplementalTask = pendingSupplementalPhotoTasks[photoId]
+    let fileName = originalFileName(for: photoId)
+
+    let task = Task(priority: .utility) { [persistenceStore] in
+      if let listingTask {
+        try await listingTask.value
+      }
+      if let priorSupplementalTask {
+        try await priorSupplementalTask.value
+      }
+      try Task.checkCancellation()
+      try await persistenceStore.saveOriginalPhotoData(originalData, fileName: fileName)
+    }
+
+    pendingSupplementalPhotoTasks[photoId] = task
+
+    Task { [weak self] in
+      do {
+        try await task.value
+        await MainActor.run {
+          self?.finishSupplementalPhotoPersistence(for: photoId, error: nil)
+        }
+      } catch {
+        await MainActor.run {
+          self?.finishSupplementalPhotoPersistence(for: photoId, error: error)
+        }
+      }
+    }
+  }
+
+  private func finishSupplementalPhotoPersistence(for photoId: UUID, error: Error?) {
+    pendingSupplementalPhotoTasks.removeValue(forKey: photoId)
+
+    if let error {
+      if error is CancellationError {
+        persistQueueStateIfNeeded()
+        return
+      }
+      AppLog.camera.error("Supplemental original persistence failed error=\(error.localizedDescription, privacy: .public)")
+      statusMessage = "Saved photo, but original frame could not be stored."
     }
 
     persistQueueStateIfNeeded()
@@ -1074,6 +1168,27 @@ final class AppState: ObservableObject {
     return true
   }
 
+  private func awaitSupplementalPhotoPersistence(
+    for photoIDs: Set<UUID>,
+    waitingMessage: String
+  ) async -> Bool {
+    let pendingTasks = pendingSupplementalPhotoTasks.filter { photoIDs.contains($0.key) }
+    guard !pendingTasks.isEmpty else { return true }
+
+    statusMessage = waitingMessage
+
+    for task in pendingTasks.values {
+      do {
+        try await task.value
+      } catch {
+        statusMessage = "Saved photo, but original frame could not be stored."
+        return false
+      }
+    }
+
+    return true
+  }
+
   private func firstPhotoPersistenceError(for photoIDs: Set<UUID>) -> String? {
     photoPersistenceErrors.first(where: { photoIDs.contains($0.key) })?.value
   }
@@ -1100,6 +1215,12 @@ final class AppState: ObservableObject {
   }
 
   private func deletePhotoAssetFiles(for photoId: UUID) {
+    pendingPhotoPersistenceTasks[photoId]?.cancel()
+    pendingPhotoPersistenceTasks.removeValue(forKey: photoId)
+    pendingSupplementalPhotoTasks[photoId]?.cancel()
+    pendingSupplementalPhotoTasks.removeValue(forKey: photoId)
+    photoPersistenceErrors.removeValue(forKey: photoId)
+
     let listingFileName = listingFileName(for: photoId)
     let thumbnailFileName = thumbnailFileName(for: photoId)
     let originalFileName = originalFileName(for: photoId)

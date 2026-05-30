@@ -158,6 +158,22 @@ enum PhotoFraming {
     return (jpeg: jpegData, thumbnail: thumbData)
   }
 
+  static func nativeDeliverableJPEG(
+    from cgImage: CGImage,
+    exifOrientation: UIImage.Orientation = .up,
+    compressionQuality: CGFloat = deliverableJPEGQuality
+  ) -> Data? {
+    let normalized = portraitLockedCGImage(from: cgImage, exifOrientation: exifOrientation)
+    let ciImage = CIImage(cgImage: normalized)
+    let colorSpace = ciImage.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+
+    return ciContext.jpegRepresentation(
+      of: ciImage,
+      colorSpace: colorSpace,
+      options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: compressionQuality]
+    )
+  }
+
   /// Reads JPEG pixel dimensions and EXIF orientation (1 = upright pixels).
   static func jpegProperties(_ data: Data) -> (width: Int, height: Int, exifOrientation: Int)? {
     guard

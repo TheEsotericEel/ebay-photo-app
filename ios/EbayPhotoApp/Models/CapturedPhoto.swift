@@ -6,7 +6,7 @@ struct CapturedPhoto: Identifiable {
   let data: Data
   let thumbnailData: Data?
   /// Full native-frame JPEG when the listing deliverable is a square crop.
-  let originalData: Data?
+  var originalData: Data?
   let lensLabel: String
   let capturedAt: Date
 
@@ -33,4 +33,3 @@ extension CapturedPhoto {
     return UIImage(data: thumbnailData)
   }
 }
-

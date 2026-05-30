@@ -251,6 +251,7 @@ final class CameraService: NSObject, ObservableObject {
     fallbackReason: nil
   )
   @Published private(set) var debugSummary = "Camera not started."
+  var deferredOriginalHandler: ((UUID, Data) -> Void)?
 
   private let sessionQueue = DispatchQueue(label: "com.joesprojects.ebayphoto.camera.session")
   private var activeDevice: AVCaptureDevice?
@@ -427,21 +428,19 @@ final class CameraService: NSObject, ObservableObject {
             }
             deliverableData = result.jpeg
             preview = result.thumbnail
-            let nativeOriginal = PhotoFraming.nativeDeliverableAndThumbnail(
-              from: cgImage,
-              exifOrientation: exifOrientation
-            )?.jpeg
+            let photoID = UUID()
+            let capturedAt = Date()
             timer.mark("image processing done (crop+thumb)")
             Task { @MainActor in
               timer.mark("MainActor task started")
               self.captureInFlight = false
               self.captureDelegate = nil
               let capturedPhoto = CapturedPhoto(
+                id: photoID,
                 data: deliverableData,
                 thumbnailData: preview,
-                originalData: nativeOriginal,
                 lensLabel: self.activeLensState.preferredLens.rawValue,
-                capturedAt: .now
+                capturedAt: capturedAt
               )
               self.captureContinuation?.resume(returning: capturedPhoto)
               self.captureContinuation = nil
@@ -449,6 +448,11 @@ final class CameraService: NSObject, ObservableObject {
               self.canCapture = true
               AppLog.camera.info("Capture completed aspect=\(aspectMode.rawValue, privacy: .public) bytes=\(deliverableData.count, privacy: .public)")
             }
+            scheduleDeferredOriginalGeneration(
+              photoID: photoID,
+              cgImage: cgImage,
+              exifOrientation: exifOrientation
+            )
             return
           case .native:
             guard let result = PhotoFraming.nativeDeliverableAndThumbnail(
@@ -499,6 +503,26 @@ final class CameraService: NSObject, ObservableObject {
   }
 
   private var captureInFlight = false
+
+  private func scheduleDeferredOriginalGeneration(
+    photoID: UUID,
+    cgImage: CGImage,
+    exifOrientation: UIImage.Orientation
+  ) {
+    DispatchQueue.global(qos: .utility).async { [weak self] in
+      guard let self else { return }
+      guard let originalData = PhotoFraming.nativeDeliverableJPEG(
+        from: cgImage,
+        exifOrientation: exifOrientation
+      ) else {
+        AppLog.camera.error("Deferred original generation failed during native JPEG encode.")
+        return
+      }
+      Task { @MainActor in
+        self.deferredOriginalHandler?(photoID, originalData)
+      }
+    }
+  }
 
   private func publishFocusIndicator(displayPoint: CGPoint, isSuccessful: Bool) {
     focusIndicatorWorkItem?.cancel()
