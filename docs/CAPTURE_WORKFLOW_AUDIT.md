@@ -2,6 +2,8 @@
 
 Date: 2026-05-27
 
+Current button semantics authority: [`docs/CAPTURE_FLOW_CONTRACT.md`](/Users/joe/Projects/ebay-photo-app/docs/CAPTURE_FLOW_CONTRACT.md)
+
 ## Current implemented workflow
 
 Fresh app launch:
@@ -19,7 +21,7 @@ Live capture flow:
 Item details checkpoint:
 - `Cancel` dismisses `ItemDetailsScreen` and returns to the same live draft.
 - `Save & Next` calls `appState.advanceToNextItem()`, which queues the current draft if it has photos, increments the item number, and clears the draft.
-- `Submit` also calls `appState.advanceToNextItem()`, then opens `Queue Review`.
+- `Continue to Review` also calls `appState.advanceToNextItem()`, then opens `Queue Review`.
 
 Queue review and submit handoff:
 - `Queue Review -> Submit` calls the shared `submitQueuedItems(advanceCurrentDraftIfNeeded: false)` helper.
@@ -46,7 +48,7 @@ Code-backed:
 - `Open Camera -> no photos -> Next` is a no-op with status text `Capture at least one photo before continuing.`
 - Seeded live camera `Next -> ItemDetailsScreen -> Cancel` preserves the same draft because `onCancel` only dismisses the sheet.
 - Seeded live camera `Save & Next` finalizes the current item and returns to the camera because `onNextItem` calls `appState.advanceToNextItem()` and clears `showingDetails`.
-- Seeded live camera `Done -> ItemDetailsScreen -> Submit -> Queue Review -> Main Screen` is wired end to end in `RootView`.
+- Seeded live camera `Done -> ItemDetailsScreen -> Continue to Review -> Queue Review -> Main Screen` is wired end to end in `RootView`.
 - Multi-item sessions should accumulate finalized items in `queuedItemPackets` because each `advanceToNextItem()` call first invokes `enqueueCurrentItemIfNeeded()`.
 - `Capture Home -> Upload Batch` refuses to submit while `capturedPhotos` is non-empty and sets `Finish the current item before submitting.`
 - `Queue Review -> Submit` uses the same helper as `Capture Home -> Upload Batch`.

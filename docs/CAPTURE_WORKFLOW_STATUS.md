@@ -2,6 +2,8 @@
 
 Date: 2026-05-28
 
+Current button semantics authority: [`docs/CAPTURE_FLOW_CONTRACT.md`](/Users/joe/Projects/ebay-photo-app/docs/CAPTURE_FLOW_CONTRACT.md)
+
 This is a state-of-app recap for the current iOS capture workflow. It tracks what is implemented, what is stable enough to build on, and what still needs careful follow-up.
 
 ## Current implemented user flow
@@ -37,7 +39,7 @@ This is a state-of-app recap for the current iOS capture workflow. It tracks wha
   - notes
 - `Cancel` returns to the same live draft.
 - `Save & Next` finalizes the current draft item and returns to the camera for the next item.
-- `Submit` finalizes the current draft item and opens `Queue Review`.
+- `Continue to Review` finalizes the current draft item and opens `Queue Review`.
 
 ### Queue Review
 - Queue Review shows finalized queued item rows with item number, photo count, metadata, and submit state.

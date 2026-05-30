@@ -92,6 +92,7 @@ The same signed-in user/account is used for both phone capture and desktop manag
 - The iPhone app should keep a real local multi-item capture queue.
 - `Next` opens the optional item checkpoint; `Save & Next` is the quick queue/return action.
 - `Submit` is the deliberate MVP handoff/upload action.
+- Current button semantics live in [`docs/CAPTURE_FLOW_CONTRACT.md`](/Users/joe/Projects/ebay-photo-app/docs/CAPTURE_FLOW_CONTRACT.md).
 - Store assignment is an item-level property, so one local queue may contain items for multiple stores.
 - Photos stay app-local until upload/retention decisions are made and should not be saved to the iPhone Camera Roll by default.
 
