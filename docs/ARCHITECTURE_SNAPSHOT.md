@@ -335,7 +335,7 @@ The native iOS app currently has:
 - Store and batch context editing.
 - Item metadata editing.
 - Finish Item checkpoint before queueing.
-- `Done` routes through the same checkpoint when the current draft has captured photos.
+- `Done` remains pending final product decision; current code opens the checkpoint when the current draft has captured photos.
 - Queue review.
 - Queue item editing.
 - Queue item deletion.
