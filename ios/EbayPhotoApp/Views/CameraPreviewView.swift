@@ -7,8 +7,8 @@ struct CameraPreviewView: UIViewRepresentable {
   var currentZoom: Double
   var minZoom: Double
   var maxZoom: Double
-  var onTapFocus: ((CGPoint) -> Void)? = nil
-  var onResetFocus: (() -> Void)? = nil
+  var onTapFocus: ((CGPoint, CGPoint) -> Void)? = nil
+  var onResetFocus: ((CGPoint) -> Void)? = nil
   var onZoomChange: ((Double) -> Void)? = nil
 
   func makeUIView(context: Context) -> PreviewUIView {
@@ -54,8 +54,8 @@ final class PreviewUIView: UIView {
   private var currentZoom: Double = 1
   private var minZoom: Double = 1
   private var maxZoom: Double = 1
-  private var onTapFocus: ((CGPoint) -> Void)?
-  private var onResetFocus: (() -> Void)?
+  private var onTapFocus: ((CGPoint, CGPoint) -> Void)?
+  private var onResetFocus: ((CGPoint) -> Void)?
   private var onZoomChange: ((Double) -> Void)?
   private var pinchStartZoom: Double?
 
@@ -96,8 +96,8 @@ final class PreviewUIView: UIView {
     currentZoom: Double,
     minZoom: Double,
     maxZoom: Double,
-    onTapFocus: ((CGPoint) -> Void)?,
-    onResetFocus: (() -> Void)?,
+    onTapFocus: ((CGPoint, CGPoint) -> Void)?,
+    onResetFocus: ((CGPoint) -> Void)?,
     onZoomChange: ((Double) -> Void)?
   ) {
     self.currentZoom = currentZoom
@@ -128,13 +128,14 @@ final class PreviewUIView: UIView {
     guard recognizer.state == .ended else { return }
     let layerPoint = recognizer.location(in: self)
     let devicePoint = videoPreviewLayer.captureDevicePointConverted(fromLayerPoint: layerPoint)
-    onTapFocus?(devicePoint)
+    onTapFocus?(layerPoint, devicePoint)
   }
 
   @objc
   private func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
     guard recognizer.state == .ended else { return }
-    onResetFocus?()
+    let layerPoint = recognizer.location(in: self)
+    onResetFocus?(layerPoint)
   }
 
   @objc

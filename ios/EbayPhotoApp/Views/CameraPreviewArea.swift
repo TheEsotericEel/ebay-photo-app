@@ -23,16 +23,16 @@ struct CameraPreviewArea: View {
 
   @ViewBuilder
   private func squarePreview(side: CGFloat) -> some View {
-    CameraPreviewView(
-      session: session,
-      currentZoom: cameraService.currentZoom,
-      minZoom: cameraService.minZoom,
-      maxZoom: cameraService.userFacingMaxZoom,
-      onTapFocus: { point in
-        cameraService.focus(at: point)
+      CameraPreviewView(
+        session: session,
+        currentZoom: cameraService.currentZoom,
+        minZoom: cameraService.minZoom,
+        maxZoom: cameraService.userFacingMaxZoom,
+      onTapFocus: { previewPoint, devicePoint in
+        cameraService.focus(at: devicePoint, displayPoint: previewPoint)
       },
-      onResetFocus: {
-        cameraService.resetFocus()
+      onResetFocus: { previewPoint in
+        cameraService.resetFocus(displayPoint: previewPoint)
       },
       onZoomChange: { zoom in
         let lens = cameraPreferences.preferredLens
@@ -55,14 +55,9 @@ struct CameraPreviewArea: View {
         }
       }
       .overlay {
-        GeometryReader { proxy in
-          if let indicator = cameraService.focusIndicator {
-            FocusIndicatorView(indicator: indicator)
-              .position(
-                x: min(max(indicator.normalizedPoint.x * proxy.size.width, 24), proxy.size.width - 24),
-                y: min(max(indicator.normalizedPoint.y * proxy.size.height, 24), proxy.size.height - 24)
-              )
-          }
+        if let indicator = cameraService.focusIndicator {
+          FocusIndicatorView(indicator: indicator)
+            .position(indicator.displayPoint)
         }
       }
       .overlay(alignment: .topLeading) {

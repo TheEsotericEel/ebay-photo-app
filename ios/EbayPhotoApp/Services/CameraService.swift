@@ -81,7 +81,7 @@ struct CameraCapabilityProbe: Equatable {
 }
 
 struct FocusIndicator: Equatable {
-  var normalizedPoint: CGPoint
+  var displayPoint: CGPoint
   var isSuccessful: Bool
   var timestamp: Date
 }
@@ -353,17 +353,17 @@ final class CameraService: NSObject, ObservableObject {
     }
   }
 
-  func focus(at normalizedPoint: CGPoint) {
+  func focus(at normalizedPoint: CGPoint, displayPoint: CGPoint) {
     guard let device = activeDevice else { return }
     let success = applyFocusPoint(to: device, normalizedPoint: normalizedPoint)
-    publishFocusIndicator(normalizedPoint: normalizedPoint, isSuccessful: success)
+    publishFocusIndicator(displayPoint: displayPoint, isSuccessful: success)
   }
 
-  func resetFocus() {
+  func resetFocus(displayPoint: CGPoint) {
     guard let device = activeDevice else { return }
     let success = resetContinuousFocus(on: device)
     publishFocusIndicator(
-      normalizedPoint: CGPoint(x: 0.5, y: 0.5),
+      displayPoint: displayPoint,
       isSuccessful: success
     )
   }
@@ -500,9 +500,9 @@ final class CameraService: NSObject, ObservableObject {
 
   private var captureInFlight = false
 
-  private func publishFocusIndicator(normalizedPoint: CGPoint, isSuccessful: Bool) {
+  private func publishFocusIndicator(displayPoint: CGPoint, isSuccessful: Bool) {
     focusIndicatorWorkItem?.cancel()
-    focusIndicator = FocusIndicator(normalizedPoint: normalizedPoint, isSuccessful: isSuccessful, timestamp: .now)
+    focusIndicator = FocusIndicator(displayPoint: displayPoint, isSuccessful: isSuccessful, timestamp: .now)
 
     let workItem = DispatchWorkItem { [weak self] in
       Task { @MainActor in
