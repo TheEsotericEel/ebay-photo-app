@@ -2703,6 +2703,22 @@ private struct CameraSessionView: View {
     showingContext || showingDetails
   }
 
+  private var isCameraReady: Bool {
+    cameraService.isConfigured && cameraService.isRunning && cameraService.canCapture
+  }
+
+  private var cameraStartupMessage: String {
+    if cameraService.debugSummary == "Camera not started." || cameraService.debugSummary == "Starting camera..." {
+      return "Starting camera..."
+    }
+
+    if !cameraService.debugSummary.isEmpty {
+      return cameraService.debugSummary
+    }
+
+    return "Starting camera..."
+  }
+
   var body: some View {
     VStack(spacing: 5) {
       CameraTopBar(
@@ -2731,8 +2747,8 @@ private struct CameraSessionView: View {
 
       Group {
         if isEditingOverlayPresented {
-          cameraPreviewPlaceholder
-        } else {
+          cameraStatusPlaceholder(message: "Editing item details…")
+        } else if isCameraReady {
           VStack(spacing: 5) {
             CameraPreviewArea(
               session: cameraService.session,
@@ -2762,6 +2778,8 @@ private struct CameraSessionView: View {
               formatZoom: formatZoom
             )
           }
+        } else {
+          cameraStatusPlaceholder(message: cameraStartupMessage)
         }
       }
       .frame(maxHeight: .infinity)
@@ -2848,12 +2866,43 @@ private struct CameraSessionView: View {
     }
   }
 
-  private var cameraPreviewPlaceholder: some View {
+  private func cameraStatusPlaceholder(message: String) -> some View {
     GeometryReader { geo in
       let side = max(min(geo.size.width, geo.size.height), 120)
-      Color.black
-        .frame(width: side, height: side)
-        .frame(maxWidth: .infinity)
+      ZStack {
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+          .fill(
+            LinearGradient(
+              colors: [
+                Color.black.opacity(0.98),
+                Color.black.opacity(0.88)
+              ],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            )
+          )
+          .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+              .stroke(.white.opacity(0.08), lineWidth: 1)
+          }
+
+        VStack(spacing: 12) {
+          ProgressView()
+            .tint(.white)
+          Text(message)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .multilineTextAlignment(.center)
+          Text("The camera screen is open. Startup continues in the background.")
+            .font(.caption)
+            .foregroundStyle(.white.opacity(0.7))
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
+        }
+        .padding(20)
+      }
+      .frame(width: side, height: side)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
   }
 

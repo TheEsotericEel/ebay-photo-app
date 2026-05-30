@@ -283,6 +283,10 @@ final class CameraService: NSObject, ObservableObject {
 
   func start(lensState: CameraLensState, zoom: Double) {
     AppLog.camera.info("Camera start requested mode=\(lensState.switchingMode.rawValue, privacy: .public) lens=\(lensState.preferredLens.rawValue, privacy: .public) zoom=\(zoom, privacy: .public)")
+    debugSummary = "Starting camera..."
+    isConfigured = false
+    isRunning = false
+    canCapture = false
     requestCameraAccess { [weak self] granted in
       guard let self else { return }
       guard granted else {
