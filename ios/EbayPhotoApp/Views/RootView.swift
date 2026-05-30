@@ -2793,7 +2793,8 @@ private struct CameraSessionView: View {
             appState.statusMessage = "Capture at least one photo before continuing."
             return
           }
-          presentDetailsEditor()
+          // Next is the item boundary; Done is the session boundary; Submit is upload/handoff.
+          appState.advanceToNextItem()
         }
       )
       .layoutPriority(0)
