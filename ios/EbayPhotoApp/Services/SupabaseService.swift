@@ -114,6 +114,25 @@ final class SupabaseService: ObservableObject {
     let id: String
   }
 
+  struct ItemPayload {
+    let storeId: String
+    let batchId: String
+    let workspaceId: String
+    let sequence: Int
+    let status: String?
+    let sku: String?
+    let notes: String?
+    let weight: String?
+    let dimensions: String?
+    let listedAtISO8601: String?
+    let photoRetentionUntil: String?
+  }
+
+  enum ItemWritePlan {
+    case create(ItemPayload)
+    case update(remoteItemId: String, payload: ItemPayload)
+  }
+
   private struct PhotoRow: Decodable {
     let id: String
   }
@@ -187,6 +206,86 @@ final class SupabaseService: ObservableObject {
     self.urlSession = urlSession
     cachedSession = Self.loadSession(from: userDefaults, key: sessionStoreKey)
     AppLog.auth.info("Session bootstrap complete hasSession=\(self.cachedSession != nil, privacy: .public)")
+  }
+
+  func makeNewItemPayload(
+    workspaceId: String,
+    storeId: String,
+    batchId: String,
+    item: NativeUploadItemPacketV1.Item
+  ) -> ItemPayload {
+    ItemPayload(
+      storeId: storeId,
+      batchId: batchId,
+      workspaceId: workspaceId,
+      sequence: item.sequence,
+      status: item.status,
+      sku: item.sku,
+      notes: item.notes,
+      weight: item.weight,
+      dimensions: item.dimensions,
+      listedAtISO8601: item.listedAtISO8601,
+      photoRetentionUntil: nil
+    )
+  }
+
+  func makeExistingItemPayload(
+    workspaceId: String,
+    storeId: String,
+    batchId: String,
+    item: NativeUploadItemPacketV1.Item
+  ) -> ItemPayload {
+    ItemPayload(
+      storeId: storeId,
+      batchId: batchId,
+      workspaceId: workspaceId,
+      sequence: item.sequence,
+      status: nil,
+      sku: item.sku,
+      notes: item.notes,
+      weight: item.weight,
+      dimensions: item.dimensions,
+      listedAtISO8601: nil,
+      photoRetentionUntil: nil
+    )
+  }
+
+  func makeCreateItemConflictError(
+    sequence: Int,
+    batchName: String
+  ) -> AppServiceError {
+    AppServiceError.invalidRequest(
+      "Item \(sequence) already exists in batch \"\(batchName)\". Change the item number or re-open the existing queued item before submitting."
+    )
+  }
+
+  func createItemPayloadBody(_ payload: ItemPayload) -> [String: Any] {
+    [
+      "store_id": payload.storeId,
+      "batch_id": payload.batchId,
+      "workspace_id": payload.workspaceId,
+      "sequence": payload.sequence,
+      "status": jsonOrNull(payload.status),
+      "sku": jsonOrNull(payload.sku),
+      "notes": jsonOrNull(payload.notes),
+      "weight": jsonOrNull(payload.weight),
+      "dimensions": jsonOrNull(payload.dimensions),
+      "listed_at": jsonOrNull(payload.listedAtISO8601),
+      "photo_retention_until": jsonOrNull(payload.photoRetentionUntil),
+    ]
+  }
+
+  func updateItemPayloadBody(_ payload: ItemPayload) -> [String: Any] {
+    [
+      "store_id": payload.storeId,
+      "batch_id": payload.batchId,
+      "workspace_id": payload.workspaceId,
+      "sequence": payload.sequence,
+      "sku": jsonOrNull(payload.sku),
+      "notes": jsonOrNull(payload.notes),
+      "weight": jsonOrNull(payload.weight),
+      "dimensions": jsonOrNull(payload.dimensions),
+    ]
   }
 
   func sendOTP(email: String) async throws {
@@ -680,6 +779,7 @@ final class SupabaseService: ObservableObject {
         workspaceId: workspaceId,
         storeId: storeId,
         batchId: batchId,
+        batchName: packet.batch.name,
         item: packet.item
       )
       AppLog.upload.info("Item upsert success itemId=\(itemId, privacy: .public)")
@@ -1116,10 +1216,21 @@ final class SupabaseService: ObservableObject {
     workspaceId: String,
     storeId: String,
     batchId: String,
+    batchName: String,
     item: NativeUploadItemPacketV1.Item
   ) async throws -> String {
-    var remoteItemId = item.remoteId
-    if remoteItemId == nil {
+    let plan: ItemWritePlan
+    if let remoteItemId = item.remoteId {
+      plan = .update(
+        remoteItemId: remoteItemId,
+        payload: makeExistingItemPayload(
+          workspaceId: workspaceId,
+          storeId: storeId,
+          batchId: batchId,
+          item: item
+        )
+      )
+    } else {
       let existingData = try await performAuthedRequest(
         config: config,
         session: session,
@@ -1129,41 +1240,49 @@ final class SupabaseService: ObservableObject {
         additionalHeaders: [:]
       )
       let existingRows = try decode([ItemRow].self, from: existingData)
-      remoteItemId = existingRows.first?.id
+      if existingRows.first != nil {
+        throw makeCreateItemConflictError(sequence: item.sequence, batchName: batchName)
+      }
+      plan = .create(
+        makeNewItemPayload(
+          workspaceId: workspaceId,
+          storeId: storeId,
+          batchId: batchId,
+          item: item
+        )
+      )
     }
 
-    var payload: [String: Any] = [
-      "store_id": storeId,
-      "batch_id": batchId,
-      "workspace_id": workspaceId,
-      "sequence": item.sequence,
-      "status": item.status,
-      "sku": jsonOrNull(item.sku),
-      "notes": jsonOrNull(item.notes),
-      "weight": jsonOrNull(item.weight),
-      "dimensions": jsonOrNull(item.dimensions),
-      "listed_at": jsonOrNull(item.listedAtISO8601),
-      "photo_retention_until": NSNull(),
-    ]
-    if let remoteItemId {
-      payload["id"] = remoteItemId
+    switch plan {
+    case .create(let payload):
+      let data = try await performAuthedRequest(
+        config: config,
+        session: session,
+        method: "POST",
+        pathWithQuery: "/rest/v1/items",
+        body: [createItemPayloadBody(payload)],
+        additionalHeaders: [
+          "Prefer": "return=representation",
+        ]
+      )
+      let rows = try decode([ItemRow].self, from: data)
+      guard let itemId = rows.first?.id else {
+        throw AppServiceError.server("Item create returned no id.")
+      }
+      return itemId
+    case .update(let remoteItemId, let payload):
+      let _ = try await performAuthedRequest(
+        config: config,
+        session: session,
+        method: "PATCH",
+        pathWithQuery: "/rest/v1/items?id=eq.\(urlEncoded(remoteItemId))",
+        body: updateItemPayloadBody(payload),
+        additionalHeaders: [
+          "Prefer": "return=representation",
+        ]
+      )
+      return remoteItemId
     }
-
-    let data = try await performAuthedRequest(
-      config: config,
-      session: session,
-      method: "POST",
-      pathWithQuery: "/rest/v1/items?on_conflict=batch_id,sequence",
-      body: [payload],
-      additionalHeaders: [
-        "Prefer": "resolution=merge-duplicates,return=representation",
-      ]
-    )
-    let rows = try decode([ItemRow].self, from: data)
-    guard let itemId = rows.first?.id else {
-      throw AppServiceError.server("Item upsert returned no id.")
-    }
-    return itemId
   }
 
   private struct ExistingPhotoStatusRow: Decodable {
