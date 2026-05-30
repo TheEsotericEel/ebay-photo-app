@@ -40,7 +40,7 @@ For route validation and screenshots:
    - weight
    - dimensions
    - notes
-6. Tap `Submit` to open Queue Review.
+6. Tap `Continue to Review` to save the item and open Queue Review.
 7. Confirm the queue rows show the finalized item metadata and submit state.
 8. Tap `Submit` on Queue Review.
 

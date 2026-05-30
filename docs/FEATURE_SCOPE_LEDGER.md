@@ -161,7 +161,7 @@ Agent rule:
 | Feature | Scope | Current handling | Agent rule |
 | --- | --- | --- | --- |
 | Current draft item | Current | iOS stores active photos and metadata before queueing. | Preserve. |
-| `Next` as item boundary | Current | Camera Next opens `ItemDetailsScreen`; `ItemDetailsScreen` Next Item finalizes the current draft, queues it, and increments item number. | Preserve. |
+| `Next` as checkpoint opener | Current | Camera Next opens `ItemDetailsScreen`; `ItemDetailsScreen` `Save & Next` finalizes the current draft, queues it, and returns to camera. | Preserve. |
 | Local multi-item queue | Current | Queued item packets exist. | Preserve. |
 | Queue persistence | Current | Queue state and photo files persist in app storage. | Preserve. |
 | Store assignment per queued item | Current | Queued item stores store and batch context. | Preserve. |

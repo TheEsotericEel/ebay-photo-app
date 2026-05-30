@@ -12,12 +12,12 @@ Live capture flow:
 - `Capture Home -> Open Camera` opens `CameraSessionView`.
 - `Next` with at least one draft photo opens `ItemDetailsScreen`.
 - `Next` with no draft photos does not advance and sets `Capture at least one photo before continuing.`
-- `Done` with at least one draft photo opens `ItemDetailsScreen`.
+- `Done` remains pending final product decision; current code opens `ItemDetailsScreen` when at least one draft photo exists.
 - `Done` with no draft photos exits the camera back to `Capture Home`.
 
 Item details checkpoint:
 - `Cancel` dismisses `ItemDetailsScreen` and returns to the same live draft.
-- `Next Item` calls `appState.advanceToNextItem()`, which queues the current draft if it has photos, increments the item number, and clears the draft.
+- `Save & Next` calls `appState.advanceToNextItem()`, which queues the current draft if it has photos, increments the item number, and clears the draft.
 - `Submit` also calls `appState.advanceToNextItem()`, then opens `Queue Review`.
 
 Queue review and submit handoff:
@@ -44,7 +44,7 @@ Code-backed:
 - `Open Camera -> no photos -> Done` exits back to `Capture Home` via the `onDone()` closure in `CameraSessionView`.
 - `Open Camera -> no photos -> Next` is a no-op with status text `Capture at least one photo before continuing.`
 - Seeded live camera `Next -> ItemDetailsScreen -> Cancel` preserves the same draft because `onCancel` only dismisses the sheet.
-- Seeded live camera `Next Item` finalizes the current item and returns to the camera because `onNextItem` calls `appState.advanceToNextItem()` and clears `showingDetails`.
+- Seeded live camera `Save & Next` finalizes the current item and returns to the camera because `onNextItem` calls `appState.advanceToNextItem()` and clears `showingDetails`.
 - Seeded live camera `Done -> ItemDetailsScreen -> Submit -> Queue Review -> Main Screen` is wired end to end in `RootView`.
 - Multi-item sessions should accumulate finalized items in `queuedItemPackets` because each `advanceToNextItem()` call first invokes `enqueueCurrentItemIfNeeded()`.
 - `Capture Home -> Upload Batch` refuses to submit while `capturedPhotos` is non-empty and sets `Finish the current item before submitting.`

@@ -49,9 +49,10 @@ AuthView -> CaptureHomeView -> CameraSessionView -> ItemDetailsScreen -> QueueRe
 
 That live flow is the source of truth for workflow semantics:
 
-- `Next` finishes the current item and starts the next one.
-- `Done` ends the live capture session or batch and moves toward review.
-- `Continue to Review` is the pre-review checkpoint transition.
+- `Next` opens the optional item checkpoint.
+- `Save & Next` queues the current draft and returns to the live camera for the next blank item.
+- `Continue to Review` queues the current draft and opens Queue Review.
+- `Done` remains pending final product decision; current code opens the checkpoint when photos exist and exits when there are none.
 - `Submit` is reserved for the live queue/review upload and handoff path.
 
 `MockIntakeFlowView` and its seeded preview/demo helpers are debug-only:

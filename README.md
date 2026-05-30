@@ -90,7 +90,7 @@ The same signed-in user/account is used for both phone capture and desktop manag
 - `mobile` means the native iPhone app.
 - The iPhone app is a capture + lightweight queue tool, not the final listing workspace.
 - The iPhone app should keep a real local multi-item capture queue.
-- `Next` is the official item boundary.
+- `Next` opens the optional item checkpoint; `Save & Next` is the quick queue/return action.
 - `Submit` is the deliberate MVP handoff/upload action.
 - Store assignment is an item-level property, so one local queue may contain items for multiple stores.
 - Photos stay app-local until upload/retention decisions are made and should not be saved to the iPhone Camera Roll by default.

@@ -82,7 +82,7 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
             }
 
             HStack(spacing: 10) {
-              // `Submit` is reserved for the review-screen upload/handoff action.
+              // Camera Next opens the optional item checkpoint; Save & Next queues and returns to camera; Submit is upload only.
               Button("Continue to Review") {
                 onContinueToReview()
               }
@@ -91,13 +91,13 @@ struct ItemDetailsScreen<ThumbnailContent: View>: View {
               .foregroundStyle(.white)
               .accessibilityIdentifier("itemDetails.continueToReview")
 
-              Button("Next Item") {
+              Button("Save & Next") {
                 onNextItem()
               }
               .buttonStyle(.borderedProminent)
               .tint(.white)
               .foregroundStyle(.black)
-              .accessibilityIdentifier("itemDetails.nextItem")
+              .accessibilityIdentifier("itemDetails.saveAndNext")
             }
           }
         }

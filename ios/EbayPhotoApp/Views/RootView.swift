@@ -2836,28 +2836,23 @@ private struct CameraSessionView: View {
         thumbnailImage: appState.capturedPhotos.last?.thumbnailImage,
         photoCount: appState.capturedPhotos.count,
         canCapture: cameraService.canCapture || (isCaptureLoopRunning && pendingCaptureCount < maxPendingCaptures),
-        onCapture: {
-          if !isCaptureLoopRunning {
-            startCaptureLoop()
-          } else if pendingCaptureCount < maxPendingCaptures {
-            pendingCaptureCount += 1
-          }
-        },
-        onNextItem: {
-          guard !appState.capturedPhotos.isEmpty else {
-            appState.statusMessage = "Capture at least one photo before continuing."
-            return
-          }
-          // Next is the item boundary; Done is the session boundary; Submit is upload/handoff.
-          Task { @MainActor in
-            guard await appState.awaitCurrentDraftPhotoPersistence(statusMessage: "Finishing local photo save…") else {
-              return
-            }
-            appState.advanceToNextItem()
-          }
-        }
-      )
-      .layoutPriority(0)
+              onCapture: {
+                if !isCaptureLoopRunning {
+                  startCaptureLoop()
+                } else if pendingCaptureCount < maxPendingCaptures {
+                  pendingCaptureCount += 1
+                }
+              },
+              onNextItem: {
+                guard !appState.capturedPhotos.isEmpty else {
+                  appState.statusMessage = "Capture at least one photo before continuing."
+                  return
+                }
+                // Camera Next opens the optional item checkpoint; Save & Next queues and returns to camera; Submit is upload only.
+                presentDetailsEditor()
+              }
+            )
+            .layoutPriority(0)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(Color.black.ignoresSafeArea())
@@ -2901,7 +2896,7 @@ private struct CameraSessionView: View {
               showingDetails = false
               onOpenQueueReview()
             }
-          },
+            },
           onNextItem: {
             guard !appState.capturedPhotos.isEmpty else {
               appState.statusMessage = "Capture at least one photo before continuing."
